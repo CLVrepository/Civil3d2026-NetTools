@@ -1,0 +1,181 @@
+diff --git a/CLV_CivilTools/Shared/BoundaryCsvImportCommands.cs b/CLV_CivilTools/Shared/BoundaryCsvImportCommands.cs
+index d450972..ba8ed12 100644
+--- a/CLV_CivilTools/Shared/BoundaryCsvImportCommands.cs
++++ b/CLV_CivilTools/Shared/BoundaryCsvImportCommands.cs
+@@ -1,5 +1,6 @@
+ using System;
+ using System.Collections.Generic;
++using System.Diagnostics.CodeAnalysis;
+ using System.Globalization;
+ using System.IO;
+ using System.Linq;
+@@ -1364,7 +1365,7 @@ namespace CLV_CivilTools.Shared
+             return CurveCreateResult.Ok(arc, end, labelPoint, note);
+         }
+ 
+-        private static bool TryCreateChordLineFromRow(BoundaryCsvRow row, Point3d start, out Line? line, out Point3d end, out string note)
++        private static bool TryCreateChordLineFromRow(BoundaryCsvRow row, Point3d start, [NotNullWhen(true)] out Line? line, out Point3d end, out string note)
+         {
+             line = null;
+             end = start;
+diff --git a/CLV_CivilTools/Shared/EasementCsvImportCommands.cs b/CLV_CivilTools/Shared/EasementCsvImportCommands.cs
+index c9324e3..0592513 100644
+--- a/CLV_CivilTools/Shared/EasementCsvImportCommands.cs
++++ b/CLV_CivilTools/Shared/EasementCsvImportCommands.cs
+@@ -1,5 +1,6 @@
+ using System;
+ using System.Collections.Generic;
++using System.Diagnostics.CodeAnalysis;
+ using System.Globalization;
+ using System.IO;
+ using System.Linq;
+@@ -557,7 +558,7 @@ namespace CLV_CivilTools.Shared
+             return TryBearingToVector(row.Bearing, out direction);
+         }
+ 
+-        private static bool TryCreateArcFromEndpoints(EasementCsvRow row, Point3d start, Point3d end, out Arc? arc, out string note)
++        private static bool TryCreateArcFromEndpoints(EasementCsvRow row, Point3d start, Point3d end, [NotNullWhen(true)] out Arc? arc, out string note)
+         {
+             arc = null;
+             note = string.Empty;
+diff --git a/CLV_CivilTools/Shared/RoadsCsvImportCommands.cs b/CLV_CivilTools/Shared/RoadsCsvImportCommands.cs
+index 5c2cbb1..17c1170 100644
+--- a/CLV_CivilTools/Shared/RoadsCsvImportCommands.cs
++++ b/CLV_CivilTools/Shared/RoadsCsvImportCommands.cs
+@@ -1,5 +1,6 @@
+ using System;
+ using System.Collections.Generic;
++using System.Diagnostics.CodeAnalysis;
+ using System.Globalization;
+ using System.IO;
+ using System.Linq;
+@@ -543,7 +544,7 @@ namespace CLV_CivilTools.Shared
+                 return true;
+             }
+ 
+-            RoadCsvRow anchored = chain.FirstOrDefault(r => r.AnchorMethod.Contains("ORANGE", StringComparison.OrdinalIgnoreCase) && r.StartX.HasValue && r.StartY.HasValue) ??
++            RoadCsvRow? anchored = chain.FirstOrDefault(r => r.AnchorMethod.Contains("ORANGE", StringComparison.OrdinalIgnoreCase) && r.StartX.HasValue && r.StartY.HasValue) ??
+                                       chain.FirstOrDefault(r => r.CoordinateAnchor.Contains("10000", StringComparison.OrdinalIgnoreCase) && r.StartX.HasValue && r.StartY.HasValue) ??
+                                       chain.FirstOrDefault(r => r.StartX.HasValue && r.StartY.HasValue);
+             if (anchored != null)
+@@ -755,7 +756,7 @@ namespace CLV_CivilTools.Shared
+             return false;
+         }
+ 
+-        private static bool TryCreateArcFromStartEnd(RoadCsvRow row, Point3d start, Point3d end, out Arc? arc, out Point3d labelPoint, out string note)
++        private static bool TryCreateArcFromStartEnd(RoadCsvRow row, Point3d start, Point3d end, [NotNullWhen(true)] out Arc? arc, out Point3d labelPoint, out string note)
+         {
+             arc = null;
+             labelPoint = MidPoint(start, end);
+diff --git a/CLV_CivilTools/Shared/SubdivisionLineworkCommands.cs b/CLV_CivilTools/Shared/SubdivisionLineworkCommands.cs
+index 3e72d15..7ae8046 100644
+--- a/CLV_CivilTools/Shared/SubdivisionLineworkCommands.cs
++++ b/CLV_CivilTools/Shared/SubdivisionLineworkCommands.cs
+@@ -1,5 +1,6 @@
+ using System;
+ using System.Collections.Generic;
++using System.Diagnostics.CodeAnalysis;
+ using System.Globalization;
+ using System.Linq;
+ using System.Windows.Forms;
+@@ -833,7 +834,7 @@ namespace CLV_CivilTools.Shared
+             return best;
+         }
+ 
+-        private static bool TryCreateCornerFilletArc(Point2d corner, Vector2d away1, Vector2d away2, double radius, out Arc? arc, out Point2d tangent1, out Point2d tangent2)
++        private static bool TryCreateCornerFilletArc(Point2d corner, Vector2d away1, Vector2d away2, double radius, [NotNullWhen(true)] out Arc? arc, out Point2d tangent1, out Point2d tangent2)
+         {
+             arc = null;
+             tangent1 = Point2d.Origin;
+@@ -887,7 +888,7 @@ namespace CLV_CivilTools.Shared
+         }
+ 
+ 
+-        private static bool TryCreateLineCircleFillet(Line line, Point3d circleCenter3d, double circleRadius, double filletRadius, Vector2d stemDirection, out Arc? arc, out Point3d lineTangent, out Point3d circleTangent)
++        private static bool TryCreateLineCircleFillet(Line line, Point3d circleCenter3d, double circleRadius, double filletRadius, Vector2d stemDirection, [NotNullWhen(true)] out Arc? arc, out Point3d lineTangent, out Point3d circleTangent)
+         {
+             arc = null;
+             lineTangent = Point3d.Origin;
+@@ -1169,7 +1170,7 @@ namespace CLV_CivilTools.Shared
+             return false;
+         }
+ 
+-        private static bool TryCreateFilletArc(Point2d line1Point, Vector2d dir1, Point2d line2Point, Vector2d dir2, double radius, Point2d roadCenter, out Arc? arc, out Point2d tangent1, out Point2d tangent2)
++        private static bool TryCreateFilletArc(Point2d line1Point, Vector2d dir1, Point2d line2Point, Vector2d dir2, double radius, Point2d roadCenter, [NotNullWhen(true)] out Arc? arc, out Point2d tangent1, out Point2d tangent2)
+         {
+             arc = null;
+             tangent1 = Point2d.Origin;
+diff --git a/CLV_CivilTools/Survey/SurveyAutoClosure.cs b/CLV_CivilTools/Survey/SurveyAutoClosure.cs
+index 546e66b..6be8a9c 100644
+--- a/CLV_CivilTools/Survey/SurveyAutoClosure.cs
++++ b/CLV_CivilTools/Survey/SurveyAutoClosure.cs
+@@ -867,8 +867,10 @@ namespace CLV_CivilTools.Survey
+                 segments[i].ConstraintState = states[i].Describe();
+                 segments[i].ConstraintTargetOffset = states[i].ReferenceOffsetDistance;
+                 segments[i].ConstraintActualOffset = ComputeSignedOffsetIfReference(segments[i], states[i]);
+-                segments[i].ConstraintOffsetDelta = segments[i].ConstraintTargetOffset.HasValue && segments[i].ConstraintActualOffset.HasValue
+-                    ? segments[i].ConstraintActualOffset.Value - segments[i].ConstraintTargetOffset.Value
++                double? targetOffset = segments[i].ConstraintTargetOffset;
++                double? actualOffset = segments[i].ConstraintActualOffset;
++                segments[i].ConstraintOffsetDelta = targetOffset.HasValue && actualOffset.HasValue
++                    ? actualOffset.Value - targetOffset.Value
+                     : null;
+             }
+ 
+diff --git a/CLV_CivilTools/Survey/SurveyPhotoReview.cs b/CLV_CivilTools/Survey/SurveyPhotoReview.cs
+index 988ed4f..ebaeb23 100644
+--- a/CLV_CivilTools/Survey/SurveyPhotoReview.cs
++++ b/CLV_CivilTools/Survey/SurveyPhotoReview.cs
+@@ -9,6 +9,7 @@ using System.Drawing.Drawing2D;
+ using DrawingImage = System.Drawing.Image;
+ using DrawingFont = System.Drawing.Font;
+ using System.Net;
++using System.Net.Http;
+ using System.Text;
+ using System.Windows.Forms;
+@@ -760,27 +761,32 @@ namespace CLV_CivilTools.Survey
+         {
+             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+ 
+-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+-            request.Method = WebRequestMethods.Http.Get;
+-            request.Accept = "image/png,image/*;q=0.8,*/*;q=0.5";
+-            request.UserAgent = "CLV_CivilTools/2026 Survey Photo Review map preview";
+-            request.Timeout = 8000;
+-            request.ReadWriteTimeout = 8000;
+-            request.KeepAlive = false;
+-            request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
++            using var handler = new HttpClientHandler
++            {
++                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
++            };
+ 
+             IWebProxy? proxy = WebRequest.DefaultWebProxy;
+             if (proxy != null)
+             {
+                 proxy.Credentials = CredentialCache.DefaultCredentials;
+-                request.Proxy = proxy;
++                handler.Proxy = proxy;
++                handler.UseProxy = true;
+             }
+ 
+-            using WebResponse response = request.GetResponse();
+-            using Stream? stream = response.GetResponseStream();
+-            if (stream == null)
+-                throw new IOException("Map tile response did not contain a data stream.");
++            using var client = new HttpClient(handler)
++            {
++                Timeout = TimeSpan.FromMilliseconds(8000)
++            };
++
++            using var request = new HttpRequestMessage(HttpMethod.Get, url);
++            request.Headers.Accept.ParseAdd("image/png,image/*;q=0.8,*/*;q=0.5");
++            request.Headers.UserAgent.ParseAdd("CLV_CivilTools/2026 Survey Photo Review map preview");
++            request.Headers.ConnectionClose = true;
+ 
++            using HttpResponseMessage response = client.Send(request, HttpCompletionOption.ResponseHeadersRead);
++            response.EnsureSuccessStatusCode();
++            using Stream stream = response.Content.ReadAsStream();
+             using var ms = new MemoryStream();
+             stream.CopyTo(ms);
+             return ms.ToArray();
