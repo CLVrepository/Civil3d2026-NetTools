@@ -1,0 +1,548 @@
+PROMPT 3 — INTERIOR ROAD CENTERLINE / PRIVATE STREET / ROW FRAMEWORK FROM FINAL BOUNDARY, QA, AND CAD CSV
+
+You are continuing a CAD reconstruction review of a recorded survey, parcel map, subdivision map, record of survey, final map, boundary map, or similar civil/survey PDF.
+
+Prompt 1 has already created the sectional/control framework first and anchored the user-marked POC/control point at:
+
+POC / Control Anchor X = 10000.0000
+POC / Control Anchor Y = 10000.0000
+
+Prompt 2 has already created the exterior boundary from the resolved Prompt 1 framework. The user may have imported the Prompt 2 boundary into CAD, resolved it to 0.00 closure, and slightly moved/aligned it to match right-of-way/control linework.
+
+This Prompt 3 builds the interior roadway framework only:
+
+* Road centerlines.
+* Private street centerlines.
+* Road right-of-way / private street edges.
+* Roadway common-element outlines when they function as the street area.
+* Curb returns, knuckles, cul-de-sacs, bulb-outs, and roadway curves.
+* Roadway tie/control lines needed to locate road geometry.
+
+Do not build individual lots yet unless a lot line is needed only as a road-edge control reference.
+Do not build easements unless they are also the road/private-street/common-element edge.
+Do not rebuild the sectional/control framework or exterior boundary.
+
+The goal is to create a CAD-ready roadway CSV that overlays the final Prompt 2 boundary and provides a clean road skeleton for Prompt 4 lot/common-element reconstruction.
+
+---
+
+Important coordinate and dependency rule
+
+Use the final Prompt 1 and Prompt 2 geometry as the master coordinate framework.
+
+The Prompt 1 POC/control anchor remains X=10000.0000, Y=10000.0000.
+
+Do not move road geometry to 10000,10000.
+Do not independently scale, rotate, or shift roadway geometry to match the PDF.
+Do not change or rebuild the exterior boundary.
+
+The road framework must be located relative to the final adjusted Prompt 2 boundary, Prompt 1 control framework, and map-labeled roadway/ROW/common-element data.
+
+Before building roads, identify which boundary source controls:
+
+* FINAL_USER_ADJUSTED_BOUNDARY_CSV, if the user provides a post-CAD adjusted boundary file.
+* PROMPT2_BOUNDARY_CSV, if no later adjusted boundary file is provided.
+* PDF_BOUNDARY_QA_ONLY, if no reliable CSV/control geometry is available.
+
+If the final boundary has been manually adjusted by the user, the final user-adjusted boundary controls over the earlier Prompt 2 calculated boundary. Report this clearly.
+
+If the final boundary cannot be tied to Prompt 1/Prompt 2, stop and report that Prompt 3 cannot reliably create importable road geometry.
+
+---
+
+Markup / color priority rule
+
+Use map labels first, but user markup controls extraction priority when provided.
+
+Common markup meanings:
+
+* Orange circle = Prompt 1 POC/control anchor at X=10000.0000, Y=10000.0000.
+* Purple highlight = sectional/control linework from Prompt 1.
+* Pink highlight = roadway or road centerline geometry.
+* Green highlight = right-of-way / road edge / private street edge geometry.
+* Yellow highlight = exterior boundary from Prompt 2.
+* Blue circle or blue arrow may mark a roadway start point, road direction, or boundary POB, but it does not move the coordinate origin.
+
+For Prompt 3, prioritize pink and green roadway/ROW/private-street linework, then road names, road-width callouts, curve labels, line labels, and tables.
+
+If no color markup exists, identify roads and private streets from map labels, street names, common-element labels, ROW labels, road-width labels, linework styles, curve labels, and lot frontage geometry.
+
+---
+
+Primary goals
+
+1. Review the PDF and all prior Prompt 1 / Prompt 2 outputs.
+2. Confirm the final exterior boundary source that controls Prompt 3.
+3. Identify every road/private street/common-element roadway area inside or adjacent to the boundary.
+4. Extract road centerlines where directly shown.
+5. Derive road centerlines from opposing road edges where centerlines are not directly shown.
+6. Extract or derive road edges / private-street edges / ROW lines.
+7. Build roadway curves, curb returns, knuckles, and cul-de-sac curves using line/curve/radial tables and visible labels.
+8. Verify widths, offsets, centerline relationships, curve math, tangency, and closure of roadway loops/areas.
+9. Create a CAD-ready roadway CSV.
+10. Create QA reports showing map-vs-CAD discrepancies.
+
+---
+
+Source review requirements
+
+Review all sheets, details, tables, and notes.
+
+Identify:
+
+* Map name.
+* Sheet count.
+* Sheet purpose.
+* Road names.
+* Private street names.
+* Public street names adjacent to the site.
+* Common-element areas that represent street areas.
+* Roadway notes.
+* ROW dedication notes.
+* Road-width / half-width callouts.
+* Road centerline labels.
+* Road-edge labels.
+* Course tables.
+* Curve tables.
+* Radial tables.
+* Detail views at corners, cul-de-sacs, knuckles, and entries.
+* Found/set monuments that control roadway geometry.
+* Any labels that appear to be lot frontage distances rather than road-edge distances.
+
+Report which sheets and details were reviewed.
+Use close zoom review for crowded labels before accepting them.
+
+---
+
+Road feature classification
+
+Classify every road-related graphic before building geometry.
+
+Feature classes:
+
+* ROAD_CENTERLINE = directly shown street centerline.
+* DERIVED_ROAD_CENTERLINE = centerline calculated as midpoint between road/private-street edges.
+* PUBLIC_ROW_LINE = public right-of-way line.
+* PRIVATE_STREET_EDGE = edge or boundary of private street/common-element road area.
+* ROAD_COMMON_ELEMENT_OUTLINE = common-element outline that forms the road/private-street lot.
+* CURB_RETURN = roadway/ROW/private-street return curve.
+* CUL_DE_SAC_OR_KNUCKLE = bulb or turnaround curve network.
+* ROADWAY_TIE = bearing-distance tie used to locate road geometry.
+* ROADWAY_POINT_TIE = point-only or monument tie supporting road geometry.
+* LOT_FRONTAGE_REFERENCE = frontage line or lot line adjacent to road; use only for QA unless it also controls road edge.
+* QA_ROAD_GEOMETRY = uncertain road geometry.
+
+Do not confuse lot frontage distances with road-edge/ROW distances. A row of 35.00-foot lot frontages is usually lot geometry, not road centerline geometry.
+
+---
+
+Offset / width / tie classification rule
+
+Before using any distance as a centerline offset, ROW offset, road width, or half-width, classify the source graphic and label.
+
+A distance callout must be treated as a NON_OFFSET_TIE_LINE when it is attached to a dotted, dashed, broken, or leader-style line that also has its own bearing, direction, or traverse-style call. In that case, the bearing and distance describe a tie/control line and must be drawn or used as a bearing-distance tie, not as a perpendicular offset.
+
+Classify labels as:
+
+* OFFSET_DIMENSION = perpendicular dimension between a centerline/control/ROW/road edge and another line, usually normal to the line and usually without a bearing.
+* ROW_WIDTH_OR_HALF_WIDTH = explicit width, half-width, or road offset callout such as 30.00, 40.00, 50.00, 60.00, etc.
+* ROADWAY_WIDTH = width across a private street/common element or travel way when explicitly identified.
+* TIE_LINE = bearing-distance call from one road/control point to another point.
+* NON_OFFSET_TIE_LINE = dotted/dashed/leader-style bearing-distance line that may locate a point but must not be interpreted as a perpendicular offset.
+* LOT_FRONTAGE_DISTANCE = lot frontage or side lot dimension along a road; not a road width.
+* AMBIGUOUS_CALLOUT = cannot be confidently classified.
+
+When both a true perpendicular road width/offset and a nearby dotted bearing-distance tie exist, hold the true perpendicular width/offset for roadway geometry and use the dotted tie only as a QA check.
+
+If a prior attempt used a dotted/dashed tie distance as a road width or centerline offset, flag ROAD_TIE_LINE_MISCLASSIFIED_AS_OFFSET and rebuild.
+
+---
+
+Road centerline extraction / derivation rules
+
+For each road:
+
+1. If the centerline is directly shown with bearing/distance/curve labels, extract it directly.
+2. If the centerline is shown graphically but labels are missing, derive it from resolved road-edge geometry where possible and mark DERIVED_ROAD_CENTERLINE.
+3. If both road edges are shown and the street width is consistent, derive the centerline as the midpoint geometry between the two road edges.
+4. If one road edge is shown and a road width/half-width is labeled, derive the centerline or opposite edge by perpendicular offset.
+5. If the road curves, derive the centerline curve radius from edge radius plus/minus half width where the map supports it.
+6. If curve radii or tangency conflict, preserve the mapped edge geometry and place the centerline on QA layer unless it is clearly derived.
+7. If the road centerline is outside the site but controls a ROW edge or entry geometry, include it as ROADWAY_CONTROL or ROAD_CENTERLINE where necessary for QA.
+
+Centerline derivation must be based on final resolved road-edge/boundary/control coordinates, not visual tracing.
+
+---
+
+Road edge / private-street / ROW build rules
+
+Build road edges and private-street outlines before lot geometry.
+
+For each road/private street:
+
+* Identify the left and right edge relative to the road direction.
+* Identify whether each edge is boundary, ROW, private-street edge, common-element boundary, or lot frontage.
+* Build each edge endpoint-to-endpoint using map bearing/distance/curve data where available.
+* Where a road edge coincides with the exterior boundary, reference the Prompt 2 boundary segment rather than duplicating uncertain geometry.
+* Where a road edge connects to a boundary, endpoint must land exactly on the final resolved boundary or be reported as a gap.
+* Where a road edge connects to another road edge by a curb return curve, build the curve using the mapped curve label/table.
+* Where opposing road edges should be parallel, verify bearing and distance between them.
+* Where the map gives a full road/common-element loop, check closure but do not autoclose unless instructed.
+
+Do not force roads to fit lots. Roads control the Prompt 4 lot build.
+
+---
+
+Curve and radial extraction rules for road geometry
+
+For each roadway curve:
+
+* Identify curve ID, if shown.
+* Identify whether the curve belongs to roadway edge, centerline, common-element boundary, curb return, cul-de-sac/knuckle, or lot line.
+* Identify direction of travel.
+* Determine LEFT or RIGHT relative to direction of travel.
+* Determine radius, delta, arc length, tangent, chord bearing, chord length where available.
+* Identify start radial and end radial bearings where shown.
+* Identify radial IDs and actual radial bearing table values.
+* Test whether the curve is tangent-controlled, radial-controlled, chord-controlled, coordinate-controlled, or unknown.
+* Test shown radial and reversed radial when radial direction is ambiguous.
+* Verify arc length = radius × delta in radians.
+* Verify tangent = radius × tan(delta/2), if tangent is shown.
+* Verify chord = 2 × radius × sin(delta/2), if chord is shown.
+* Verify tangency with incoming/outgoing road lines where applicable.
+
+If curve label/table ownership is ambiguous, do not assign it to road geometry silently. Place on QA layer and report CURVE_LABEL_OWNERSHIP_UNCERTAIN.
+
+---
+
+Roadway closure / loop checks
+
+For each closed roadway/common-element outline:
+
+Report:
+
+* Beginning coordinate.
+* Ending coordinate.
+* Easting error.
+* Northing error.
+* Linear closure error.
+* Perimeter.
+* Closure ratio, if possible.
+
+Default: do not autoclose road loops. Preserve map calls and report closure errors.
+
+If the user specifically asks for closed road loops, then perform length-only adjustment only on eligible road-edge lines, hold bearings, preserve curve data, and report all adjustments.
+
+---
+
+Boundary and control fit QA
+
+After road geometry is built:
+
+* Verify every road edge that should meet the final boundary lands on the final boundary.
+* Verify road entries connect to public ROW or adjacent road control lines.
+* Verify road widths and half-widths.
+* Verify private-street/common-element area outlines close or report closure.
+* Verify centerlines are centered between edges when derived.
+* Verify edge curves and centerline curves have correct radius relationships when derived.
+* Verify no road feature was generated from unadjusted Prompt 1/Prompt 2 geometry if a final user-adjusted boundary was provided.
+
+If road geometry is tied to a boundary that was manually adjusted by the user, report the source boundary segment and final coordinates used.
+
+---
+
+CSV output
+
+Create a downloadable CSV file whenever file creation is available.
+
+Name the file:
+
+MapName_Prompt3_Road_Centerline_ROW_Framework.csv
+
+If only partially reliable, name it:
+
+MapName_Prompt3_Road_Centerline_ROW_Framework_QA.csv
+
+Use this CSV format:
+
+FeatureID,FeatureType,ReferenceClass,Layer,RoadName,Segment,Type,StartX,StartY,EndX,EndY,Bearing,Distance,OriginalDistance,AdjustedDistance,LengthAdjustment,AdjustmentMethod,CurveDirection,CurveBuildMethod,Radius,Delta,ArcLength,Tangent,ChordBearing,ChordLength,RadialBearing,StartRadialBearing,EndRadialBearing,RadialDirectionUsed,WidthSource,MapWidthOrOffset,CADMeasuredWidthOrOffset,WidthOffsetError,WidthOffsetStatus,CenterlineMethod,LeftEdgeSegment,RightEdgeSegment,RelatedBoundarySegment,RelatedPrompt1Segment,RelatedPrompt2Segment,FromPoint,ToPoint,GeometryBuildMode,SourceSheet,SourceLabel,CorrectedLabel,Confidence,ImportStatus,QAStatus,Notes
+
+FeatureType options:
+
+* ROAD_FRAMEWORK
+* ROAD_CENTERLINE
+* ROAD_EDGE
+* ROAD_COMMON_ELEMENT
+* ROADWAY_CONTROL
+* ROADWAY_TIE
+* POINT_TIE
+* QA_REFERENCE
+
+ReferenceClass options:
+
+* ROAD_CENTERLINE
+* DERIVED_ROAD_CENTERLINE
+* PUBLIC_ROW_LINE
+* PRIVATE_STREET_EDGE
+* ROAD_COMMON_ELEMENT_OUTLINE
+* CURB_RETURN
+* CUL_DE_SAC_OR_KNUCKLE
+* ROADWAY_TIE
+* ROADWAY_POINT_TIE
+* LOT_FRONTAGE_REFERENCE
+* QA_ROAD_GEOMETRY
+
+Layer defaults:
+
+* Road centerline: V-MAPL-ROAD-CL
+* Derived road centerline: V-MAPL-ROAD-CL
+* Public ROW line: V-MAPL-ROAD-ROW
+* Private street edge: V-MAPL-ROAD-ROW
+* Road common-element outline: V-MAPL-ROAD-CE
+* Curb return / roadway curve: V-MAPL-ROAD-ROW
+* Roadway tie/control: V-MAPL-CNTRL
+* QA/uncertain geometry: V-MAPL-QA
+
+Type options:
+
+* LINE
+* CURVE
+* POINT_TIE
+* NOTE
+
+GeometryBuildMode options:
+
+* BEARING_DISTANCE
+* OFFSET
+* MIDPOINT_BETWEEN_EDGES
+* INTERSECTION_COORDINATE
+* COORDINATE
+* CURVE_TANGENT
+* CURVE_RADIAL
+* CURVE_CENTERLINE_DERIVED
+* QA_COORDINATE
+* UNKNOWN
+
+Confidence options:
+
+* DIRECT
+* DERIVED
+* ADJUSTED
+* APPROXIMATE
+* UNCERTAIN
+
+ImportStatus options:
+
+* IMPORT
+* IMPORT_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+WidthOffsetStatus options:
+
+* WIDTH_MATCH
+* HALF_WIDTH_MATCH
+* OFFSET_MATCH
+* CENTERLINE_CENTERED
+* CENTERLINE_DERIVED
+* VARIABLE_WIDTH
+* WIDTH_CONFLICT
+* OFFSET_CONFLICT
+* CENTERLINE_NOT_CENTERED
+* NON_OFFSET_TIE_LINE
+* TIE_NOT_OFFSET
+* ROAD_TIE_LINE_MISCLASSIFIED_AS_OFFSET
+* NOT_APPLICABLE
+* MANUAL_REVIEW
+
+QAStatus examples:
+
+* ROAD_FRAMEWORK_OK
+* ROAD_CENTERLINE_OK
+* ROAD_EDGE_OK
+* ROAD_COMMON_ELEMENT_OK
+* BOUNDARY_TIE_OK
+* WIDTH_VERIFIED
+* OFFSET_VERIFIED
+* CENTERLINE_DERIVED_FROM_EDGES
+* CENTERLINE_DIRECT_FROM_MAP
+* CURVE_OK
+* RADIAL_CONTROLLED
+* TANGENCY_OK
+* TANGENCY_CONFLICT
+* CURVE_DATA_CONFLICT
+* CURVE_LABEL_OWNERSHIP_UNCERTAIN
+* ROAD_LOOP_CLOSURE_OK
+* ROAD_LOOP_CLOSURE_ERROR
+* GAP_TO_BOUNDARY
+* GAP_TO_ROAD_EDGE
+* LOT_FRONTAGE_NOT_USED_AS_ROAD
+* MANUAL_REVIEW
+
+---
+
+Required output sections
+
+A. Prompt 3 Summary
+
+Summarize what was reviewed, what roads were built, which final boundary source controlled, whether CAD CSV was created, and the reliability rating.
+
+B. Source Sheets / Details Reviewed
+
+List all sheets, details, tables, diagrams, curve/radial tables, and notes used.
+
+C. Prompt 1 / Prompt 2 Dependency Review
+
+Include:
+
+* Prompt 1 POC anchor coordinate.
+* Final boundary source used.
+* Boundary adjustment status, if known.
+* Boundary segments that control road endpoints.
+* Prompt 1/Prompt 2 geometry left on QA that may affect roadwork.
+
+D. Roadway Feature Identification
+
+Create a table:
+
+RoadName,FeatureType,PublicOrPrivate,CommonElementName,SourceSheet,GeometryShown,LabelsAvailable,Confidence,Notes
+
+E. Road Centerline Extraction / Derivation Report
+
+Create a table:
+
+RoadName,CenterlineSegment,Method,FromPoint,ToPoint,Bearing,Distance,LeftEdge,RightEdge,MapWidth,CADWidth,CenterlineStatus,Confidence,Notes
+
+F. Road Edge / ROW / Private Street Outline Report
+
+Create a table:
+
+RoadName,Segment,ReferenceClass,FromPoint,ToPoint,BearingOrCurve,DistanceOrArc,WidthOrOffsetSource,BoundaryTie,SourceSheet,Confidence,Notes
+
+G. Curve Math QA
+
+Create a table:
+
+CurveSegment,RoadName,ReferenceClass,Radius,Delta,MapArc,CalculatedArc,ArcError,TangentMap,TangentCalculated,TangentError,ChordMap,ChordCalculated,ChordError,CurveMathStatus,Notes
+
+H. Curve Tangency / Radial / Build-Method QA
+
+Create a table:
+
+CurveSegment,RoadName,CurveDirection,CurveBuildMethod,StartRadial,EndRadial,RadialDirectionUsed,IncomingTangency,OutgoingTangency,CurveQAStatus,Notes
+
+I. Width / Offset / Centerline Verification Report
+
+Create a table:
+
+RoadName,CheckType,ControlFeature,LeftEdge,RightEdgeOrCenterline,MapWidthOrOffset,CADMeasuredWidthOrOffset,Error,MeasurementMethod,Status,Notes
+
+J. Road Loop / Common Element Closure Report
+
+For each closed road/private-street/common-element outline, report closure.
+
+K. Boundary / Control Fit QA
+
+Create a table:
+
+RoadFeature,ExpectedTieFeature,RelatedBoundarySegment,RelatedPrompt1Or2Segment,CADGap,FitStatus,Resolution,Notes
+
+L. Map vs CAD Roadway Error Report
+
+For every road segment, include:
+
+Segment,RoadName,ReferenceClass,MapBearing,MapDistance,CADBearing,CADDistance,BearingError,DistanceError,MapStartPoint,CADStartX,CADStartY,CADEndX,CADEndY,EndpointError,WidthOffsetError,ErrorType,Severity,Resolution,Notes
+
+ErrorType options:
+
+* NONE
+* MAP_LABEL_UNREADABLE
+* MAP_LABEL_CONFLICT
+* BEARING_MISMATCH
+* DISTANCE_MISMATCH
+* ENDPOINT_GAP
+* WIDTH_CONFLICT
+* OFFSET_CONFLICT
+* CENTERLINE_NOT_CENTERED
+* ROAD_TIE_LINE_MISCLASSIFIED_AS_OFFSET
+* NON_OFFSET_TIE_LINE_USED_AS_OFFSET
+* LOT_FRONTAGE_USED_AS_ROAD_EDGE
+* CURVE_DIRECTION_CONFLICT
+* RADIAL_CONFLICT
+* TANGENCY_CONFLICT
+* CURVE_DATA_CONFLICT
+* CURVE_LABEL_OWNERSHIP_UNCERTAIN
+* ROAD_LOOP_CLOSURE_ERROR
+* BOUNDARY_FIT_CONFLICT
+* MANUAL_REVIEW_REQUIRED
+
+Severity options:
+
+* INFO
+* MINOR
+* MODERATE
+* MAJOR
+
+Resolution options:
+
+* ACCEPTED_AS_MATCH
+* ACCEPTED_ROUNDING
+* MAP_VALUE_HELD
+* DERIVED_FROM_BOUNDARY
+* DERIVED_FROM_ROAD_EDGES
+* DERIVED_FROM_CENTERLINE_OFFSET
+* PLACED_ON_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+M. Final Import Decision Summary
+
+Summarize counts:
+
+* IMPORT
+* IMPORT_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+N. Final Roadway CAD CSV
+
+Display the CSV table and create a downloadable CSV file when available.
+
+O. Items Requiring Manual Verification
+
+List anything to check in CAD/PDF overlay before using the roadway geometry as production linework.
+
+---
+
+Important rules
+
+* Build roads after the final boundary is known.
+* Do not move the Prompt 1 anchor.
+* Do not move, rotate, scale, or rebuild the exterior boundary.
+* If the user has a final adjusted boundary from CAD, use that as the controlling boundary shell.
+* Build road edges/private-street outlines before individual lots.
+* Build or derive centerlines from reliable road edges and widths.
+* Do not treat dotted/dashed bearing-distance tie lines as offsets.
+* Do not treat lot frontage distances as road-edge or road-centerline distances unless clearly identified as such.
+* Use explicit road-width, ROW-width, and half-width labels where shown.
+* Use curve labels/tables only when ownership is clear.
+* Place uncertain curves, ambiguous labels, and unresolved road geometry on V-MAPL-QA.
+* Every importable row must have usable StartX, StartY, EndX, EndY.
+* Report all discrepancies. Do not silently force geometry.
+
+---
+
+Final reliability rating
+
+At the end, rate the Prompt 3 road framework as one of the following:
+
+* RELIABLE_ROAD_FRAMEWORK_FROM_BOUNDARY
+  Roads are tied to the final boundary/control framework, road edges connect, centerlines are verified or properly derived, widths/offsets pass, curves pass QA, and import rows are reliable.
+
+* PARTIALLY_RELIABLE_ROAD_FRAMEWORK_FROM_BOUNDARY
+  Road geometry is useful for CAD review/import, but some road segments, curves, widths, or centerlines require QA/manual verification.
+
+* NOT_RELIABLE_ROAD_FRAMEWORK_FROM_BOUNDARY
+  Road geometry cannot be imported without substantial manual correction, or it cannot be tied to the final Prompt 1/Prompt 2 coordinate framework.
+
+Do not call the road framework reliable if road centerlines are visually guessed, if the final boundary source is uncertain, if road widths/offsets are unresolved, if curve labels cannot be assigned to features, or if road endpoints do not tie to the resolved boundary/control framework.

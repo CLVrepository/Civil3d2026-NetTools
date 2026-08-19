@@ -1,0 +1,494 @@
+PROMPT 2 — BOUNDARY FROM RESOLVED SECTIONAL / CONTROL FRAMEWORK, QA, RADIAL CURVE REVIEW, AND CAD CSV
+
+You are continuing a CAD reconstruction review of a recorded survey, parcel map, subdivision map, record of survey, boundary map, or similar civil/survey PDF.
+
+Prompt 1 has already created the sectional/control framework first. Prompt 1 should have forced the outer sectional/control framework to 0.00 closure, recalculated all sectional/control breakouts from the resolved framework, and anchored the user-marked POC/control point at:
+
+POC / Control Anchor X = 10000.0000
+POC / Control Anchor Y = 10000.0000
+
+This Prompt 2 builds the project boundary from that resolved Prompt 1 framework.
+
+Important coordinate rule:
+
+Do not move the boundary POB to 10000,10000.
+
+The 10000,10000 point remains the Prompt 1 POC/control anchor. The boundary POB must be calculated or identified in its correct CAD location relative to the resolved Prompt 1 sectional/control framework. The final boundary linework must overlay the revised Prompt 1 calculated location.
+
+If the map-labeled POB is not the same point as the Prompt 1 POC, do not assign the POB to 10000,10000. Instead, derive the POB coordinate from the resolved sectional/control framework using the map’s ties, offsets, centerline relationships, right-of-way relationships, monument calls, or intersections.
+
+This prompt is for the site boundary only.
+
+Do not rebuild the sectional/control framework. Use the final Prompt 1 results as the controlling coordinate framework.
+
+---
+
+Markup / color priority rule
+
+Use map labels first, but user markup controls extraction priority when provided.
+
+Common markup meanings:
+
+* Orange circle = Prompt 1 POC/control anchor at X=10000.0000, Y=10000.0000.
+* Purple highlight = sectional/control linework from Prompt 1.
+* Pink highlight = roadway or control centerlines.
+* Green highlight = right-of-way lines or offset control lines.
+* Yellow highlight = boundary to reconstruct in this Prompt 2.
+* Blue circle or blue arrow may mark a boundary POB or intended direction, but they do not move the CAD coordinate origin away from the Prompt 1 POC.
+
+If yellow boundary highlight exists, follow the yellow boundary.
+
+If no yellow highlight exists, identify the intended exterior/site boundary from the legal description, map labels, parcel lines, and user instructions.
+
+---
+
+Primary goals
+
+1. Load or reconstruct the final Prompt 1 sectional/control framework as the master coordinate system.
+2. Keep the Prompt 1 POC/control anchor at X=10000.0000, Y=10000.0000.
+3. Locate the boundary POB relative to the resolved Prompt 1 framework.
+4. Extract the site boundary sequence from the map, legal description, line tables, curve tables, radial tables, and detail views.
+5. Build the boundary in its true CAD location, overlaying the resolved Prompt 1 geometry.
+6. Check boundary offsets from centerlines, ROW lines, section lines, and other control features where the map gives offset or width callouts.
+7. Check all curve math, tangency, radial bearings, LEFT/RIGHT curve direction, and curve build method.
+8. Create a final CAD-ready boundary CSV.
+9. Create error reports showing map-vs-CAD discrepancies, including offset errors from control/centerline geometry.
+
+---
+
+Prompt 1 dependency requirements
+
+Before building boundary geometry, review the Prompt 1 output.
+
+Identify from Prompt 1:
+
+* Map name.
+* POC/control anchor point name.
+* POC/control anchor coordinate.
+* Resolved outer sectional/control traverse corners.
+* Section lines, quarter lines, sixteenth lines, and control centerlines.
+* Roadway centerlines and ROW/control lines that the boundary ties to.
+* Corrected midpoint / aliquot / intersection points.
+* Any Prompt 1 linework left on QA/manual review status.
+* Any Prompt 1 closure or breakout discrepancies that may affect the boundary.
+
+If Prompt 1 is missing, incomplete, or not reliable enough to locate the boundary, stop and report that Prompt 1 must be corrected before Prompt 2 can produce reliable boundary geometry.
+
+Do not create a boundary CSV with arbitrary coordinates if the boundary cannot be tied back to the Prompt 1 POC framework.
+
+---
+
+Boundary POB location rule
+
+The map-labeled POB or chosen boundary start point must be located by one of these methods:
+
+* SHARES_PROMPT1_CONTROL_POINT = the POB is the same as a resolved Prompt 1 control point.
+* CENTERLINE_OFFSET = the POB is derived from a roadway/control centerline offset or ROW width.
+* ROW_OFFSET = the POB is derived from an ROW line or offset from an ROW line.
+* SECTIONAL_TIE = the POB is derived from a section, quarter-section, or sixteenth-section line/tie.
+* MONUMENT_TIE = the POB is derived from a monument tie.
+* INTERSECTION_DERIVED = the POB is the intersection of two resolved Prompt 1/control/boundary-supporting lines.
+* BOUNDARY_TIE = the POB is tied from a previously calculated boundary/control point.
+* PDF_OVERLAY_ALIGNED_QA = visually aligned to the Prompt 1 geometry for QA only.
+* UNKNOWN = the POB cannot be reliably tied to Prompt 1.
+
+Only use IMPORT for boundary rows when the POB and boundary geometry are tied to the Prompt 1 POC coordinate framework by reliable geometry.
+
+If the boundary POB is marked by a blue circle, use it only as an identification marker for the boundary start location. Do not assign it X=10000,Y=10000 unless it is also the orange Prompt 1 POC.
+
+---
+
+Boundary extraction rules
+
+Extract boundary calls in sequence using:
+
+* visible map labels,
+* legal description calls,
+* line tables,
+* curve tables,
+* radial tables,
+* detail views,
+* centerline/ROW/sectional control ties,
+* monument descriptions,
+* Prompt 1 control framework.
+
+Do not invent missing bearings, distances, curve data, radial bearings, or offsets.
+
+If a label is unreadable, mark it UNCERTAIN.
+
+If a label is shown opposite the direction of travel, report the source label and the corrected CAD bearing.
+
+If legal description and map labels conflict, report both values and identify which source controls the final CSV.
+
+Review congested boundary corners, radial labels, and curve labels at close zoom before accepting values.
+
+---
+
+Boundary build rule
+
+Build the boundary from the calculated boundary POB coordinate, not from 10000,10000 unless the boundary POB is truly the Prompt 1 POC.
+
+Use endpoint-to-endpoint chain build logic:
+
+* The first boundary row starts at the calculated boundary POB coordinate.
+* Each next row starts exactly at the previous calculated endpoint.
+* Line endpoints are calculated from bearing and distance.
+* Curve endpoints are calculated from curve build method, radius, delta, radial data, chord data, and LEFT/RIGHT direction.
+* Do not force the boundary to overlay Prompt 1 if the map call creates a conflict. Report the conflict.
+* Do not silently rotate, scale, or shift boundary geometry to fit the PDF.
+
+The boundary should overlay the resolved Prompt 1 framework through source-controlled ties, offsets, intersections, and shared points.
+
+---
+
+Closure rule
+
+Compute boundary closure using the map/legal boundary calls.
+
+Report:
+
+* Beginning coordinate.
+* Ending coordinate.
+* Easting error.
+* Northing error.
+* Linear closure error.
+* Boundary perimeter.
+* Closure ratio, if possible.
+
+Do not auto-adjust the boundary unless I specifically ask for an autoclosure boundary adjustment.
+
+For Prompt 2, the default is to preserve boundary map/legal calls and report closure errors. If the boundary does not close, identify the likely source segment, curve, radial, or POB/control tie issue.
+
+---
+
+Curve and radial extraction rules
+
+For each curve, identify:
+
+* Curve ID, if shown.
+* Direction of travel.
+* LEFT or RIGHT curve direction relative to direction of travel.
+* Clockwise or counterclockwise direction, if determinable.
+* Radius.
+* Delta.
+* Arc length.
+* Tangent length, if shown.
+* Chord bearing and chord length, if shown.
+* Start radial bearing at PC/start, if shown.
+* End radial bearing at PT/end, if shown.
+* Radial IDs, if shown.
+* Whether each radial appears center-to-curve-point or curve-point-to-center.
+* Whether the curve is tangent to the incoming segment.
+* Whether the curve is tangent to the outgoing segment.
+* Whether the curve appears radial-controlled rather than tangent-controlled.
+
+Radial bearing rule:
+
+Treat every radial bearing as bidirectional unless the map clearly defines the direction. Test the shown radial and the same radial reversed 180 degrees. Use the orientation that best maintains boundary direction, curve placement, tangency where applicable, and closure.
+
+If a radial table provides a radial ID and a bearing, include the actual radial bearing text in the CSV fields, not only the radial ID.
+
+Curve build-control options:
+
+* TANGENT_CONTROLLED = curve is built from incoming tangent, radius, delta, and LEFT/RIGHT.
+* RADIAL_CONTROLLED = curve is built from curve start point, start radial bearing, radius, delta, and LEFT/RIGHT.
+* CHORD_CONTROLLED = curve is built or checked from chord bearing and chord length.
+* COORDINATE_CONTROLLED = curve endpoints are fixed by reliable Prompt 1/control/boundary coordinates.
+* UNKNOWN_CONTROL = insufficient information.
+
+If a curve has a start radial at the PC, prefer RADIAL_CONTROLLED unless the map clearly shows tangent control.
+
+---
+
+Interactive CAD importer curve-review requirement
+
+The final CSV must include enough curve/radial fields for the CAD importer to allow the user to review and choose curve options during import.
+
+For uncertain or radial-controlled curves, Notes should tell the importer/user which options should be previewed:
+
+* Keep = CSV curve direction + shown radial.
+* FlipCurve = opposite curve direction + shown radial.
+* ReverseRadial = CSV curve direction + radial reversed 180 degrees.
+* Both = opposite curve direction + radial reversed 180 degrees.
+
+CurveDirection must be LEFT or RIGHT whenever known.
+
+CurveBuildMethod must be TANGENT_CONTROLLED, RADIAL_CONTROLLED, CHORD_CONTROLLED, COORDINATE_CONTROLLED, or UNKNOWN_CONTROL.
+
+RadialDirectionUsed must be SHOWN, REVERSED, BOTH_TESTED, or UNKNOWN.
+
+---
+
+Curve QA rules
+
+For each curve:
+
+* Verify arc length approximately equals radius × delta in radians.
+* Verify tangent approximately equals radius × tan(delta/2), if tangent is shown.
+* Verify chord length approximately equals 2 × radius × sin(delta/2), if chord is shown.
+* Verify incoming tangency when tangent-controlled.
+* Verify outgoing tangency where possible.
+* Verify radial bearings are perpendicular to curve tangents at PC/PT where applicable.
+* Test LEFT and RIGHT if direction is uncertain.
+* Test shown radial and reversed radial if radial is shown.
+* Report curve direction, radial direction, build method, and math errors.
+
+CurveQAStatus options:
+
+* CURVE_OK
+* RADIAL_CONTROLLED
+* RADIAL_REVERSED
+* NON_TANGENT_RADIAL_CONTROL
+* CW_CCW_CORRECTED
+* LEFT_RIGHT_CORRECTED
+* TANGENCY_CONFLICT
+* RADIAL_CONFLICT
+* CURVE_DATA_CONFLICT
+* CURVE_BUILD_METHOD_CONFLICT
+* MANUAL_REVIEW
+
+---
+
+Offset / centerline / ROW verification rules
+
+When the map provides a centerline, ROW, section line, offset, width, half-width, or tie that controls the boundary location, verify the boundary against the resolved Prompt 1 geometry.
+
+Check:
+
+* Boundary offset from roadway/control centerline.
+* Boundary offset from ROW line.
+* Boundary offset from section, quarter-section, or sixteenth-section line.
+* ROW full width and half width.
+* Perpendicular offset distances.
+* Monument/control ties from Prompt 1 points to boundary points.
+* Intersections between boundary and resolved control lines.
+
+Do not treat diagonal ties as ROW widths unless the map clearly identifies them as perpendicular offsets.
+
+Create an Offset / Control Verification Report with:
+
+OffsetCallout,ControlFeature,BoundarySegment,ControlType,MapOffsetOrTie,CADMeasuredOffsetOrTie,OffsetError,MeasurementMethod,OffsetStatus,ControllingSource,Notes
+
+OffsetStatus options:
+
+* OFFSET_MATCH
+* WIDTH_MATCH
+* HALF_WIDTH_MATCH
+* TIE_MATCH
+* VARIABLE_WIDTH
+* OFFSET_CONFLICT
+* WIDTH_CONFLICT
+* TIE_CONFLICT
+* CONTROL_FEATURE_MISSING
+* OFFSET_NOT_VERIFIED
+* MANUAL_REVIEW
+
+Default offset tolerance = 0.05 feet unless I provide a different value.
+
+If a boundary segment is intended to be parallel to a centerline or ROW line, verify parallel bearing.
+
+If a boundary point is intended to be a perpendicular offset from a centerline, measure perpendicular distance from the resolved Prompt 1 centerline to the boundary point or line.
+
+If a boundary line is intended to be offset from a centerline, derive or verify the entire line from the resolved Prompt 1 centerline and compare to the map boundary call.
+
+If the boundary map call conflicts with the control offset, report both and identify which controls. Do not silently shift the boundary.
+
+---
+
+Prompt 1 overlay / fit QA
+
+After building the boundary:
+
+* Overlay the boundary against the resolved Prompt 1 sectional/control framework.
+* Confirm shared points land on resolved Prompt 1 points.
+* Confirm offsets from centerlines/ROW/sectional lines match map callouts.
+* Confirm the boundary does not use unadjusted Prompt 1 geometry.
+* Confirm the boundary POB coordinate is not incorrectly set to 10000,10000 unless it is truly the Prompt 1 POC.
+* Report any mismatch between boundary and Prompt 1 control geometry.
+
+---
+
+Map vs CAD Boundary Error Report
+
+Create a dedicated error report comparing the source map calls against the CAD-calculated boundary linework.
+
+For every boundary segment, include:
+
+Segment,FromPoint,ToPoint,MapBearing,MapDistance,CADBearing,CADDistance,BearingError,DistanceError,MapStartPoint,CADStartX,CADStartY,CADEndX,CADEndY,EndpointError,ControlFeature,MapOffset,CADOffset,OffsetError,ErrorType,Severity,Resolution,Notes
+
+ErrorType options:
+
+* NONE
+* MAP_LABEL_UNREADABLE
+* MAP_LABEL_CONFLICT
+* LEGAL_MAP_CONFLICT
+* POB_TIE_CONFLICT
+* POB_NOT_TIED_TO_PROMPT1
+* POB_INCORRECTLY_SET_TO_10000
+* BEARING_MISMATCH
+* DISTANCE_MISMATCH
+* ENDPOINT_GAP
+* CLOSURE_ERROR
+* OFFSET_CONFLICT
+* WIDTH_CONFLICT
+* CENTERLINE_OFFSET_CONFLICT
+* ROW_OFFSET_CONFLICT
+* SECTIONAL_TIE_CONFLICT
+* INTERSECTION_GAP
+* CURVE_DIRECTION_CONFLICT
+* RADIAL_CONFLICT
+* TANGENCY_CONFLICT
+* CURVE_DATA_CONFLICT
+* MANUAL_REVIEW_REQUIRED
+
+Severity options:
+
+* INFO = informational, no CAD correction needed.
+* MINOR = discrepancy appears to be rounding or plotting tolerance.
+* MODERATE = discrepancy affects linework and should be reviewed.
+* MAJOR = discrepancy prevents reliable import or requires manual correction.
+
+Resolution options:
+
+* ACCEPTED_AS_MATCH
+* ACCEPTED_ROUNDING
+* MAP_VALUE_HELD
+* LEGAL_VALUE_HELD
+* CONTROL_OFFSET_HELD
+* DERIVED_FROM_PROMPT1_CONTROL
+* PLACED_ON_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+---
+
+Legal description vs map QA
+
+If a legal description exists, compare every legal call to the final boundary sequence.
+
+Create this table:
+
+LegalCall,MapSegment,CSVSegment,LegalValue,MapValue,FinalCSVValue,MatchStatus,ControllingSource,Notes
+
+MatchStatus options:
+
+* MATCH
+* REVERSED_MATCH
+* NUMERIC_CONFLICT
+* SEQUENCE_CONFLICT
+* MISSING_FROM_MAP
+* MISSING_FROM_LEGAL
+* UNCERTAIN
+
+Unresolved legal/map conflicts must lower the final reliability rating.
+
+---
+
+Final CSV format
+
+Create a downloadable CSV file whenever file creation is available.
+
+Name the file:
+
+MapName_Prompt2_Boundary_From_Sectional_Framework.csv
+
+If only partially reliable, name it:
+
+MapName_Prompt2_Boundary_From_Sectional_Framework_QA.csv
+
+Use this CSV format:
+
+FeatureID,FeatureType,Layer,Segment,Type,StartX,StartY,EndX,EndY,Bearing,Distance,CurveDirection,CurveBuildMethod,Radius,Delta,ArcLength,Tangent,ChordBearing,ChordLength,RadialBearing,StartRadialBearing,EndRadialBearing,RadialDirectionUsed,SourceSheet,SourceLabel,CorrectedLabel,Confidence,ImportStatus,QAStatus,Notes,POCAnchorX,POCAnchorY,BoundaryPOBMethod,RelatedPrompt1Segment,RelatedPrompt1Point,ControlFeature,ControlOffset,MeasuredOffset,OffsetError,OffsetStatus
+
+CSV field rules:
+
+* FeatureType = BOUNDARY.
+* Layer = V-MAPL-BNDY for reliable boundary geometry.
+* Layer = V-MAPL-QA for uncertain geometry.
+* Type = LINE or CURVE.
+* CurveDirection = LEFT, RIGHT, UNKNOWN, or blank for line segments.
+* CurveBuildMethod = TANGENT_CONTROLLED, RADIAL_CONTROLLED, CHORD_CONTROLLED, COORDINATE_CONTROLLED, UNKNOWN_CONTROL, or blank for line segments.
+* RadialBearing should include the actual radial bearing text where known.
+* StartRadialBearing and EndRadialBearing should contain actual bearing values where known.
+* RadialDirectionUsed = SHOWN, REVERSED, BOTH_TESTED, UNKNOWN, or blank.
+* POCAnchorX and POCAnchorY should normally be 10000.0000 and 10000.0000.
+* BoundaryPOBMethod must identify how the boundary POB was tied to the Prompt 1 framework.
+* RelatedPrompt1Segment / RelatedPrompt1Point should identify the Prompt 1 control feature used to locate or verify the boundary row.
+* ControlOffset / MeasuredOffset / OffsetError / OffsetStatus should be populated where centerline, ROW, section, or width checks apply.
+
+Confidence options:
+
+* DIRECT
+* DERIVED
+* ADJUSTED
+* APPROXIMATE
+* UNCERTAIN
+
+ImportStatus options:
+
+* IMPORT
+* IMPORT_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+QAStatus examples:
+
+* BOUNDARY_OK
+* POB_TIED_TO_PROMPT1
+* POB_TIE_UNCERTAIN
+* OFFSET_VERIFIED
+* OFFSET_CONFLICT
+* LEGAL_MAP_CONFLICT
+* CURVE_OK
+* RADIAL_CONTROLLED
+* RADIAL_REVERSED
+* CURVE_DIRECTION_CONFLICT
+* TANGENCY_CONFLICT
+* CLOSURE_ERROR
+* MANUAL_REVIEW
+
+Notes must include:
+
+* Label verification status.
+* Prompt 1 control relationship.
+* Whether the POB was tied to the 10000,10000 POC framework.
+* Any centerline/ROW/section offset verification.
+* Curve/radial review options for uncertain curves.
+* Any manual-review needs.
+
+---
+
+Required output sections
+
+A. Prompt 2 Summary
+B. Prompt 1 Framework Dependency Review
+C. POC / Boundary POB Coordinate Report
+D. Source Sheets / Details Reviewed
+E. Boundary Sequence Extracted
+F. Legal Description vs Map QA
+G. Boundary Build / Closure Report
+H. Offset / Centerline / ROW / Sectional Control Verification Report
+I. Curve Math QA
+J. Curve Tangency / Radial / Build-Method QA
+K. Prompt 1 Overlay / Fit QA
+L. Map vs CAD Boundary Error Report
+M. Final Import Decision Summary
+N. Final Boundary CAD CSV
+O. Items Requiring Manual Verification
+
+---
+
+Final reliability rating
+
+At the end, rate the Prompt 2 boundary reconstruction as one of the following:
+
+* RELIABLE_BOUNDARY_FROM_CONTROL
+  The POB is tied to the resolved Prompt 1 framework, all segments connect, curve/radial QA passes, offset checks pass where applicable, and closure is acceptable.
+
+* PARTIALLY_RELIABLE_BOUNDARY_FROM_CONTROL
+  The boundary is useful for CAD review/import, but some segments, offsets, curves, or legal/map conflicts require QA or manual review.
+
+* NOT_RELIABLE_BOUNDARY_FROM_CONTROL
+  The boundary cannot be imported without substantial manual correction, or it cannot be tied to the Prompt 1 POC/control framework.
+
+Do not call the boundary reliable if the boundary POB was incorrectly assigned to 10000,10000, if Prompt 1 control is unresolved, if offset/control conflicts remain unresolved, if curve/radial conflicts remain unresolved, or if legal/map conflicts materially affect the geometry.

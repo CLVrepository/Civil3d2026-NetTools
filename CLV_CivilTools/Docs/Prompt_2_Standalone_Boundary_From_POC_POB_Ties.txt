@@ -1,0 +1,631 @@
+PROMPT 2 — STANDALONE BOUNDARY FROM POC / POB / TIE CALLS, QA, RADIAL CURVE REVIEW, AND CAD CSV
+Version: 2026-07-09 Rev 1 - standalone boundary workflow, no Prompt 1 sectional dependency
+Purpose: Create CAD-ready boundary linework from a recorded survey, parcel map, subdivision map, record of survey, final map, boundary map, or similar civil/survey PDF. This prompt starts from a POC/control anchor at 10000,10000, builds all commencement/tie lines to the POB, then builds the boundary from the POB using the map/legal calls. It produces a boundary CSV, an on-screen QA report, and a downloadable review report when file creation is available.
+
+============================================================
+CORE INTENT
+============================================================
+This prompt is for the project/site/parcel boundary only.
+
+Do not build lots.
+Do not build easements.
+Do not build road centerline networks except as reference/tie rows needed to locate the boundary.
+Do not build road edges, curb returns, ROW offsets, or cul-de-sac geometry unless the boundary itself is legally described along that feature.
+Do not rebuild sectional/control linework from Prompt 1.
+Do not require Prompt 1 geometry.
+Prompt 1 is now only a review report and does not supply required CAD coordinates.
+Prompt 4 has been removed from the workflow.
+
+The goal is to create boundary geometry that can be imported into CAD and checked against a scaled PDF/image overlay.
+
+============================================================
+DEFAULT COORDINATE RULE
+============================================================
+Use X/Y coordinates in feet.
+
+If no project/control coordinates are provided, place the Point of Commencement or controlling POC anchor at:
+
+POC / Control Anchor X = 10000.0000
+POC / Control Anchor Y = 10000.0000
+
+Build the boundary in this order:
+
+1. Identify the POC/control anchor.
+2. Place the POC at 10000,10000 unless real project coordinates are provided.
+3. Build all commencement/tie calls from the POC to the POB.
+4. Calculate the POB coordinate from the tie sequence.
+5. Build the boundary from the POB using the legal/map boundary calls.
+
+Important:
+
+* Do not assign the POB to 10000,10000 unless the POB is truly the same point as the POC.
+* The POC is the commencement/control point.
+* The POB is where the boundary begins.
+* Commencement/tie lines are not boundary area lines.
+* Boundary closure and area must use boundary calls only, not commencement/tie lines.
+
+Coordinate conventions:
+
+* Easting = X.
+* Northing = Y.
+* N theta E = +X, +Y.
+* S theta E = +X, -Y.
+* S theta W = -X, -Y.
+* N theta W = -X, +Y.
+* Export coordinates to at least 4 decimals, preferably 6 decimals.
+* Do not round coordinates so aggressively that closure changes.
+
+============================================================
+NO AUTOCLOSURE / NO FORCE-CLOSURE DEFAULT
+============================================================
+Build the boundary from the source calls exactly as read.
+
+Do not perform autoclosure, rubber-sheeting, rotation, scaling, best-fit adjustment, or forced endpoint closure unless the user specifically requests an autoclosure-adjusted boundary.
+
+The required first geometry build is the SOURCE-CALL BUILD.
+
+Report:
+
+* Source-call closure delta X.
+* Source-call closure delta Y.
+* Source-call closure distance.
+* Perimeter.
+* Closure ratio, if possible.
+* Likely source of error, if visible.
+
+Do not force the final endpoint back to the POB merely to close the boundary.
+If the boundary does not close, report the gap and mark the file QA or NOT READY as appropriate.
+
+============================================================
+MARKUP / COLOR PRIORITY RULE
+============================================================
+Use map/legal labels first, but user markup controls extraction priority.
+
+Common markup meanings:
+
+* Orange circle = POC/control anchor, normally placed at X=10000,Y=10000.
+* Yellow highlight = boundary to reconstruct in this Prompt 2.
+* Blue circle or blue arrow = possible POB, boundary start, or direction marker; does not move the POC coordinate.
+* Pink highlight = roadway/control centerlines; reference only unless needed as a tie/control feature.
+* Green highlight = ROW/road edge/private street edge/offset; reference only unless boundary is legally described along it.
+* Purple highlight = old sectional/control reference; not required by this Prompt 2.
+
+If yellow boundary highlight exists, follow the yellow boundary.
+If no yellow highlight exists, identify the intended exterior/site boundary from the legal description, map labels, parcel lines, and user instructions.
+
+============================================================
+LEGAL DESCRIPTION EXTRACTION REQUIREMENTS
+============================================================
+Extract and report the following when readable:
+
+* Map name / project name.
+* Recording number / document number.
+* APN / parcel number.
+* Owner / grantor / related party names, if relevant.
+* County and state.
+* PLSS location.
+* Plat/book/page references.
+* Basis of bearing.
+* Units.
+* Stated area.
+* Point of Commencement description.
+* Point of Beginning description.
+* All commencement/tie calls.
+* All boundary calls.
+* Line table data.
+* Curve table data.
+* Radial table data.
+* Detail/exhibit references.
+
+If missing or unreadable, write UNKNOWN or UNREADABLE. Do not guess.
+
+============================================================
+POC / POB / COMMENCEMENT BUILD RULE
+============================================================
+Build the POC and all tie lines before the boundary.
+
+POC/POB method options:
+
+* POC_AT_10000_10000 = default POC placement.
+* POC_FROM_PROJECT_COORDINATES = real coordinate values are provided.
+* POB_EQUALS_POC = POB is the same point as POC.
+* BEARING_DISTANCE_TIE_FROM_POC = POB calculated by tie call from POC.
+* MULTIPLE_TIE_CALLS_FROM_POC = POB calculated by multiple commencement/tie calls.
+* MONUMENT_TIE = POB calculated from monument/control tie.
+* ROW_OR_CENTERLINE_TIE = POB calculated from ROW/centerline/control relationship visible on the map.
+* INTERSECTION_DERIVED = POB calculated from intersection of reliable source lines.
+* PDF_OVERLAY_ALIGNED_QA = visually aligned for QA only, not production import.
+* UNKNOWN = POB cannot be reliably calculated.
+
+Use IMPORT only when the POB is calculable from source data.
+Use IMPORT_QA_LAYER or MANUAL_REVIEW when the POB is partially supported.
+Use DO_NOT_IMPORT when the POB cannot be located without guessing.
+
+============================================================
+BOUNDARY EXTRACTION RULES
+============================================================
+Extract the boundary sequence using:
+
+* Legal description calls.
+* Visible map labels.
+* Line tables.
+* Curve tables.
+* Radial tables.
+* Detail views.
+* Monument descriptions.
+* POC/POB/tie calls.
+* User highlighted boundary route.
+
+For every boundary segment, extract:
+
+* Segment ID.
+* From point.
+* To point.
+* Bearing.
+* Distance.
+* Curve data, if curved.
+* Radius, delta, arc length, tangent, chord bearing, chord length, radial bearings, if shown.
+* Source sheet/detail/table.
+* Source label.
+* Corrected label if reversed or corrected.
+* Confidence.
+
+Do not invent missing bearings, distances, curve data, radial bearings, or endpoints.
+If a label is unreadable, mark it UNCERTAIN.
+If a bearing is shown opposite the direction of travel, report the source bearing and corrected CAD bearing.
+If legal description and map labels conflict, report both values and identify which source controls the CSV.
+
+============================================================
+BOUNDARY CHAIN-BUILD RULE
+============================================================
+Build the boundary endpoint-to-endpoint from the calculated POB coordinate.
+
+* First boundary row starts at the calculated POB.
+* Each next row starts exactly at the previous endpoint.
+* Line endpoints are calculated from bearing and distance.
+* Curve endpoints are calculated from curve build method, radius, delta, radial data, chord data, and LEFT/RIGHT direction.
+* Do not force closure.
+* Do not visually shift, rotate, scale, or stretch geometry to fit the PDF.
+* Report endpoint gaps, overlaps, sequence conflicts, and closure errors.
+
+============================================================
+CURVE / RADIAL RULES
+============================================================
+For each boundary curve:
+
+* Identify curve ID.
+* Identify direction of travel.
+* Identify LEFT or RIGHT relative to travel.
+* Identify radius, delta, arc length, tangent, chord bearing, chord length, start radial bearing, end radial bearing, and radial IDs where shown.
+* Determine whether radial bearings appear center-to-curve-point or curve-point-to-center.
+* Treat radial bearings as bidirectional unless the map clearly defines the direction.
+* Test shown radial and reversed radial when direction is ambiguous.
+* Test LEFT and RIGHT if curve direction is uncertain.
+* Prefer RADIAL_CONTROLLED when a start radial is shown unless tangent control is clearly shown.
+* Use tangent control only when legal description, exhibit, or table supports tangency.
+* Use chord control as fallback/check when needed.
+* Do not fabricate missing curve data.
+
+CurveBuildMethod options:
+
+* TANGENT_CONTROLLED
+* RADIAL_CONTROLLED
+* CHORD_CONTROLLED
+* COORDINATE_CONTROLLED
+* UNKNOWN_CONTROL
+
+RadialDirectionUsed options:
+
+* SHOWN
+* REVERSED
+* BOTH_TESTED
+* UNKNOWN
+
+CurveQAStatus options:
+
+* CURVE_OK
+* RADIAL_CONTROLLED
+* TANGENT_CONTROLLED
+* CHORD_CONTROLLED
+* RADIAL_REVERSED
+* BOTH_RADIAL_DIRECTIONS_TESTED
+* LEFT_RIGHT_TESTED
+* LEFT_RIGHT_CORRECTED
+* TANGENCY_CONFLICT
+* RADIAL_CONFLICT
+* CURVE_DATA_CONFLICT
+* CURVE_MATH_CONFLICT
+* CURVE_DATA_INCOMPLETE
+* UNKNOWN_CURVE_CONTROL
+* MANUAL_REVIEW
+
+============================================================
+TIE-LINE / OFFSET / FRONTAGE CLASSIFICATION RULE
+============================================================
+Before using any distance as a centerline offset, ROW offset, road width, half-width, strip width, or perpendicular dimension, classify the source graphic and label.
+
+A dotted, dashed, broken, or leader-style line with its own bearing and distance is a TIE_LINE or NON_OFFSET_TIE_LINE. Use it as a bearing-distance tie if it locates a point. Do not treat it as a perpendicular offset unless the map explicitly states it is an offset.
+
+Classify labels as:
+
+* BOUNDARY_CALL
+* COMMENCEMENT_TIE
+* CONTROL_TIE
+* OFFSET_DIMENSION
+* ROW_WIDTH_OR_HALF_WIDTH
+* NON_OFFSET_TIE_LINE
+* LOT_FRONTAGE_DISTANCE
+* AMBIGUOUS_CALLOUT
+
+Report any label that could be confused with an offset, frontage, or boundary call.
+
+============================================================
+OFFSET / CENTERLINE / ROW CONTROL VERIFICATION
+============================================================
+When the boundary is described relative to a centerline, ROW line, section line, offset, width, half-width, or tie, verify the relationship if calculable.
+
+Do not use Prompt 1 sectional geometry as a required source. Use only the current map/document and Prompt 2 generated tie/boundary geometry.
+
+Check:
+
+* Boundary offset from roadway/control centerline.
+* Boundary offset from ROW line.
+* ROW full width or half width.
+* Perpendicular offsets.
+* Monument/control ties.
+* Boundary intersections with control lines.
+* Dotted/dashed bearing-distance ties as ties only, not offsets.
+
+OffsetStatus options:
+
+* OFFSET_MATCH
+* WIDTH_MATCH
+* HALF_WIDTH_MATCH
+* TIE_MATCH
+* VARIABLE_WIDTH
+* OFFSET_CONFLICT
+* WIDTH_CONFLICT
+* TIE_CONFLICT
+* CONTROL_FEATURE_MISSING
+* OFFSET_NOT_VERIFIED
+* NON_OFFSET_TIE_LINE
+* TIE_LINE_VERIFIED
+* TIE_NOT_OFFSET
+* TIE_LINE_MISCLASSIFIED_AS_OFFSET
+* MANUAL_REVIEW
+
+Default offset tolerance = 0.05 feet unless the user provides a different value.
+
+============================================================
+FORWARD CLOSURE CHECK
+============================================================
+After building the boundary from source calls, compute:
+
+* POB coordinate.
+* Ending coordinate.
+* Delta X.
+* Delta Y.
+* Linear closure error.
+* Boundary perimeter.
+* Closure ratio, if possible.
+* Area, if boundary is close enough to compute and it is appropriate.
+
+Do not include commencement/tie lines in area.
+Do not force closure.
+Report pass/warn/fail.
+
+============================================================
+REVERSE BOUNDARY BUILD QA
+============================================================
+Perform a reverse-build QA check using the final forward-built geometry that will be exported.
+
+Reverse build is QA only. Do not adjust geometry from the reverse check.
+
+Procedure:
+
+1. Use the same POB coordinate as the reverse-build start and closure target.
+2. Reverse the final boundary sequence.
+3. For LINE rows, swap start/end and use reciprocal bearing.
+4. For CURVE rows, swap PC/PT, reverse travel, flip LEFT/RIGHT, and test radial direction as needed.
+5. Chain-build the reversed boundary endpoint-to-endpoint.
+6. Compare reverse-built endpoints to matching forward-built points.
+7. Compare reverse ending coordinate to original POB.
+
+Reverse report table:
+
+ReverseSegment,ForwardSegment,Type,ReverseFromPoint,ReverseToPoint,ReverseStartX,ReverseStartY,ReverseEndX,ReverseEndY,ExpectedForwardPoint,ExpectedX,ExpectedY,EndpointDeltaX,EndpointDeltaY,EndpointGap,ReverseBearingOrCurve,CurveDirectionUsed,RadialDirectionUsed,ReverseQAStatus,Severity,Resolution,Notes
+
+ReverseQAStatus options:
+
+* REVERSE_BUILD_OK
+* REVERSE_BUILD_CLOSURE_OK
+* REVERSE_ENDPOINT_MATCH
+* REVERSE_LINE_OK
+* REVERSE_CURVE_OK
+* REVERSE_RADIAL_OK
+* REVERSE_RADIAL_REVERSED_OK
+* REVERSE_ENDPOINT_GAP
+* REVERSE_CLOSURE_ERROR
+* REVERSE_LINE_BEARING_CONFLICT
+* REVERSE_CURVE_DIRECTION_CONFLICT
+* REVERSE_RADIAL_CONFLICT
+* REVERSE_CURVE_ENDPOINT_CONFLICT
+* REVERSE_BUILD_MANUAL_REVIEW
+
+Default reverse tolerance = 0.05 feet unless the user provides a different value.
+
+============================================================
+SCALED PDF / IMAGE OVERLAY QA
+============================================================
+Overlay is QA only.
+
+If image/PDF tools are available, compare the calculated Prompt 2 boundary and tie geometry against the scaled PDF/image.
+
+Verify:
+
+* POC/tie/POB relationship appears correct.
+* Boundary follows highlighted yellow route.
+* Boundary does not accidentally follow lot, ROW, easement, or centerline features.
+* Curves appear on the correct side.
+* Boundary endpoints and corners align with intended map features.
+* Any visible mismatch is reported.
+
+Do not move, rotate, scale, stretch, or visually nudge the geometry to fit the PDF.
+
+============================================================
+MAP VS CAD BOUNDARY ERROR REPORT
+============================================================
+Create an error report comparing source map/legal calls against CAD-calculated boundary geometry.
+
+Table:
+
+Segment,FromPoint,ToPoint,MapBearing,MapDistance,CADBearing,CADDistance,BearingError,DistanceError,MapStartPoint,CADStartX,CADStartY,CADEndX,CADEndY,EndpointError,ControlFeature,MapOffsetOrTie,CADOffsetOrTie,OffsetOrTieError,ErrorType,Severity,Resolution,Notes
+
+ErrorType options:
+
+* NONE
+* MAP_LABEL_UNREADABLE
+* MAP_LABEL_CONFLICT
+* LEGAL_MAP_CONFLICT
+* POC_TIE_CONFLICT
+* POB_TIE_CONFLICT
+* POB_INCORRECTLY_SET_TO_10000
+* BEARING_MISMATCH
+* DISTANCE_MISMATCH
+* ENDPOINT_GAP
+* CLOSURE_ERROR
+* OFFSET_CONFLICT
+* WIDTH_CONFLICT
+* TIE_LINE_MISCLASSIFIED_AS_OFFSET
+* NON_OFFSET_TIE_LINE_USED_AS_OFFSET
+* CENTERLINE_OFFSET_CONFLICT
+* ROW_OFFSET_CONFLICT
+* INTERSECTION_GAP
+* CURVE_DIRECTION_CONFLICT
+* RADIAL_CONFLICT
+* TANGENCY_CONFLICT
+* CURVE_DATA_CONFLICT
+* MANUAL_REVIEW_REQUIRED
+
+Severity options:
+
+* INFO
+* MINOR
+* MODERATE
+* MAJOR
+
+Resolution options:
+
+* ACCEPTED_AS_MATCH
+* ACCEPTED_ROUNDING
+* MAP_VALUE_HELD
+* LEGAL_VALUE_HELD
+* CONTROL_TIE_HELD
+* CONTROL_OFFSET_HELD
+* PLACED_ON_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+============================================================
+LEGAL DESCRIPTION VS MAP QA
+============================================================
+If a legal description exists, compare every legal call to the final boundary sequence.
+
+Table:
+
+LegalCall,MapSegment,CSVSegment,LegalValue,MapValue,FinalCSVValue,MatchStatus,ControllingSource,Notes
+
+MatchStatus options:
+
+* MATCH
+* REVERSED_MATCH
+* NUMERIC_CONFLICT
+* SEQUENCE_CONFLICT
+* MISSING_FROM_MAP
+* MISSING_FROM_LEGAL
+* UNCERTAIN
+
+Unresolved legal/map conflicts must lower the final reliability rating.
+
+============================================================
+FINAL CSV OUTPUT
+============================================================
+Create a downloadable CSV file whenever file creation is available.
+
+Name the file:
+
+MapName_Prompt2_Boundary_From_POC_POB_Ties.csv
+
+If only partially reliable, name it:
+
+MapName_Prompt2_Boundary_From_POC_POB_Ties_QA.csv
+
+CSV header:
+
+FeatureID,FeatureType,Layer,Segment,Type,ImportRole,FromPoint,ToPoint,StartX,StartY,EndX,EndY,Bearing,Distance,CurveDirection,CurveBuildMethod,Radius,Delta,ArcLength,Tangent,ChordBearing,ChordLength,RadialBearing,StartRadialBearing,EndRadialBearing,RadialDirectionUsed,SourceSheet,SourceLabel,CorrectedLabel,Confidence,ImportStatus,QAStatus,Notes,POCAnchorX,POCAnchorY,POBMethod,ControlFeature,MapOffsetOrTie,CADMeasuredOffsetOrTie,OffsetOrTieError,OffsetStatus
+
+FeatureType options:
+
+* POC_MARKER
+* POB_MARKER
+* COMMENCEMENT_TIE
+* BOUNDARY
+* CONTROL_TIE
+* QA_REFERENCE
+
+ImportRole options:
+
+* POC_MARKER
+* POB_MARKER
+* COMMENCEMENT
+* BOUNDARY
+* CONTROL_REFERENCE
+* QA_REFERENCE
+
+Layer defaults:
+
+* Boundary: V-MAPL-BNDY
+* Commencement/tie/control: V-MAPL-CNTRL
+* POC/POB marker: V-MAPL-CNTRL
+* QA/uncertain geometry: V-MAPL-QA
+
+Type options:
+
+* LINE
+* CURVE
+* POINT_MARKER
+* NOTE
+
+Confidence options:
+
+* DIRECT
+* DERIVED
+* APPROXIMATE
+* UNCERTAIN
+
+ImportStatus options:
+
+* IMPORT
+* IMPORT_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+QAStatus examples:
+
+* POC_AT_10000_10000
+* POB_CALCULATED_FROM_TIES
+* POB_EQUALS_POC
+* COMMENCEMENT_TIE_OK
+* BOUNDARY_OK
+* SOURCE_CALL_BUILD_REPORTED
+* NO_AUTOCLOSURE_PERFORMED
+* CLOSURE_OK
+* CLOSURE_ERROR
+* CURVE_OK
+* RADIAL_CONTROLLED
+* RADIAL_REVERSED
+* OFFSET_VERIFIED
+* NON_OFFSET_TIE_LINE
+* LEGAL_MAP_CONFLICT
+* MANUAL_REVIEW
+
+Every IMPORT row must have usable StartX, StartY, EndX, EndY.
+
+============================================================
+DOWNLOADABLE REVIEW REPORT
+============================================================
+Create a downloadable review report whenever file creation is available.
+
+Preferred name:
+
+MapName_Prompt2_Boundary_Review_Report.docx
+
+If docx is not available, use:
+
+MapName_Prompt2_Boundary_Review_Report.txt
+
+Report sections:
+
+1. Cover / Project Summary
+2. Executive Summary
+3. Preliminary Legal Description Review and Possible Errors
+4. POC / POB / Commencement Coordinate Report
+5. Source Sheets / Details Reviewed
+6. Boundary Sequence Extracted
+7. Legal Description vs Map QA
+8. Boundary Build / Closure Report
+9. Reverse Boundary Build QA Report
+10. Offset / Centerline / ROW / Control Verification Report
+11. Curve Math QA
+12. Curve Tangency / Radial / Build-Method QA
+13. Scaled PDF / Image Overlay QA
+14. Map vs CAD Boundary Error Report
+15. Import Decision Summary
+16. Final Boundary CSV Preview
+17. Items Requiring Manual Verification
+18. Final Reliability Rating
+
+============================================================
+REQUIRED ON-SCREEN OUTPUT SECTIONS
+============================================================
+A. Prompt 2 Summary
+B. Downloadable Files
+C. Preliminary Legal Description Review and Possible Errors
+D. POC / POB / Commencement Coordinate Report
+E. Source Sheets / Details Reviewed
+F. Boundary Sequence Extracted
+G. Legal Description vs Map QA
+H. Boundary Build / Closure Report
+I. Reverse Boundary Build QA Report
+J. Offset / Centerline / ROW / Control Verification Report
+K. Curve Math QA
+L. Curve Tangency / Radial / Build-Method QA
+M. Scaled PDF / Image Overlay QA
+N. Map vs CAD Boundary Error Report
+O. Final Import Decision Summary
+P. Final Boundary CAD CSV
+Q. Items Requiring Manual Verification
+R. Final Reliability Rating
+
+============================================================
+FINAL IMPORT STATUS
+============================================================
+Use one of these exact statements:
+
+* READY FOR BOUNDARY IMPORT
+* READY FOR BOUNDARY IMPORT WITH QA REVIEW
+* NOT READY FOR BOUNDARY IMPORT - REVIEW REQUIRED
+
+Do not say READY if any IMPORT row would be skipped because of missing headers, missing Type, missing Layer, missing coordinates, unsupported geometry, unresolved POB, unresolved MAJOR curve issue, or unresolved MAJOR legal/map conflict.
+
+============================================================
+FINAL RELIABILITY RATING
+============================================================
+At the end, rate the Prompt 2 boundary reconstruction as one of:
+
+* RELIABLE_BOUNDARY_FROM_POC_POB_TIES
+  POC is identified, POB is calculated from source tie/control data, boundary sequence connects, curve/radial QA passes, reverse-build QA passes, closure is acceptable or clearly reported, and import rows are reliable.
+
+* PARTIALLY_RELIABLE_BOUNDARY_FROM_POC_POB_TIES
+  Boundary is useful for CAD review/import, but some segments, offsets, curves, ties, or legal/map conflicts require QA/manual verification.
+
+* NOT_RELIABLE_BOUNDARY_FROM_POC_POB_TIES
+  Boundary cannot be imported without substantial manual correction, POB cannot be calculated, source calls are missing/unreadable, curve/radial conflicts are unresolved, reverse-build QA fails, or legal/map conflicts materially affect the geometry.
+
+============================================================
+FINAL IMPORTANT RULES
+============================================================
+* Prompt 2 is standalone.
+* Prompt 2 does not require Prompt 1 CAD geometry.
+* Prompt 1 is review only.
+* Prompt 4 has been removed.
+* Place POC at 10000,10000 unless real coordinates are provided.
+* Build ties from POC to POB.
+* Build boundary from POB.
+* Do not put POB at 10000,10000 unless POB equals POC.
+* Do not force closure unless specifically requested.
+* Perform forward closure and reverse-build QA.
+* Keep curve/radial review.
+* Keep tie-line vs offset classification.
+* Perform scaled PDF/image overlay as QA only.
+* Report all discrepancies. Do not silently force geometry.

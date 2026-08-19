@@ -1,0 +1,488 @@
+PROMPT 3 — ROAD CENTERLINES ONLY FROM PROMPT 2 BOUNDARY / POC FRAMEWORK, QA, AND CAD CSV
+Version: 2026-07-09 Rev 1 - no sectional Prompt 1 dependency
+Purpose: Create CAD-ready road centerline linework only, using the Prompt 2 POC/POB/tie/boundary coordinate framework and the highlighted road centerline map labels. This prompt exports centerlines only for the 3-ROADS IMPORT workflow. Road offsets, road edges, ROW outlines, cul-de-sac edge geometry, and curb returns are handled later by separate CAD tools.
+
+============================================================
+CORE INTENT
+============================================================
+This Prompt 3 is CENTERLINE ONLY.
+
+Do not build road edges.
+Do not build right-of-way lines.
+Do not build private street edge outlines.
+Do not build road common-element outlines.
+Do not build offsets.
+Do not build cul-de-sac edge circles/arcs.
+Do not build curb returns or road edge returns.
+Do not build lots, common elements, or easements.
+Do not rebuild the Prompt 2 boundary.
+Do not depend on Prompt 1 sectional/control linework.
+Prompt 1 is review only.
+Prompt 4 has been removed.
+
+The user will highlight or identify the road centerline path to build. Use the highlighted centerline route and map labels to calculate centerline linework only.
+
+============================================================
+COORDINATE FRAMEWORK RULE
+============================================================
+Prompt 2 establishes the coordinate framework.
+
+The standard POC/control anchor is:
+
+POC / Control Anchor X = 10000.0000
+POC / Control Anchor Y = 10000.0000
+
+Prompt 2 should have created:
+
+* POC marker.
+* Commencement/tie lines from POC to POB.
+* Boundary POB coordinate.
+* Boundary linework.
+* Any control/tie rows needed to locate the boundary.
+
+Prompt 3 uses that Prompt 2 framework to locate road centerlines.
+
+Do not move a road centerline start point to 10000,10000 unless the highlighted road centerline actually begins at the Prompt 2 POC.
+
+A road centerline start point must be calculated by one of these methods:
+
+* PROMPT2_BOUNDARY_INTERSECTION = centerline start is where highlighted centerline intersects Prompt 2 boundary.
+* PROMPT2_TIE_OR_CONTROL_POINT = centerline start uses a Prompt 2 tie/control point.
+* BEARING_DISTANCE_TIE_FROM_POC = centerline start is calculated by bearing/distance from POC.
+* BEARING_DISTANCE_TIE_FROM_POB = centerline start is calculated by bearing/distance from boundary POB.
+* BEARING_DISTANCE_TIE_FROM_BOUNDARY_POINT = centerline start is calculated from a known Prompt 2 boundary point.
+* CENTERLINE_TIE = centerline start is located by a centerline-specific tie call.
+* ROW_OR_CONTROL_OFFSET = centerline start is derived from a ROW/control offset that is clearly labeled.
+* MONUMENT_TIE = centerline start is derived from a monument tie.
+* INTERSECTION_DERIVED = centerline start is calculated by intersection of resolved source geometry.
+* PDF_OVERLAY_ALIGNED_QA = visual alignment for QA only, not production import.
+* UNKNOWN = centerline start cannot be reliably calculated.
+
+If the centerline start method is PDF_OVERLAY_ALIGNED_QA or UNKNOWN, mark affected rows IMPORT_QA_LAYER or MANUAL_REVIEW.
+
+============================================================
+MARKUP / COLOR PRIORITY RULE
+============================================================
+Use map labels first, but user markup controls extraction priority.
+
+Common markup meanings:
+
+* Orange circle = POC/control anchor at 10000,10000 from Prompt 2.
+* Yellow highlight = Prompt 2 boundary reference.
+* Pink highlight = road centerline geometry to build in Prompt 3.
+* Green highlight = ROW / road edge / private street edge; use only as reference or QA. Do not export.
+* Blue circle or arrow = possible roadway start point, direction, boundary POB, or user note.
+* Purple highlight = old sectional/control reference; not required.
+
+For Prompt 3, follow only the highlighted road centerline route.
+
+If a road edge is highlighted but the centerline is not highlighted, do not build road edges. Use the edge only as QA/reference if the centerline location can be derived from clear width/offset data.
+
+============================================================
+PROMPT 2 DEPENDENCY REVIEW
+============================================================
+Before building centerlines, review the Prompt 2 results.
+
+Identify:
+
+* Map name.
+* Prompt 2 POC coordinate.
+* Prompt 2 POB coordinate.
+* Prompt 2 boundary source used.
+* Prompt 2 boundary segments that relate to road centerline entry/tie points.
+* Prompt 2 tie/control rows that relate to centerline start points.
+* Any Prompt 2 QA issue that affects centerline location.
+
+If Prompt 2 boundary/tie geometry is missing, incomplete, or not reliable enough to locate the highlighted centerline, stop and report that Prompt 3 cannot reliably create importable centerline geometry.
+
+Do not create arbitrary coordinates.
+
+============================================================
+CENTERLINE EXTRACTION RULES
+============================================================
+For every highlighted centerline segment, extract:
+
+* Road name.
+* Segment ID.
+* From point.
+* To point.
+* Bearing.
+* Distance.
+* Curve data, if the centerline is curved.
+* Radius.
+* Delta.
+* Arc length.
+* Tangent.
+* Chord bearing.
+* Chord length.
+* Start and end radial bearings where shown.
+* Source sheet/detail/table.
+* Source label.
+* Whether the value is direct, derived, approximate, or uncertain.
+
+Use visible map labels, road centerline labels, line tables, curve tables, radial tables, detail views, monument ties, boundary relationships, and Prompt 2 control data.
+
+Do not invent missing bearings, distances, curve data, endpoints, road names, or cul-de-sac center points.
+
+If a label is unreadable, mark it UNCERTAIN.
+If a bearing is shown opposite the direction of travel, record the original source bearing and corrected CAD bearing.
+If a curve label appears to belong to an edge/ROW line rather than the centerline, do not use it for centerline geometry unless the derivation is clear and marked QA.
+
+============================================================
+CENTERLINE CHAIN-BUILD RULE
+============================================================
+Build the highlighted centerline endpoint-to-endpoint.
+
+* The first centerline row starts at the calculated centerline start point tied to Prompt 2 geometry or a source tie.
+* Each next row starts exactly at the previous centerline endpoint.
+* Line endpoints are calculated from bearing and distance.
+* Curve endpoints are calculated from the selected curve build method.
+* Centerline intersection nodes must share the same coordinate.
+* Branch roads must start from resolved parent centerline nodes.
+* Continue the parent centerline through an intersection when the bearing/curve geometry does not change and the road name remains the same.
+* Do not split a parent centerline into separate rows just because another road crosses or branches from it.
+* Do not create disconnected loose centerline pieces unless the map shows separate roads and each has its own control tie.
+* Do not trim or extend centerlines to road edges.
+* Do not continue beyond the highlighted endpoint, true angle point, curve transition, dead-end node, or cul-de-sac center point.
+
+If a calculated endpoint does not match the expected map/control/intersection node, report the difference and place the row on QA unless correction is supported by source data.
+
+============================================================
+CENTERLINE CONTINUITY / SINGLE-OBJECT EXPORT RULE
+============================================================
+Before creating the final CSV, review the highlighted centerline chain by road name and merge adjacent same-geometry pieces into the longest valid continuous centerline object.
+
+For each road name:
+
+* Keep separate road names as separate centerline chains.
+* Do not break a centerline at crossings, lot lines, boundary intersections, road-width callouts, station points, tie points, annotation leaders, or minor construction nodes if the bearing/curve geometry continues.
+* Do not break at an intersection unless the road changes bearing, begins/ends, branches into a different road name, or reaches a true PI/PC/PT/curve transition.
+* Merge adjacent LINE rows with same road name, same bearing, collinear geometry, and matching endpoints.
+* Merge adjacent CURVE rows with same road name, radius, curve direction, curve center/radial control, and continuous geometry unless the map labels them as separate curves.
+* Preserve intermediate source labels and distances in Notes for QA.
+* Split only at true angle points, PC/PT, reverse curves, compound curves with different radius, tangent-to-curve transitions, road name changes, dead ends, or cul-de-sac center points.
+
+Default merge tolerances:
+
+* Bearing match tolerance = 0°00'05".
+* Collinearity / endpoint tolerance = 0.05 feet.
+* Radius match tolerance = 0.05 feet.
+* Arc/chord endpoint tolerance = 0.05 feet.
+
+QAStatus examples:
+
+* CENTERLINE_MERGED_CONTINUOUS_LINE
+* CENTERLINE_MERGED_CONTINUOUS_CURVE
+* INTERMEDIATE_POINT_USED_FOR_QA_ONLY
+* ROAD_INTERSECTION_NOT_A_BREAK
+* SAME_BEARING_SEGMENTS_MERGED
+* CONTINUOUS_CURVE_SEGMENTS_MERGED
+* CENTERLINE_SPLIT_AT_TRUE_ANGLE_POINT
+* CENTERLINE_SPLIT_AT_PC_PT
+* CENTERLINE_SPLIT_AT_ROAD_NAME_CHANGE
+* CENTERLINE_NOT_MERGED_MANUAL_REVIEW
+
+============================================================
+CENTERLINE INTERSECTION / BRANCH RULE
+============================================================
+When one highlighted centerline intersects or branches from another:
+
+* Calculate the parent centerline first.
+* Calculate the branch point as an actual coordinate on the parent centerline.
+* The branch centerline starts exactly at the parent centerline node.
+* If the branch is located by station/distance along the parent, calculate that station from the resolved parent centerline.
+* If the branch is located by intersection of two bearings, calculate the intersection.
+* If the branch point is only visually shown and not labeled, use it only as QA and mark APPROXIMATE or UNCERTAIN.
+
+Do not start branch roads from visually guessed points if a calculable tie or intersection exists.
+
+============================================================
+CENTERLINE CURVE RULES
+============================================================
+For each centerline curve:
+
+* Confirm the curve belongs to the centerline.
+* Identify LEFT or RIGHT relative to direction of centerline travel.
+* Identify radius, delta, arc length, tangent, chord bearing, chord length, radial bearings, and radial IDs where shown.
+* Determine build method:
+  * TANGENT_CONTROLLED
+  * RADIAL_CONTROLLED
+  * CHORD_CONTROLLED
+  * COORDINATE_CONTROLLED
+  * UNKNOWN_CONTROL
+* Test shown radial and reversed radial when ambiguous.
+* Test LEFT and RIGHT when curve direction is ambiguous.
+* Verify arc length, tangent, chord math, and endpoint fit.
+* Verify tangent continuity when the map implies tangency.
+
+If a curve label belongs to road edge/ROW rather than centerline, report CURVE_LABEL_NOT_CENTERLINE and do not export it as centerline geometry unless clearly derived and marked QA.
+
+============================================================
+CUL-DE-SAC / DEAD-END CENTERLINE RULE
+============================================================
+For dead-end roads, bulbs, knuckles, and cul-de-sacs:
+
+* Build only the centerline to the highlighted dead-end/cul-de-sac centerline endpoint.
+* If a cul-de-sac circle or bulb is shown, identify its center point if available, but do not export the circle or edge arc.
+* If the centerline terminates at the cul-de-sac center, use that as final endpoint.
+* If the map shows centerline ending at PC/PT/tangent point instead, use the mapped endpoint and report the endpoint basis.
+* Do not draw bulb edges, return curves, edge radii, or offset geometry.
+* Record road width/cul-de-sac radius information in Notes as FUTURE_OFFSET_SCRIPT_INFO.
+
+============================================================
+ROAD EDGE / OFFSET EXCLUSION RULE
+============================================================
+Only export centerline/control rows.
+
+Allowed ReferenceClass values:
+
+* ROAD_CENTERLINE
+* DERIVED_ROAD_CENTERLINE
+* ROADWAY_CONTROL
+* ROADWAY_TIE
+* ROADWAY_POINT_TIE
+* QA_ROAD_GEOMETRY
+
+Do not export rows with ReferenceClass:
+
+* PUBLIC_ROW_LINE
+* PRIVATE_STREET_EDGE
+* ROAD_COMMON_ELEMENT_OUTLINE
+* CURB_RETURN
+* CUL_DE_SAC_OR_KNUCKLE
+* ROAD_EDGE
+* OFFSET_LINE
+
+Road width, half-width, cul-de-sac radius, and offset data may be saved in Notes only for later offset script development.
+
+============================================================
+TIE LINE / OFFSET CLASSIFICATION RULE
+============================================================
+Before using any distance to locate a centerline, classify the source label.
+
+Classify labels as:
+
+* CENTERLINE_CALL
+* CENTERLINE_TIE
+* CONTROL_TIE
+* BOUNDARY_TIE
+* OFFSET_DIMENSION
+* ROAD_WIDTH_OR_HALF_WIDTH
+* NON_OFFSET_TIE_LINE
+* LOT_FRONTAGE_DISTANCE
+* AMBIGUOUS_CALLOUT
+
+A dotted/dashed/leader line with its own bearing and distance is a TIE_LINE or NON_OFFSET_TIE_LINE, not a perpendicular offset, unless explicitly labeled as an offset.
+
+Do not treat lot frontage distances as centerline distances.
+
+============================================================
+CENTERLINE QA CHECKS
+============================================================
+After building the centerline:
+
+* Verify start point is tied to Prompt 2 boundary/tie framework or source tie.
+* Verify centerline does not start at 10000,10000 unless it truly begins at the POC.
+* Verify each segment begins at the previous endpoint.
+* Verify branches start at resolved parent centerline nodes.
+* Verify intersections share one coordinate.
+* Verify bearings and distances match map labels within tolerance.
+* Verify curve math.
+* Verify endpoint is correct highlighted endpoint or cul-de-sac/dead-end center point.
+* Verify centerline does not use road-edge curve labels unless clearly derived.
+* Verify no road edge / offset geometry was exported.
+
+Default tolerances:
+
+* Bearing tolerance = 0°00'05".
+* Distance tolerance = 0.05 feet.
+* Endpoint tolerance = 0.05 feet.
+* Curve math tolerance = 0.05 feet.
+
+============================================================
+MAP VS CAD CENTERLINE ERROR REPORT
+============================================================
+Table:
+
+Segment,RoadName,FromPoint,ToPoint,MapBearing,MapDistance,CADBearing,CADDistance,BearingError,DistanceError,MapStartPoint,CADStartX,CADStartY,CADEndX,CADEndY,EndpointError,StartTieMethod,RelatedPrompt2Segment,RelatedBoundarySegment,ErrorType,Severity,Resolution,Notes
+
+ErrorType options:
+
+* NONE
+* MAP_LABEL_UNREADABLE
+* MAP_LABEL_CONFLICT
+* CENTERLINE_START_NOT_TIED_TO_PROMPT2
+* CENTERLINE_START_INCORRECTLY_SET_TO_10000
+* BEARING_MISMATCH
+* DISTANCE_MISMATCH
+* ENDPOINT_GAP
+* INTERSECTION_NODE_GAP
+* BRANCH_NODE_GAP
+* CENTERLINE_OVERRUN
+* CENTERLINE_SHORTFALL
+* CURVE_DIRECTION_CONFLICT
+* RADIAL_CONFLICT
+* CURVE_DATA_CONFLICT
+* CURVE_LABEL_NOT_CENTERLINE
+* ROAD_EDGE_GEOMETRY_EXPORTED_BY_MISTAKE
+* NON_OFFSET_TIE_LINE_USED_AS_OFFSET
+* LOT_FRONTAGE_USED_AS_CENTERLINE
+* MANUAL_REVIEW_REQUIRED
+
+Severity options:
+
+* INFO
+* MINOR
+* MODERATE
+* MAJOR
+
+Resolution options:
+
+* ACCEPTED_AS_MATCH
+* ACCEPTED_ROUNDING
+* MAP_VALUE_HELD
+* DERIVED_FROM_PROMPT2_BOUNDARY
+* DERIVED_FROM_PROMPT2_TIE
+* DERIVED_FROM_CENTERLINE_TIE
+* PLACED_ON_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+============================================================
+FINAL CSV OUTPUT
+============================================================
+Create a downloadable CSV file whenever file creation is available.
+
+Name the file:
+
+MapName_Prompt3_Road_Centerlines_Only.csv
+
+If partially reliable:
+
+MapName_Prompt3_Road_Centerlines_Only_QA.csv
+
+CSV header:
+
+FeatureID,FeatureType,ReferenceClass,Layer,RoadName,Segment,Type,StartX,StartY,EndX,EndY,Bearing,Distance,OriginalDistance,AdjustedDistance,LengthAdjustment,AdjustmentMethod,CurveDirection,CurveBuildMethod,Radius,Delta,ArcLength,Tangent,ChordBearing,ChordLength,RadialBearing,StartRadialBearing,EndRadialBearing,RadialDirectionUsed,WidthSource,MapWidthOrOffset,CADMeasuredWidthOrOffset,WidthOffsetError,WidthOffsetStatus,CenterlineMethod,LeftEdgeSegment,RightEdgeSegment,RelatedBoundarySegment,RelatedPrompt2Segment,FromPoint,ToPoint,GeometryBuildMode,SourceSheet,SourceLabel,CorrectedLabel,Confidence,ImportStatus,QAStatus,Notes
+
+FeatureType options:
+
+* ROAD_CENTERLINE
+* ROADWAY_CONTROL
+* ROADWAY_TIE
+* POINT_TIE
+* QA_REFERENCE
+
+Layer defaults:
+
+* Road centerline: V-MAPL-ROAD-CL
+* Derived road centerline: V-MAPL-ROAD-CL
+* Roadway control/tie: V-MAPL-CNTRL
+* QA/uncertain geometry: V-MAPL-QA
+
+Type options:
+
+* LINE
+* CURVE
+* POINT_TIE
+* NOTE
+
+GeometryBuildMode options:
+
+* CENTERLINE_FROM_PROMPT2_BOUNDARY
+* CENTERLINE_FROM_PROMPT2_TIE
+* CENTERLINE_FROM_TIE
+* CENTERLINE_FROM_INTERSECTION
+* CENTERLINE_CHAIN_BUILD
+* CENTERLINE_CURVE_TANGENT
+* CENTERLINE_CURVE_RADIAL
+* CENTERLINE_CURVE_CHORD
+* COORDINATE
+* QA_COORDINATE
+* UNKNOWN
+
+CenterlineMethod options:
+
+* DIRECT_CENTERLINE_LABEL
+* HIGHLIGHTED_CENTERLINE_WITH_MAP_LABELS
+* BEARING_DISTANCE_TIE_FROM_POC
+* BEARING_DISTANCE_TIE_FROM_POB
+* BEARING_DISTANCE_TIE_FROM_BOUNDARY_POINT
+* INTERSECTION_DERIVED
+* PROMPT2_BOUNDARY_TIE
+* DERIVED_FROM_EDGES_QA_ONLY
+* APPROXIMATE_FROM_HIGHLIGHT_QA_ONLY
+* UNKNOWN
+
+ImportStatus options:
+
+* IMPORT
+* IMPORT_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+Notes must include:
+
+* How the first centerline point was calculated from the Prompt 2 framework.
+* Boundary/tie relationship.
+* Highlight color/markup used.
+* Any centerline tie, road name, branch node, cul-de-sac endpoint, or curve note.
+* Any road width / cul-de-sac radius information for later offset script, clearly marked FUTURE_OFFSET_SCRIPT_INFO.
+
+============================================================
+REQUIRED OUTPUT SECTIONS
+============================================================
+A. Prompt 3 Summary
+B. Source Sheets / Details Reviewed
+C. Prompt 2 Dependency Review
+D. Highlighted Centerline Identification
+E. Centerline Start / Tie-In Coordinate Report
+F. Centerline Sequence Extracted
+G. Centerline Chain-Build Coordinate Report
+H. Centerline Curve QA
+I. Centerline Intersection / Branch Node QA
+J. Centerline Continuity / Merge QA Report
+K. Cul-De-Sac / Dead-End Centerline Endpoint Notes
+L. Road Edge / Offset Exclusion QA
+M. Map vs CAD Centerline Error Report
+N. Final Import Decision Summary
+O. Final Road Centerline CAD CSV
+P. Items Requiring Manual Verification
+Q. Final Reliability Rating
+
+============================================================
+FINAL IMPORT STATUS
+============================================================
+Use one of these exact statements:
+
+* READY FOR ROAD CENTERLINE IMPORT
+* READY FOR ROAD CENTERLINE IMPORT WITH QA REVIEW
+* NOT READY FOR ROAD CENTERLINE IMPORT - REVIEW REQUIRED
+
+============================================================
+FINAL RELIABILITY RATING
+============================================================
+At the end, rate the Prompt 3 centerline framework as:
+
+* RELIABLE_CENTERLINE_FRAMEWORK_FROM_PROMPT2
+  Highlighted centerline is tied to Prompt 2 boundary/tie framework, segments connect, branches share nodes, curve QA passes, no road edge geometry is exported, and import rows are reliable.
+
+* PARTIALLY_RELIABLE_CENTERLINE_FRAMEWORK_FROM_PROMPT2
+  Centerline geometry is useful for CAD review/import, but some segments, curves, branch nodes, or ties require QA/manual verification.
+
+* NOT_RELIABLE_CENTERLINE_FRAMEWORK_FROM_PROMPT2
+  Centerline geometry cannot be imported without substantial manual correction, cannot be tied to Prompt 2, relies on visual guesses, uses edge labels as centerline without support, or has unresolved curve/node/endpoint conflicts.
+
+============================================================
+FINAL IMPORTANT RULES
+============================================================
+* This prompt builds road centerlines only.
+* Prompt 1 is review only.
+* Prompt 2 provides the coordinate framework.
+* Prompt 4 has been removed.
+* Do not place the road start at 10000,10000 unless it truly begins at POC.
+* Do not export road edges, ROW, offsets, cul-de-sac edges, curb returns, or common-element outlines.
+* Save road-width/offset/cul-de-sac info only in Notes for later script use.
+* Merge continuous same-road centerline geometry before export.
+* Do not split centerlines at intersections unless geometry or road name changes.
+* Report all discrepancies. Do not silently force geometry.

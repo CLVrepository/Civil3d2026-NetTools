@@ -1,0 +1,727 @@
+PROMPT 1 — SECTIONAL / CONTROL FRAMEWORK FIRST BUILD, QA, AUTOCLOSURE, AND CAD CSV
+
+You are reviewing a recorded survey, parcel map, subdivision map, record of survey, boundary map, or similar civil/survey PDF for CAD reconstruction.
+
+This prompt is for maps where sectional/control linework exists and should be built first before the exterior boundary, roadway right-of-way, lots, easements, or interior linework.
+
+This is Prompt 1: Sectional / Control Framework Build.
+
+The goal is to reconstruct the primary sectional/control framework the same way a drafter would manually begin the drawing:
+
+1. Identify the controlling sectional/control polygon or network.
+2. Build the main enclosing sectional/control traverse first.
+3. Perform closure checks.
+4. If needed, resolve small closure error by holding bearings true and adjusting lengths only.
+5. Split or derive interior sectional/control lines from the corrected framework.
+6. Move the completed framework so the user-marked POC/control anchor lands at CAD coordinate X=10000.0000, Y=10000.0000.
+7. Create a CAD-ready CSV for importing the sectional/control linework.
+
+Do not build the parcel boundary yet unless I specifically ask for boundary linework in this prompt.
+
+Do not build interior lots, road ROW, easements, or parcel boundary linework yet unless those lines are needed only as references for the sectional/control framework.
+
+---
+
+CAD Anchor Rule
+
+Use this CAD coordinate for the user-marked POC/control anchor unless I provide a different coordinate:
+
+POC / Anchor Point X = 10000.0000
+POC / Anchor Point Y = 10000.0000
+
+The POC/control anchor will usually be marked on the map with an orange circle.
+
+The orange circle does not automatically mean the first point of the local traverse. It means the final completed sectional/control linework must be moved/anchored so that the marked control point lands at X=10000.0000, Y=10000.0000.
+
+If the orange circle marks a known section corner, quarter corner, sixteenth corner, centerline intersection, monument, or other control node, identify that point and use it as the final CAD anchor.
+
+If no orange circle is shown, identify the best map-labeled control point for the CAD anchor and report that no orange circle was found.
+
+---
+
+Markup / Color Priority Rule
+
+Use map labels first, but user markup controls extraction priority when provided.
+
+Common markup meanings:
+
+* Orange circle = POC/control anchor that must land at X=10000.0000, Y=10000.0000.
+* Purple highlight = sectional/control linework.
+* Pink highlight = roadway centerlines that may be part of the control framework.
+* Green highlight = right-of-way linework.
+* Yellow highlight = parcel boundary, usually for a later prompt.
+
+For this Prompt 1, focus on sectional/control framework geometry first.
+
+If roadway centerlines are part of the sectional/control framework, include them when they are needed to close, check, or locate the sectional network.
+
+Do not treat yellow parcel boundary as the controlling linework unless it is also a sectional/control line.
+
+---
+
+Primary Tasks
+
+1. Review the PDF and identify control framework
+
+Review all sheets, details, tables, and notes.
+
+Identify:
+
+* Map name.
+* Sheet count.
+* Sheet purpose.
+* Basis of bearings.
+* North orientation.
+* Section, township, range, aliquot, or subdivision control references.
+* Section corners.
+* Quarter corners.
+* Sixteenth corners.
+* Roadway centerline intersections used as control.
+* Found monuments.
+* Set monuments.
+* Record vs measured calls.
+* Any overall survey analysis diagrams.
+* Any line tables, curve tables, radial tables, monument tables, or detail views.
+
+Report which sheets and details were reviewed.
+
+Use close zoom review for all bearings, distances, and labels before accepting them.
+
+---
+
+2. Identify the main sectional/control traverse
+
+Before drawing smaller lines, identify the main enclosing sectional/control traverse or control polygon.
+
+This should normally be the largest closed or nearly closed control framework shown by labeled section lines, aliquot lines, roadway centerlines, or control lines.
+
+The traverse may include:
+
+* Section lines.
+* Quarter-section lines.
+* Sixteenth-section lines.
+* Roadway centerlines used as control.
+* Centerline-to-centerline control legs.
+* Monument-to-monument control legs.
+* Aliquot control lines.
+* Other survey control lines.
+
+If the map does not contain a closed control polygon, identify the best open control framework and report that closure cannot be computed.
+
+If there are multiple possible control polygons, choose the one that most directly controls the boundary and report the alternatives.
+
+---
+
+3. Choose a logical manual drafting start point and direction
+
+Choose a control corner or control node that a drafter would normally use to begin the sectional/control build.
+
+Use the following priority:
+
+1. User-provided start point or instruction.
+2. Orange-circled control point, if it is also a logical traverse start.
+3. Labeled section corner, quarter corner, sixteenth corner, or roadway/control intersection.
+4. Most complete labeled corner of the enclosing control polygon.
+5. Best-fit start point based on available labels.
+
+Build the main control traverse in a consistent direction, preferably counterclockwise when the map and labels allow it.
+
+If the map labels or legal/control description clearly indicate clockwise direction, use that instead and explain why.
+
+Do not hard-code roadway or corner names. Extract names from the map.
+
+---
+
+4. Extract main control traverse calls
+
+For each main control traverse segment, extract:
+
+* Segment ID.
+* From point.
+* To point.
+* Point/corner names.
+* Line type.
+* Bearing.
+* Distance.
+* Source sheet.
+* Source label.
+* Whether the value is measured, record, calculated, or derived.
+* Whether the value was zoom verified.
+* Confidence.
+
+Use the visible map labels, control tables, legal/control notes, monument ties, and detail views.
+
+Do not invent missing bearings or distances.
+
+If a label is unreadable, mark it UNCERTAIN.
+
+If a bearing is shown opposite the direction of travel, record the original source bearing and the corrected CAD bearing.
+
+---
+
+5. Build the local main control traverse
+
+First build the main control traverse in a local coordinate system.
+
+Use a temporary local start coordinate if needed.
+
+For each line:
+
+* Start at the prior segment endpoint.
+* Calculate the endpoint from bearing and distance.
+* Continue around the full control polygon.
+* Every segment must start at the previous segment endpoint.
+* Do not force closure during the first build.
+
+Create a draft traverse table showing the calculated coordinates.
+
+---
+
+6. Closure check
+
+After the main control traverse is built, calculate:
+
+* Beginning coordinate.
+* Ending coordinate.
+* Easting error.
+* Northing error.
+* Linear closure error.
+* Traverse perimeter.
+* Closure ratio, if possible.
+
+Report closure numerically.
+
+If closure error is 0.00 feet or within rounding tolerance, mark the main control traverse as CLOSED.
+
+Use these default tolerances unless I provide different values:
+
+* Coordinate tolerance = 0.02 feet.
+* Minor rounding tolerance = 0.05 feet.
+* Bearing conflict tolerance = 0°00'05".
+* Distance conflict tolerance = 0.05 feet.
+
+---
+
+7. Autoclosure-style length adjustment / forced 0.00 closure
+
+If the main outer sectional/control traverse does not close, perform an autoclosure-style adjustment similar to manually drawing the traverse and then running an AutoClosure routine.
+
+Important rule:
+
+The final corrected outer sectional/control traverse must close to 0.00 feet. Hold all bearings true. Adjust lengths only. Do not rotate bearings. Do not change curve data.
+
+For line-only control traverses:
+
+* Keep each segment bearing unchanged.
+* Resolve the closure error by adjusting line lengths only.
+* Distribute the length corrections across all outer traverse line segments unless the map clearly identifies a fixed/held segment.
+* Use a proportional or least-squares length-only adjustment so the correction is distributed through the full traverse, with longer lines allowed to receive proportionally larger corrections.
+* The final corrected endpoint must equal the beginning point exactly for CAD output.
+* Do not leave a small gap in the corrected CAD linework. The corrected CAD traverse must have zero endpoint gap.
+* Do not adjust any segment that is labeled as fixed, record-only, monument-controlled, or user-held unless no other solution exists. If a segment is held fixed, report how the remaining length corrections were distributed.
+* If a specific distance appears misread, conflicting, or uncertain, test that segment first before spreading the error, but still report the final distributed correction used.
+* Report every length adjustment.
+* Do not report a length-adjusted line as a clean match to the map. Mark it LENGTH_ADJUSTED_TO_CLOSE and show the original map distance and adjusted CAD distance.
+
+For traverses with curves:
+
+* Do not adjust curve radius, delta, or arc length unless the curve data is clearly the source of error and the correction is supported by the map.
+* Prefer adjusting adjacent tangent line lengths before modifying curve data.
+* If curve closure cannot be resolved confidently, mark the traverse MANUAL_REVIEW.
+
+Create an adjusted closure report showing:
+
+* Original distance.
+* Adjusted distance.
+* Length correction.
+* Bearing held.
+* Reason for adjustment.
+* Final adjusted endpoint.
+* Final closure error.
+
+Do not hide the original unadjusted values.
+
+---
+
+8. Chain-build corrected outer traverse
+
+After length adjustment, rebuild the entire outer sectional/control traverse using endpoint-to-endpoint chain logic:
+
+* The first outer traverse row starts from the selected local start point.
+* Each next row starts exactly at the prior corrected endpoint.
+* Each endpoint is calculated from the held bearing and the adjusted length.
+* The final row must end exactly at the first start point, creating 0.00 closure in the CAD geometry.
+* The final CAD CSV must use the corrected chain-built coordinates, not the unadjusted map-calculated endpoints.
+* The original map distances must remain in OriginalDistance.
+* The corrected CAD build distances must be placed in AdjustedDistance.
+* LengthAdjustment must equal AdjustedDistance minus OriginalDistance.
+* AdjustmentMethod should identify the closure process, such as DISTRIBUTED_LENGTH_ONLY_CLOSURE_BEARINGS_HELD.
+
+The final import geometry should behave the same as a drafter drawing the outer traverse, running autoclosure, holding bearings, adjusting lengths, and then redrawing from endpoint to endpoint.
+
+9. Rebuild corrected main control traverse
+
+After length adjustment, rebuild the entire main control traverse from the same start point using:
+
+* Original bearings.
+* Adjusted distances.
+* Original curve data, if any.
+* Corrected direction of travel.
+
+Confirm that the corrected traverse closes.
+
+If it still does not close within tolerance, report failure and mark the output as QA/manual review.
+
+---
+
+10. Split and derive remaining sectional/control linework
+
+After the main control framework is closed and corrected, derive the remaining sectional/control lines.
+
+This may include:
+
+* Section lines.
+* Quarter-section lines.
+* Sixteenth-section lines.
+* Centerline-of-section lines.
+* Interior aliquot lines.
+* Roadway centerlines that form the control network.
+* Lines between known control intersections.
+* Monument tie lines.
+* Control ties from section corners to boundary or ROW.
+* Offset or parallel control lines.
+
+Use the corrected, forced-closed main control framework as the parent geometry.
+
+Important dependency rule:
+
+* Do not derive or split interior/remaining sectional lines from the unadjusted traverse.
+* Recalculate all division lines, midpoint/sixteenth points, roadway/control intersections, and derived lines from the resolved 0.00-closure geometry.
+* Any quarter/sixteenth/intermediate lines created before closure correction must be recalculated after the outer traverse is forced closed.
+* If a derived line changes because of the length-only closure correction, report the before/after difference in the Map vs CAD Linework Error Report.
+
+Rules:
+
+* If a full-length control line is shown, create one full-length CAD line from controlling endpoint to controlling endpoint.
+* Do not split a full-length line only because intermediate distances or intersections are shown.
+* Use shorter distances only for QA, node checking, and intermediate point calculation.
+* If the map labels a continuous full distance, hold that full distance for the final line.
+* If the full distance is missing but sub-distances are shown and the line is clearly continuous/collinear, derive the full length by summing the sub-distances.
+* Mark summed lengths as DERIVED.
+* If a line changes bearing, function, or source control, split it.
+* If an intermediate point is important, add it as a POINT_TIE or NOTE row instead of splitting the main line unless the source requires a split.
+
+---
+
+11. Missing bearing / parallel-control rule
+
+If a sectional/control line lacks its own bearing but is clearly parallel or collinear with another labeled control line:
+
+* Derive the bearing from the controlling parallel/collinear line.
+* Identify the controlling source segment.
+* Mark Confidence = DERIVED.
+* Add DERIVED_FROM_PARALLEL_CONTROL in Notes.
+* Verify the derived line against endpoints, offsets, or intersections when possible.
+
+If the derived bearing conflicts with known endpoints beyond tolerance, place the line on the QA layer and report BEARING_ENDPOINT_CONFLICT.
+
+---
+
+12. Intersection and node QA
+
+For all sectional/control lines:
+
+* Calculate intersections where lines are shown crossing or meeting.
+* Verify that centerlines and control lines intersect cleanly where the map shows an intersection.
+* Verify intermediate nodes fall on the corrected full-length control lines.
+* Report intersection gaps.
+* If an intersection gap is less than or equal to 0.05 feet and appears to be rounding, mark it MINOR_ROUNDING.
+* If an intersection gap exceeds 0.05 feet, place the affected geometry on QA layer unless the controlling source is clear.
+
+Do not visually force lines to intersect if the bearing/distance data says they do not.
+
+---
+
+13. Move / anchor final linework to CAD coordinate system
+
+After the corrected local sectional/control framework is built:
+
+1. Identify the orange-circled POC/control anchor point.
+2. Determine its local coordinate from the corrected framework.
+3. Translate the entire corrected framework so that this point becomes:
+
+   X = 10000.0000
+   Y = 10000.0000
+
+Do not rotate or scale the framework during this move unless I specifically instruct you to do so.
+
+If the orange-circled point is not part of the calculated framework, determine whether it can be derived from the framework by tie, offset, intersection, or monument call.
+
+If it cannot be reliably tied, mark the framework as TEMP_LOCAL_QA or MANUAL_REVIEW and explain why.
+
+---
+
+14. Final sectional/control CAD CSV
+
+Create a CAD-ready CSV for the sectional/control framework.
+
+Create a downloadable .csv file whenever file creation is available.
+
+Name the file:
+
+MapName_Prompt1_Sectional_Control_Framework.csv
+
+If the geometry is only partially reliable, name it:
+
+MapName_Prompt1_Sectional_Control_Framework_QA.csv
+
+Outer traverse CSV marking rule:
+
+For the corrected outer sectional/control traverse rows, clearly mark them so the CAD importer can chain-build and force-check them as a closed traverse:
+
+* Notes must include ControlRole=OUTER_CONTROL_TRAVERSE.
+* QAStatus must include OUTER_CONTROL_TRAVERSE_CLOSED_0 when final corrected closure is 0.00.
+* AdjustmentMethod must include DISTRIBUTED_LENGTH_ONLY_CLOSURE_BEARINGS_HELD when any length was adjusted.
+* Distance should contain the build distance used by the CSV.
+* OriginalDistance must contain the source map distance before closure adjustment.
+* AdjustedDistance must contain the corrected CAD distance after closure adjustment.
+* LengthAdjustment must contain AdjustedDistance minus OriginalDistance.
+* StartX/StartY and EndX/EndY must be the final chain-built, POC-anchored coordinates.
+
+Derived, split, or interior sectional/control rows must not be marked OUTER_CONTROL_TRAVERSE unless they are part of the closing outer traverse. They must be recalculated from the resolved outer geometry and marked as DERIVED_FROM_RESOLVED_CONTROL_FRAMEWORK in Notes.
+
+Use this CSV format:
+
+FeatureID,FeatureType,ReferenceClass,Layer,Segment,Type,StartX,StartY,EndX,EndY,Bearing,Distance,OriginalDistance,AdjustedDistance,LengthAdjustment,AdjustmentMethod,CurveDirection,CurveBuildMethod,Radius,Delta,ArcLength,Tangent,ChordBearing,ChordLength,RoadName,FromPoint,ToPoint,MonumentName,MonumentType,CoordinateAnchor,AnchorMethod,AnchorSourceSegment,AnchorSourcePoint,GeometryBuildMode,SourceSheet,SourceLabel,CorrectedLabel,Confidence,ImportStatus,QAStatus,Notes
+
+---
+
+CSV Field Rules
+
+FeatureType options:
+
+* SECTIONAL_CONTROL
+* CONTROL_REFERENCE
+* ROADWAY_CONTROL
+* MONUMENT_TIE
+* POINT_TIE
+* OTHER_REFERENCE
+
+ReferenceClass options:
+
+* SECTION_LINE
+* QUARTER_SECTION_LINE
+* SIXTEENTH_SECTION_LINE
+* ROAD_CENTERLINE
+* CONTROL_LINE
+* MONUMENT_TIE
+* POINT_TIE
+* OFFSET_LINE
+* OTHER_REFERENCE
+
+Layer defaults:
+
+* Section line: V-MAPL-SECT
+* Quarter-section line: V-MAPL-QTR
+* Sixteenth-section line: V-MAPL-SIXTEENTH
+* Roadway/control centerline: V-MAPL-ROAD-CL
+* Monument tie/control: V-MAPL-CNTRL
+* QA or uncertain geometry: V-MAPL-QA
+
+Type options:
+
+* LINE
+* CURVE
+* POINT_TIE
+* NOTE
+
+GeometryBuildMode options:
+
+* BEARING_DISTANCE
+* INTERSECTION_COORDINATE
+* COORDINATE
+* OFFSET
+* CURVE_TANGENT
+* CURVE_RADIAL
+* QA_COORDINATE
+* UNKNOWN
+
+AnchorMethod options:
+
+* ORANGE_CIRCLE_POC
+* SECTION_CORNER
+* QUARTER_CORNER
+* SIXTEENTH_CORNER
+* ROAD_CENTERLINE_INTERSECTION
+* MONUMENT_TIE
+* INTERSECTION_DERIVED
+* OFFSET_DERIVED
+* PDF_OVERLAY_ALIGNED
+* TEMP_LOCAL_QA
+* UNKNOWN_ANCHOR
+
+Confidence options:
+
+* DIRECT
+* DERIVED
+* ADJUSTED
+* APPROXIMATE
+* UNCERTAIN
+
+ImportStatus options:
+
+* IMPORT
+* IMPORT_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+QAStatus examples:
+
+* CONTROL_FRAMEWORK_OK
+* CLOSED_NO_ADJUSTMENT
+* CLOSED_AFTER_LENGTH_ADJUSTMENT
+* LENGTH_ADJUSTED_BEARING_HELD
+* DERIVED_FROM_PARALLEL_CONTROL
+* OVERALL_LENGTH_DERIVED_FROM_SUBDISTANCES
+* INTERSECTION_OK
+* INTERSECTION_GAP
+* BEARING_COORDINATE_CONFLICT
+* ANCHOR_POINT_CONFIRMED
+* ANCHOR_POINT_UNCERTAIN
+* MANUAL_REVIEW
+
+---
+
+Required Output Sections
+
+Produce the following sections:
+
+A. Prompt 1 Summary
+
+Summarize what was reviewed, what framework was built, whether the orange POC was found, and whether a CAD CSV was created.
+
+B. Source Sheets / Details Reviewed
+
+List all sheets, details, tables, diagrams, and notes used.
+
+C. Orange POC / CAD Anchor Report
+
+Include:
+
+* Orange circle found: Yes/No.
+* Marked point name, if known.
+* Point type.
+* Local coordinate before move.
+* Final CAD coordinate after move.
+* Anchor confidence.
+* Any uncertainty.
+
+D. Control Framework Identification
+
+Describe the main sectional/control polygon or network selected.
+
+Include:
+
+* Start control point.
+* Direction of build.
+* Reason for start point.
+* Reason for build direction.
+* Control lines included.
+* Control lines excluded and why.
+
+E. Extracted Main Control Traverse Calls
+
+Create a table with:
+
+Segment,FromPoint,ToPoint,Bearing,Distance,SourceSheet,SourceLabel,Confidence,Notes
+
+F. Initial Local Traverse / Closure Report
+
+Include:
+
+* Initial start coordinate.
+* Initial ending coordinate.
+* Easting error.
+* Northing error.
+* Closure error.
+* Perimeter.
+* Closure ratio, if available.
+* Pass/fail.
+
+G. Length-Only Closure Adjustment Report
+
+If adjustment was needed, show:
+
+Segment,OriginalDistance,AdjustedDistance,LengthAdjustment,BearingHeld,AdjustmentMethod,DistributedCorrectionPercent,Reason,Notes
+
+If no adjustment was needed, state that no closure adjustment was required.
+
+H. Corrected Chain-Built Traverse Closure Report
+
+Include final corrected closure numbers and confirm the CAD geometry endpoint gap is 0.00.
+
+Include:
+
+* Initial unadjusted closure error.
+* Adjustment method.
+* Bearings held: Yes/No.
+* Number of adjusted lines.
+* Final corrected endpoint.
+* Beginning point.
+* Final CAD closure error = 0.00.
+* Confirmation that the last segment endpoint was forced to the beginning point by length-only adjustment.
+
+I. Derived / Split Sectional-Control Linework
+
+List the additional lines derived after the main framework was closed.
+
+Include:
+
+Segment,ReferenceClass,FromPoint,ToPoint,Bearing,Distance,DerivationMethod,Confidence,Notes
+
+J. Intersection / Node QA Report
+
+Report important intersections, intermediate nodes, and any gaps.
+
+K. Map vs CAD Linework Error Report
+
+Create a dedicated error report comparing the source map calls against the CAD-calculated linework.
+
+This report must highlight discrepancies between:
+
+* What the map document shows.
+* What the extracted source labels say.
+* What the local traverse calculates before adjustment.
+* What the corrected CAD linework calculates after any length-only closure adjustment.
+* What the final anchored CAD CSV exports.
+
+For every sectional/control segment, include this table:
+
+Segment,FromPoint,ToPoint,MapBearing,MapDistance,CADBearing,CADDistance,BearingError,DistanceError,MapStartPoint,CADStartX,CADStartY,CADEndX,CADEndY,EndpointError,ErrorType,Severity,Resolution,Notes
+
+ErrorType options:
+
+* NONE
+* MAP_LABEL_UNREADABLE
+* MAP_LABEL_CONFLICT
+* BEARING_MISMATCH
+* DISTANCE_MISMATCH
+* ENDPOINT_GAP
+* CLOSURE_ERROR
+* INTERSECTION_GAP
+* DERIVED_BEARING_CONFLICT
+* LENGTH_ADJUSTED_TO_CLOSE
+* ANCHOR_POINT_CONFLICT
+* GEOMETRY_NOT_TIED_TO_POC
+* MANUAL_REVIEW_REQUIRED
+
+Severity options:
+
+* INFO = informational, no CAD correction needed.
+* MINOR = discrepancy appears to be rounding or plotting tolerance.
+* MODERATE = discrepancy affects linework and should be reviewed.
+* MAJOR = discrepancy prevents reliable import or requires manual correction.
+
+Resolution options:
+
+* ACCEPTED_AS_MATCH
+* ACCEPTED_ROUNDING
+* CAD_LENGTH_ADJUSTED_BEARING_HELD
+* MAP_VALUE_HELD
+* DERIVED_FROM_CONTROL
+* PLACED_ON_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+Report rules:
+
+* Compare map bearing to CAD-calculated bearing for every LINE row.
+* Compare map distance to CAD-calculated distance for every LINE row.
+* If a segment was length-adjusted to close, show both the original map distance and adjusted CAD distance.
+* Do not report a length-adjusted segment as a clean match. Mark it LENGTH_ADJUSTED_TO_CLOSE.
+* If bearing is held true and only distance changes, BearingError should be 0 unless the map label itself conflicts.
+* If a calculated endpoint does not land on the expected map/control node, report EndpointError.
+* If a full-length control line is held but intermediate sub-distances do not add up, report the difference.
+* If sub-distances are used only for QA and not final geometry, state that clearly.
+* If the CAD linework differs from the map because of a documented closure adjustment, explain the adjustment and do not hide the original map value.
+* Confirm that all derived/split sectional lines were recalculated from the resolved 0.00-closure outer geometry.
+* Report any derived line that was originally calculated from unadjusted geometry and then changed after closure resolution.
+* If a discrepancy exceeds tolerance, place the affected row on V-MAPL-QA unless the correction is fully supported by the map.
+
+Default error tolerances unless I provide different values:
+
+* BearingError tolerance = 0°00'05".
+* DistanceError tolerance = 0.05 feet.
+* EndpointError tolerance = 0.05 feet.
+* ClosureError tolerance = 0.02 feet for final corrected framework.
+
+L. General Discrepancy Report
+
+In addition to the Map vs CAD Linework Error Report, summarize any broader issues:
+
+* Unreadable labels.
+* Conflicting distances.
+* Conflicting bearings.
+* Closure issues.
+* Derived-bearing issues.
+* Intersection gaps.
+* Anchor uncertainty.
+* Map geometry conflicts.
+* Any CAD-calculated geometry that does not match the map document.
+
+M. Import Decision Summary
+
+Summarize how many rows are:
+
+* IMPORT
+* IMPORT_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+N. Sectional / Control CAD CSV
+
+Display the CSV table and create a downloadable CSV file when available.
+
+O. Items Requiring Manual Verification
+
+List anything that should be checked in CAD or by zooming into the source PDF again.
+
+---
+
+Important Rules
+
+* Build sectional/control data first.
+* Do not build parcel boundary in this prompt unless specifically instructed.
+* Do not build interior lot/ROW/easement linework in this prompt unless it is needed to support the control framework.
+* Use the orange-circled point as the final CAD anchor at 10000,10000.
+* Build the main control traverse first in local coordinates.
+* Check closure before deriving interior/split linework.
+* The outer sectional/control traverse must be forced to 0.00 closure for final CAD output.
+* If closure adjustment is needed, hold bearings true and adjust lengths only, distributing length changes through all eligible outer traverse lines.
+* Preserve original distances and report all adjusted distances.
+* Do not silently modify source data.
+* Use endpoint-to-endpoint chain build logic for the corrected outer traverse.
+* Recalculate division/split lines from the resolved forced-closed geometry, not the original unclosed geometry.
+* Use full-length control lines where the map shows full-length control.
+* Use short/sub distances for QA and intermediate node checks only, unless the map clearly requires separate line entities.
+* Do not invent missing data.
+* Mark uncertain geometry clearly and place it on V-MAPL-QA.
+* Every importable row must have usable StartX, StartY, EndX, EndY.
+* Final linework must be in the same CAD coordinate framework where the POC/control anchor is X=10000.0000, Y=10000.0000.
+
+---
+
+Final Reliability Rating
+
+At the end, rate the Prompt 1 sectional/control framework as one of the following:
+
+* RELIABLE_CONTROL_FRAMEWORK
+  The main control traverse closes, the orange POC is confirmed, adjusted lengths if any are documented, and derived sectional/control lines are geometrically consistent.
+
+* PARTIALLY_RELIABLE_CONTROL_FRAMEWORK
+  The framework is useful for CAD import/review, but some lines remain on QA layers or require manual verification.
+
+* NOT_RELIABLE_CONTROL_FRAMEWORK
+  The sectional/control framework cannot be imported without substantial manual correction.
+
+Do not call the framework reliable if the orange POC is uncertain, closure remains unresolved, labels are unreadable, or derived control lines cannot be tied back to the corrected framework.

@@ -1,0 +1,464 @@
+PROMPT EASEMENT — STANDALONE EASEMENT FROM POC / POB / TIE CALLS, EXACT WIDTH QA, AND CAD CSV
+Version: 2026-07-09 Rev 6 - aligned with Prompt 1 review-only and Prompt 2 standalone boundary workflow
+Purpose: Create one CAD-import-ready easement CSV for the 4-EASEMENT_IMPORT routine and one review report. The CSV must import directly and must not require a separate points file, calls file, DXF, ZIP, or manual interpretation.
+
+============================================================
+WORKFLOW CONTEXT
+============================================================
+Prompt 1 is now a map/legal/linework review prompt only.
+Prompt 2 is a standalone boundary prompt using POC -> POB -> boundary calls.
+Prompt 3 is a standalone road-centerline prompt using Prompt 2 geometry.
+Prompt 4 has been removed.
+
+Prompt Easement remains standalone.
+It does not require Prompt 1 sectional/control geometry.
+It may use Prompt 1 review findings, Prompt 2 boundary geometry, or user-provided project coordinates as reference, but it must be able to build an easement from its own POC/POB/tie/legal calls when available.
+
+============================================================
+REQUIRED OUTPUTS
+============================================================
+Output exactly two downloadable files unless the user specifically asks for something else:
+
+1. <recording-number>-Easement.csv
+2. <recording-number>-Easement_report.txt
+
+Do NOT output:
+
+* points.csv
+* calls.csv
+* duplicate import CSV
+* DXF
+* shapefile
+* KML
+* ZIP
+* extra QA CSV
+
+The Easement.csv file is the only import file. It must contain every importable object needed by 4-EASEMENT_IMPORT, including commencement/tie lines, easement boundary linework/curves, and POC/POB marker rows when supported.
+
+============================================================
+STRICT CSV FORMAT - DO NOT CHANGE HEADER NAMES
+============================================================
+The CSV must use this exact header row and column order:
+
+FeatureID,FeatureType,Layer,Segment,Type,ImportRole,From,To,StartX,StartY,EndX,EndY,Bearing,Distance,CurveDirection,Radius,Delta,ArcLength,Tangent,ChordBearing,ChordLength,RadialBearing,StartRadialBearing,EndRadialBearing,RadialDirectionUsed,MarkerLabel,LabelText,SourceLabel,CorrectedLabel,ImportStatus,QAStatus,Notes
+
+Required rules:
+
+* Do not add, remove, rename, or reorder columns.
+* Every row with ImportStatus=IMPORT must have FeatureID, FeatureType, Layer, Segment, Type, ImportRole, StartX, StartY, EndX, EndY, and enough geometry fields to construct the object.
+* Type must be LINE, CURVE, or POINT_MARKER.
+* ImportRole must be COMMENCEMENT, EASEMENT, POB_MARKER, or POC_MARKER.
+* ImportStatus must be IMPORT or DO_NOT_IMPORT.
+* Do not place long QA narrative in the CSV. Put long review notes in the report.
+* No blank rows are allowed inside the CSV.
+* No merged cells, formulas, tabs, or markdown tables. Plain CSV only.
+
+============================================================
+STANDARD FEATURE / LAYER MAPPING
+============================================================
+Use these layer names unless the user provides project-specific layer names or the CAD routine requires a different exact layer name:
+
+Easement boundary lines/curves:
+
+* Layer = V-ESMT-LINE
+* FeatureType = EASEMENT_BOUNDARY
+* ImportRole = EASEMENT
+
+Commencement / tie lines:
+
+* Layer = V-ESMT-TIE
+* FeatureType = COMMENCEMENT_TIE
+* ImportRole = COMMENCEMENT
+
+POB marker:
+
+* Layer = V-ESMT-MARK
+* FeatureType = POINT_MARKER
+* Type = POINT_MARKER
+* ImportRole = POB_MARKER
+* MarkerLabel = POB
+* LabelText must identify POINT OF BEGINNING.
+
+POC marker:
+
+* Layer = V-ESMT-MARK
+* FeatureType = POINT_MARKER
+* Type = POINT_MARKER
+* ImportRole = POC_MARKER
+* MarkerLabel = POC
+* LabelText must identify POINT OF COMMENCEMENT and include PLSS/control description when available.
+
+============================================================
+COORDINATE RULES
+============================================================
+Use X/Y coordinates in feet.
+
+Default placement:
+
+* If no project/control coordinates are provided, set the Point of Commencement (POC) at X=10000.0000, Y=10000.0000.
+* Calculate all commencement/tie lines and the POB from that POC using document bearings and distances.
+* Calculate the easement boundary from the POB using the legal description sequence.
+
+Coordinate conventions:
+
+* Easting = X.
+* Northing = Y.
+* N theta E = +X, +Y.
+* S theta E = +X, -Y.
+* S theta W = -X, -Y.
+* N theta W = -X, +Y.
+* Decimal precision for coordinates: minimum 4 decimals, preferred 6 decimals for QA.
+* Distances must be in feet.
+* Do not round coordinates so aggressively that closure changes.
+
+POC / POB handling:
+
+* POC is the control/commencement point described in the document.
+* POB is where the easement boundary begins.
+* Commencement/tie calls are not easement boundary area lines.
+* Boundary closure and area must be calculated only from the easement boundary, not from commencement/tie lines.
+
+============================================================
+NO AUTOCLOSURE / NO FORCE-CLOSURE DEFAULT
+============================================================
+Do not perform autoclosure, rubber-sheeting, rotation, scaling, best-fit adjustment, or forced endpoint closure unless the user specifically asks for an autoclosure-adjusted easement.
+
+The first required geometry build is the SOURCE-CALL BUILD.
+
+Build the easement from extracted legal/map calls exactly as read and report its natural closure error before any constrained geometry decisions.
+
+Exact strip-width/parallel-offset enforcement is not autoclosure. It is a source-control constraint only when the legal description, exhibit, or dimension clearly states the width/offset controls.
+
+If exact-width enforcement changes a segment endpoint, distance, bearing, curve radius, or closure result, report before/after values. Do not hide the source-call closure error.
+
+Do not force the last boundary segment endpoint back to the POB merely to close the easement. If exact-offset/legal-control geometry leaves a closure gap, report the gap and mark the file NOT READY or QA as appropriate.
+
+The report must include both:
+
+* SOURCE-CALL CLOSURE CHECK.
+* FINAL CONSTRAINT GEOMETRY CLOSURE CHECK when exact-width/offset constraints are applied.
+
+============================================================
+LEGAL DESCRIPTION EXTRACTION REQUIREMENTS
+============================================================
+Extract and report when readable:
+
+* recording number / document number
+* APN / parcel number
+* grantor / owner / party name
+* grantee / easement holder
+* purpose of easement
+* source exhibit/page
+* county/state
+* PLSS location: section, township, range, meridian, aliquot parts
+* plat/book/page references
+* Point of Commencement description
+* Point of Beginning description
+* all commencement/tie calls
+* all easement boundary calls
+* stated area
+* curve table information
+* radial table information
+* exhibit/sketch information
+* fixed width, strip width, or exact offset information
+
+If any item is unreadable or missing, write UNKNOWN/UNREADABLE in the report. Do not guess.
+
+============================================================
+BOUNDARY BUILD RULES
+============================================================
+1. Build the POC and all commencement/tie calls first.
+2. Calculate the POB coordinate from the commencement/tie sequence.
+3. Build the easement boundary from the POB exactly in legal-description order.
+4. Add one CSV row for every importable line or curve segment.
+5. Add POC and POB marker rows with marker text.
+6. Do not include adjacent easements, existing easements, lot lines, ROW lines, common elements, section lines, or exhibit reference lines as easement boundary unless the legal description clearly makes them part of the boundary.
+7. If the boundary call says it is along another line, include that phrase in SourceLabel or Notes, but still construct the actual segment using the bearing/distance/curve data or exact source-control constraint.
+8. If consecutive line calls have the same bearing and are clearly intended as one continuous easement boundary segment, combine them only when the legal description supports it and the combined segment does not hide a monument, corner, change in ownership, or POC/POB reference. Otherwise keep calls separate.
+
+============================================================
+STRIP WIDTH / PARALLEL EASEMENT OFFSET HOLD RULE - HARD CONSTRAINT
+============================================================
+When the legal description, exhibit, sketch, or dimensioning clearly defines the easement as a fixed-width strip, parallel line, or exact offset from another line or curve, the stated width/offset is a HARD GEOMETRY CONSTRAINT.
+
+This is not autoclosure.
+Do not force boundary closure.
+Build the fixed-width geometry from the parent line/curve and report the resulting closure.
+
+Use this rule when the document states or clearly shows:
+
+* A fixed easement width such as 6.00, 10.00, 20.00, 30.00, 37.00 feet, or similar.
+* A line parallel with another easement line, parcel line, ROW line, centerline, section line, or control line.
+* A line lying a stated distance northerly, southerly, easterly, westerly, left, right, inside, or outside of another line.
+* A strip easement, sidewalk easement, drainage easement, utility easement, access easement, or other corridor depending on fixed width.
+* A dimension shown between two parallel lines in the exhibit.
+
+Required two-stage build when exact width/offset is present:
+
+STAGE 1 - SOURCE-CALL BUILD / CLOSURE FIRST
+
+1. Build the easement from legal/map calls exactly as read, without autoclosure and without exact-offset correction.
+2. Report natural source-call closure error, area, and measured offsets.
+3. Keep this as the QA baseline.
+
+STAGE 2 - EXACT-OFFSET CONSTRAINT BUILD
+
+1. Identify every fixed-width or parallel-offset condition.
+2. Identify the parent line/curve controlling each offset.
+3. Identify offset side: LEFT, RIGHT, NORTH, SOUTH, EAST, WEST, INSIDE, OUTSIDE, or UNKNOWN.
+4. Build/select the parent geometry first.
+5. Construct each offset line/curve directly from parent geometry at the exact stated perpendicular offset.
+6. For straight parallel lines, create the child line by exact offset, then compute endpoints by intersection with resolved target/cap/closing lines.
+7. For offset curves, offset the radius by the exact distance on the correct side where supported.
+8. If multiple segments are part of the same fixed-width strip edge, rebuild the entire edge from the same parent geometry.
+9. Recalculate final StartX, StartY, EndX, EndY, Bearing, and Distance from exact-offset geometry.
+10. Re-run closure, reverse build, bearing/distance, width, and area checks.
+11. Do not silently shift, rotate, scale, stretch, rubber-sheet, or visually nudge the easement.
+12. Do not use a dotted/dashed/leader bearing-distance tie line as strip width or perpendicular offset unless explicitly labeled as width, half-width, offset, or perpendicular dimension.
+
+Mandatory exact-width QA:
+
+For every detected strip-width/parallel-offset condition, measure perpendicular distance between parent and final offset geometry at practical locations:
+
+* Start.
+* Midpoint.
+* End.
+* Curve PC/PT and midpoint when applicable.
+* Every dimension location shown in the exhibit.
+
+The final measured offset must equal the stated offset within 0.005 feet unless the user gives a different tolerance.
+
+If exact width cannot pass because source calls conflict, set affected rows DO_NOT_IMPORT or mark the entire file:
+
+NOT READY FOR 4-EASEMENT_IMPORT - REVIEW REQUIRED
+
+Do not output READY when required exact-width checks fail.
+
+QAStatus / Notes values:
+
+* SOURCE_CALL_BUILD_REPORTED
+* NO_AUTOCLOSURE_PERFORMED
+* EXACT_OFFSET_DISTANCE_HELD
+* STRIP_WIDTH_HELD
+* PARALLEL_OFFSET_HELD
+* OFFSET_LINE_REBUILT_FROM_PARENT
+* ENTIRE_OFFSET_EDGE_REBUILT_FROM_PARENT
+* OFFSET_INTERSECTED_WITH_RESOLVED_TARGET
+* PARALLEL_LINE_CONSTRAINT_OK
+* PARALLEL_LINE_CONSTRAINT_CONFLICT
+* EXACT_OFFSET_CONFLICT
+* STRIP_WIDTH_CONFLICT
+* OFFSET_CONFLICT_MANUAL_REVIEW
+* EXACT_WIDTH_QA_PASS
+* EXACT_WIDTH_QA_FAIL
+* NOT_READY_EXACT_WIDTH_CONFLICT
+
+============================================================
+TIE-LINE / OFFSET CLASSIFICATION RULE
+============================================================
+A dotted, dashed, broken, or leader-style line with its own bearing and distance is normally a TIE_LINE or NON_OFFSET_TIE_LINE, not a perpendicular offset.
+
+Classify labels as:
+
+* EASEMENT_BOUNDARY_CALL
+* COMMENCEMENT_TIE
+* CONTROL_TIE
+* OFFSET_DIMENSION
+* STRIP_WIDTH
+* NON_OFFSET_TIE_LINE
+* ADJACENT_EASEMENT_REFERENCE
+* LOT_FRONTAGE_DISTANCE
+* AMBIGUOUS_CALLOUT
+
+Do not use lot frontage, adjacent easement, or dotted/leader tie distances as easement width unless explicitly stated.
+
+============================================================
+CURVE / RADIAL RULES
+============================================================
+For every easement boundary curve or commencement/tie curve, extract and populate as much curve data as available without changing the CSV header.
+
+CurveDirection must be LEFT, RIGHT, UNKNOWN, or blank when not applicable. LEFT/RIGHT is relative to the direction of travel for that CSV row.
+
+Extract:
+
+* curve ID/source label
+* direction of travel
+* LEFT/RIGHT direction
+* radius
+* delta
+* arc length
+* tangent
+* chord bearing
+* chord length
+* radial bearing
+* start radial bearing
+* end radial bearing
+* radial IDs
+* radial direction used
+* tangent/radial/chord/coordinate build-control method in QAStatus/Notes
+
+Treat radial bearings as bidirectional unless clearly defined.
+Test shown and reversed radial.
+Test LEFT/RIGHT when curve direction is uncertain.
+Do not silently reverse a radial; report RADIAL_REVERSED when used.
+
+Build-control concepts in QAStatus/Notes:
+
+* TANGENT_CONTROLLED
+* RADIAL_CONTROLLED
+* CHORD_CONTROLLED
+* COORDINATE_CONTROLLED
+* UNKNOWN_CONTROL
+
+Curve QAStatus/Notes values:
+
+* CURVE_OK
+* RADIAL_CONTROLLED
+* TANGENT_CONTROLLED
+* CHORD_CONTROLLED
+* COORDINATE_CONTROLLED
+* RADIAL_REVERSED
+* BOTH_RADIAL_DIRECTIONS_TESTED
+* LEFT_RIGHT_TESTED
+* CW_CCW_CORRECTED
+* LEFT_RIGHT_CORRECTED
+* NON_TANGENT_RADIAL_CONTROL
+* TANGENCY_CONFLICT
+* RADIAL_CONFLICT
+* CURVE_DIRECTION_CONFLICT
+* CURVE_DATA_CONFLICT
+* CURVE_MATH_CONFLICT
+* CURVE_DATA_INCOMPLETE
+* UNKNOWN_CURVE_CONTROL
+* MANUAL_REVIEW
+
+============================================================
+MANDATORY QA / VERIFICATION BEFORE OUTPUT
+============================================================
+Before producing final files, perform:
+
+A. CSV preflight check
+
+* Verify exact header.
+* Verify all IMPORT rows have valid Type and ImportRole.
+* Verify LINE rows have numeric coordinates, Bearing, and Distance.
+* Verify CURVE rows have numeric coordinates and enough curve data.
+* Verify POINT_MARKER rows have StartX/StartY and EndX/EndY equal to marker coordinate.
+* Verify no IMPORT row is missing Layer.
+* Verify no coordinates are blank, text, NaN, or malformed.
+
+B. Forward build check
+
+* Starting at POB, traverse every easement boundary call forward.
+* Verify computed endpoint matches CSV endpoint.
+* Report source-call closure before exact-width correction.
+* Report final constraint-geometry closure after exact-width correction.
+* Do not force endpoint back to POB unless user requested autoclosure.
+
+C. Reverse build check from POB
+
+* Traverse boundary in reverse order using reversed bearings/curve direction.
+* Verify reverse traverse returns to POB.
+* List reverse closure.
+
+D. Bearing and distance check
+
+* Calculate bearing/distance from CSV coordinates for each line.
+* Compare to source.
+* Report PASS/WARN/FAIL.
+
+E. Curve/radial check
+
+* Verify arc, tangent, chord, chord bearing, endpoint, tangency, and radial math where data is available.
+
+F. Area check
+
+* Compute easement area when boundary is sufficiently closed or when final constraint geometry supports area.
+* Compare to stated area if present.
+* Do not include commencement/tie lines.
+
+G. Layer check
+
+* Verify boundary, tie, and marker layers.
+
+H. Exact strip / offset width check
+
+* Verify exact width/offset constraints to 0.005 feet unless user provides a different tolerance.
+
+============================================================
+REPORT FILE REQUIREMENTS
+============================================================
+Create <recording-number>-Easement_report.txt with these sections:
+
+1. EASEMENT EXTRACTION REPORT
+2. START / CONTROL INFORMATION
+3. CSV IMPORT SUMMARY
+4. BOUNDARY CALL VERIFICATION TABLE
+5. CURVE / RADIAL QA TABLE
+5A. EXACT STRIP / OFFSET WIDTH QA TABLE, when applicable
+6. SOURCE-CALL AND FINAL FORWARD CLOSURE CHECK
+7. REVERSE BUILD CHECK FROM POB
+8. AREA CHECK
+9. PRELIMINARY LEGAL / DRAFTING REVIEW
+10. FINAL IMPORT STATUS
+
+============================================================
+ON-SCREEN RESPONSE REQUIREMENTS
+============================================================
+The final chat response must include:
+
+* link to <recording-number>-Easement.csv
+* link to <recording-number>-Easement_report.txt
+* short on-screen error/QA summary
+* POC coordinate
+* POB coordinate
+* extracted PLSS/start information
+* source-call forward closure distance before exact-width correction
+* final constraint-geometry forward closure distance after exact-width correction
+* reverse closure distance
+* autoclosure performed: YES/NO
+* computed area
+* final import status
+
+Do not paste the full CSV in chat unless asked.
+Do not give multiple CSV options.
+Do not say the CSV is ready if any IMPORT row would be skipped due to missing headers, missing Type, missing Layer, missing coordinates, or unsupported geometry.
+
+============================================================
+FAILURE / DISCREPANCY HANDLING
+============================================================
+If the easement cannot be calculated or constructed, still output the report file and clearly state:
+
+NOT READY FOR 4-EASEMENT_IMPORT - REVIEW REQUIRED
+
+List likely reasons, such as:
+
+* legal description incomplete
+* POB missing or ambiguous
+* POC tie does not reach usable POB
+* bearing/distance call unreadable
+* curve radius/delta/arc/chord missing
+* curve direction/radial/tangency ambiguous
+* shown and reversed radial create plausible alternatives
+* boundary does not close
+* reverse build does not match forward build
+* computed area does not match stated area
+* legal text conflicts with exhibit sketch
+* adjacent/existing easement confusion
+* easement depends on external record data not provided
+
+Do not create guessed linework just to make the CSV import.
+
+============================================================
+FINAL IMPORTANT RULES
+============================================================
+* Prompt Easement is standalone.
+* Prompt 1 is review only.
+* Prompt 4 has been removed.
+* Use POC at 10000,10000 unless project coordinates are provided.
+* Build POC -> POB ties before easement boundary.
+* Do not force closure unless requested.
+* Hold exact strip/offset width when source clearly controls.
+* Keep the CSV header unchanged.
+* Output exactly one easement CSV and one report file unless asked otherwise.
+* Report all discrepancies. Do not silently force geometry.
