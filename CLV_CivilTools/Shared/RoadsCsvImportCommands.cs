@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -543,7 +544,7 @@ namespace CLV_CivilTools.Shared
                 return true;
             }
 
-            RoadCsvRow anchored = chain.FirstOrDefault(r => r.AnchorMethod.Contains("ORANGE", StringComparison.OrdinalIgnoreCase) && r.StartX.HasValue && r.StartY.HasValue) ??
+            RoadCsvRow? anchored = chain.FirstOrDefault(r => r.AnchorMethod.Contains("ORANGE", StringComparison.OrdinalIgnoreCase) && r.StartX.HasValue && r.StartY.HasValue) ??
                                       chain.FirstOrDefault(r => r.CoordinateAnchor.Contains("10000", StringComparison.OrdinalIgnoreCase) && r.StartX.HasValue && r.StartY.HasValue) ??
                                       chain.FirstOrDefault(r => r.StartX.HasValue && r.StartY.HasValue);
             if (anchored != null)
@@ -755,7 +756,7 @@ namespace CLV_CivilTools.Shared
             return false;
         }
 
-        private static bool TryCreateArcFromStartEnd(RoadCsvRow row, Point3d start, Point3d end, out Arc? arc, out Point3d labelPoint, out string note)
+        private static bool TryCreateArcFromStartEnd(RoadCsvRow row, Point3d start, Point3d end, [NotNullWhen(true)] out Arc? arc, out Point3d labelPoint, out string note)
         {
             arc = null;
             labelPoint = MidPoint(start, end);

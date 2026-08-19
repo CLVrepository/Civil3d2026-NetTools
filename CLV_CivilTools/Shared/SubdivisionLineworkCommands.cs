@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
@@ -833,7 +834,7 @@ namespace CLV_CivilTools.Shared
             return best;
         }
 
-        private static bool TryCreateCornerFilletArc(Point2d corner, Vector2d away1, Vector2d away2, double radius, out Arc? arc, out Point2d tangent1, out Point2d tangent2)
+        private static bool TryCreateCornerFilletArc(Point2d corner, Vector2d away1, Vector2d away2, double radius, [NotNullWhen(true)] out Arc? arc, out Point2d tangent1, out Point2d tangent2)
         {
             arc = null;
             tangent1 = Point2d.Origin;
@@ -887,7 +888,7 @@ namespace CLV_CivilTools.Shared
         }
 
 
-        private static bool TryCreateLineCircleFillet(Line line, Point3d circleCenter3d, double circleRadius, double filletRadius, Vector2d stemDirection, out Arc? arc, out Point3d lineTangent, out Point3d circleTangent)
+        private static bool TryCreateLineCircleFillet(Line line, Point3d circleCenter3d, double circleRadius, double filletRadius, Vector2d stemDirection, [NotNullWhen(true)] out Arc? arc, out Point3d lineTangent, out Point3d circleTangent)
         {
             arc = null;
             lineTangent = Point3d.Origin;
@@ -1169,7 +1170,7 @@ namespace CLV_CivilTools.Shared
             return false;
         }
 
-        private static bool TryCreateFilletArc(Point2d line1Point, Vector2d dir1, Point2d line2Point, Vector2d dir2, double radius, Point2d roadCenter, out Arc? arc, out Point2d tangent1, out Point2d tangent2)
+        private static bool TryCreateFilletArc(Point2d line1Point, Vector2d dir1, Point2d line2Point, Vector2d dir2, double radius, Point2d roadCenter, [NotNullWhen(true)] out Arc? arc, out Point2d tangent1, out Point2d tangent2)
         {
             arc = null;
             tangent1 = Point2d.Origin;

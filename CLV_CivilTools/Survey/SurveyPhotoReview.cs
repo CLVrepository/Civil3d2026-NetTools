@@ -9,6 +9,7 @@ using System.Drawing.Drawing2D;
 using DrawingImage = System.Drawing.Image;
 using DrawingFont = System.Drawing.Font;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Windows.Forms;
 
@@ -760,27 +761,32 @@ namespace CLV_CivilTools.Survey
         {
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
 
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
-            request.Method = WebRequestMethods.Http.Get;
-            request.Accept = "image/png,image/*;q=0.8,*/*;q=0.5";
-            request.UserAgent = "CLV_CivilTools/2026 Survey Photo Review map preview";
-            request.Timeout = 8000;
-            request.ReadWriteTimeout = 8000;
-            request.KeepAlive = false;
-            request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+            using var handler = new HttpClientHandler
+            {
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+            };
 
             IWebProxy? proxy = WebRequest.DefaultWebProxy;
             if (proxy != null)
             {
                 proxy.Credentials = CredentialCache.DefaultCredentials;
-                request.Proxy = proxy;
+                handler.Proxy = proxy;
+                handler.UseProxy = true;
             }
 
-            using WebResponse response = request.GetResponse();
-            using Stream? stream = response.GetResponseStream();
-            if (stream == null)
-                throw new IOException("Map tile response did not contain a data stream.");
+            using var client = new HttpClient(handler)
+            {
+                Timeout = TimeSpan.FromMilliseconds(8000)
+            };
 
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Accept.ParseAdd("image/png,image/*;q=0.8,*/*;q=0.5");
+            request.Headers.UserAgent.ParseAdd("CLV_CivilTools/2026 Survey Photo Review map preview");
+            request.Headers.ConnectionClose = true;
+
+            using HttpResponseMessage response = client.Send(request, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+            using Stream stream = response.Content.ReadAsStream();
             using var ms = new MemoryStream();
             stream.CopyTo(ms);
             return ms.ToArray();
