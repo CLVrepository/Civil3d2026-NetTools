@@ -1,0 +1,17 @@
+Files clv_original/CLV_CivilTools/CHANGELOG.md and clv_work/CLV_CivilTools/CHANGELOG.md differ
+Files clv_original/CLV_CivilTools/CLV_CivilTools.csproj and clv_work/CLV_CivilTools/CLV_CivilTools.csproj differ
+Files clv_original/CLV_CivilTools/COMMAND_INDEX.md and clv_work/CLV_CivilTools/COMMAND_INDEX.md differ
+Only in clv_work/CLV_CivilTools/Docs: PDF_VIEWER_ULTIMATE_PLAN.md
+Only in clv_work/CLV_CivilTools/Docs: PDF_VIEWER_V1_README.md
+Only in clv_work/CLV_CivilTools: PDF_VIEWER_V1_FILE_CHANGES.txt
+Files clv_original/CLV_CivilTools/PROJECT_MAP.md and clv_work/CLV_CivilTools/PROJECT_MAP.md differ
+Only in clv_work/CLV_CivilTools: PdfViewer
+Files clv_original/CLV_CivilTools/Survey/SurveyPalette.cs and clv_work/CLV_CivilTools/Survey/SurveyPalette.cs differ
+
+FIX 15 - UNIFIED NAVIGATION LIST
+Modified: PdfViewer/PdfViewerControl.cs
+Modified: Docs/PDF_VIEWER_ULTIMATE_PLAN.md
+Modified: Docs/PDF_VIEWER_V1_README.md
+Modified: CHANGELOG.md
+
+Behavior: removed category filter buttons and combined all mapped plans and saved reference views into one list with category prefixes and pinned items first.

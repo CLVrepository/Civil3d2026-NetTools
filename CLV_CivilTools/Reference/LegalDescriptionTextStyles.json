@@ -1,0 +1,44 @@
+[
+  {
+    "Name": "CLV Old Standard",
+    "AllCaps": true,
+    "BeginningSame": "BEGINNING AT {POB_DESCRIPTION};",
+    "Commencing": "COMMENCING AT {POC_DESCRIPTION};",
+    "TieCoursePrefix": "THENCE ",
+    "LastTieTemplate": "{COURSE_TEXT} TO A POINT, SAID POINT BEING THE POINT OF BEGINNING;",
+    "BoundaryCoursePrefix": "THENCE ",
+    "ReturnToBeginning": "THENCE TO THE POINT OF BEGINNING.",
+    "AreaTemplate": "SAID PARCEL CONTAINS {AREA_SF} SQUARE FEET, MORE OR LESS.",
+    "LineDistanceSeparator": ", ",
+    "FeetWord": "FEET",
+    "CurveTemplate": "ALONG A CURVE TO THE {DIRECTION}, HAVING A RADIUS OF {RADIUS} FEET, THROUGH A CENTRAL ANGLE OF {DELTA}, AN ARC LENGTH OF {LENGTH} FEET"
+  },
+  {
+    "Name": "True POB",
+    "AllCaps": true,
+    "BeginningSame": "BEGINNING AT {POB_DESCRIPTION};",
+    "Commencing": "COMMENCING AT {POC_DESCRIPTION};",
+    "TieCoursePrefix": "THENCE ",
+    "LastTieTemplate": "{COURSE_TEXT} TO THE TRUE POINT OF BEGINNING;",
+    "BoundaryCoursePrefix": "THENCE ",
+    "ReturnToBeginning": "THENCE TO THE TRUE POINT OF BEGINNING.",
+    "AreaTemplate": "CONTAINING {AREA_SF} SQUARE FEET, MORE OR LESS.",
+    "LineDistanceSeparator": ", ",
+    "FeetWord": "FEET",
+    "CurveTemplate": "ALONG A CURVE TO THE {DIRECTION}, HAVING A RADIUS OF {RADIUS} FEET, THROUGH A CENTRAL ANGLE OF {DELTA}, AN ARC LENGTH OF {LENGTH} FEET"
+  },
+  {
+    "Name": "Direct POB",
+    "AllCaps": true,
+    "BeginningSame": "BEGINNING AT {POB_DESCRIPTION};",
+    "Commencing": "COMMENCING AT {POC_DESCRIPTION};",
+    "TieCoursePrefix": "THENCE ",
+    "LastTieTemplate": "{COURSE_TEXT} TO THE POINT OF BEGINNING;",
+    "BoundaryCoursePrefix": "THENCE ",
+    "ReturnToBeginning": "THENCE TO THE POINT OF BEGINNING.",
+    "AreaTemplate": "SAID PARCEL CONTAINS {AREA_SF} SQUARE FEET, MORE OR LESS.",
+    "LineDistanceSeparator": ", ",
+    "FeetWord": "FEET",
+    "CurveTemplate": "ALONG A CURVE TO THE {DIRECTION}, HAVING A RADIUS OF {RADIUS} FEET, THROUGH A CENTRAL ANGLE OF {DELTA}, AN ARC LENGTH OF {LENGTH} FEET"
+  }
+]

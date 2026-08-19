@@ -1,0 +1,430 @@
+PROMPT 1 — MAP / LEGAL / LINEWORK REVIEW ONLY — ON-SCREEN FINDINGS REPORT
+Version: 2026-07-09 Rev 1 - replaces sectional/control construction prompt
+Purpose: Review a recorded survey, parcel map, subdivision map, record of survey, final map, boundary map, easement exhibit, or similar civil/survey PDF before CAD reconstruction begins. This prompt does not create CAD linework. It identifies project information, map/legal call issues, linework risks, missing data, curve/radial concerns, POC/POB/tie information, and recommended next steps before running Prompt 2, Prompt 3, or Prompt Easement.
+
+============================================================
+CORE INTENT
+============================================================
+This is a review prompt only.
+
+Do not build sectional/control linework.
+Do not auto-close a parent frame.
+Do not create split points.
+Do not create PLSS point CSV files.
+Do not create boundary, road, easement, lot, ROW, or sectional import CSV files.
+Do not visually fit or trace CAD geometry.
+
+The goal is to produce a clear on-screen review report that helps the drafter catch obvious errors before CAD reconstruction starts.
+
+Use this prompt to answer these questions before drafting:
+
+1. What is the map/document?
+2. What sheets, details, legal descriptions, tables, and notes were reviewed?
+3. Is there a legal description or boundary narrative?
+4. Is there a clear POC and POB?
+5. Are the commencement/tie calls readable?
+6. Are the boundary calls readable and in order?
+7. Do the map labels, legal description, line tables, curve tables, radial tables, and highlighted linework appear to agree?
+8. Are any calls missing, unreadable, duplicated, reversed, or suspicious?
+9. Are any dotted/dashed lines being confused with offsets?
+10. Are any curve/radial labels ambiguous?
+11. Does the map appear ready for Prompt 2, Prompt 3, or Prompt Easement?
+
+============================================================
+DEFAULT COORDINATE / ANCHOR REVIEW
+============================================================
+The standard CAD coordinate framework used by later prompts is:
+
+POC / Control Anchor X = 10000.0000
+POC / Control Anchor Y = 10000.0000
+
+For Prompt 1, do not calculate final CAD geometry from this point. Only identify whether the map/document shows a usable POC, control point, monument, or commencement point that later prompts can place at 10000,10000.
+
+If the orange circle marks a point, identify what it appears to represent:
+
+* POC / Point of Commencement.
+* POB / Point of Beginning.
+* Section corner.
+* Quarter corner.
+* Monument.
+* Road/control intersection.
+* Boundary corner.
+* Other control point.
+* Unknown.
+
+If the orange circle is missing, report that no user-marked POC/control anchor was found.
+
+Important:
+
+* The orange circle does not automatically mean the POB.
+* The blue circle or blue arrow may mark a POB, start direction, or user note, but it does not move the standard POC coordinate.
+* Prompt 2 will later decide how the POB is calculated from the POC and tie calls.
+
+============================================================
+MARKUP / COLOR REVIEW RULE
+============================================================
+Use map labels first, but user markup controls review priority.
+
+Common markup meanings:
+
+* Orange circle = likely POC/control anchor candidate.
+* Yellow highlight = likely boundary to be built in Prompt 2.
+* Pink highlight = likely road centerline to be built in Prompt 3.
+* Green highlight = likely ROW, road edge, private street edge, offset, or reference line.
+* Purple highlight = optional sectional/control reference only; Prompt 4 has been removed from this workflow.
+* Blue circle/arrow = possible POB, start point, direction, or user note.
+
+Prompt 1 must identify all highlighted colors present and explain what each appears to mean for later prompts.
+
+============================================================
+LEGAL DESCRIPTION REVIEW
+============================================================
+If the map/document includes a legal description, review it before any map call extraction.
+
+Extract and report when readable:
+
+* Recording number / document number.
+* Map name / project name.
+* APN / parcel number.
+* Owner / grantor / party names, if relevant.
+* County and state.
+* PLSS location: section, township, range, meridian, aliquot parts.
+* Plat/book/page or map recording references.
+* Basis of bearing.
+* Units.
+* Stated area.
+* Point of Commencement description.
+* Point of Beginning description.
+* Commencement/tie calls.
+* Boundary calls.
+* Curve table references.
+* Radial table references.
+* Exhibit or detail references.
+
+If any item is missing or unreadable, report UNKNOWN or UNREADABLE. Do not guess.
+
+Compare legal description and map linework at a review level only. Do not calculate full closure in Prompt 1 unless the user specifically asks for a rough check.
+
+============================================================
+BOUNDARY READINESS REVIEW
+============================================================
+Identify the intended Prompt 2 boundary.
+
+Review:
+
+* Whether yellow highlighted boundary exists.
+* Whether the boundary sequence is clear.
+* Whether the POB is labeled or marked.
+* Whether there are tie calls from POC to POB.
+* Whether the boundary can be built from bearings/distances/curves shown on the map or legal description.
+* Whether line table and curve table labels are readable.
+* Whether any boundary segment depends on a ROW, centerline, section line, monument, or external record not provided.
+* Whether any boundary line appears to be a lot line, ROW line, centerline, easement, or adjacent parcel line instead of the intended project boundary.
+
+Do not create the boundary. Only report whether Prompt 2 appears ready.
+
+============================================================
+ROAD CENTERLINE READINESS REVIEW
+============================================================
+Identify whether Prompt 3 can be run later.
+
+Review:
+
+* Whether pink highlighted centerline exists.
+* Whether the road names are readable.
+* Whether centerline bearings, distances, curve labels, and station/tie information are readable.
+* Whether centerlines can be tied to the Prompt 2 boundary/POC framework.
+* Whether road edge or ROW labels might be confused for centerline labels.
+* Whether cul-de-sac/knuckle centerline endpoints are identifiable.
+
+Do not build centerlines in Prompt 1.
+
+============================================================
+EASEMENT READINESS REVIEW
+============================================================
+If the document appears to include an easement, review whether Prompt Easement can be run later.
+
+Review:
+
+* Easement purpose.
+* Grantee/easement holder.
+* POC and POB descriptions.
+* Commencement/tie calls.
+* Easement boundary calls.
+* Strip width or exact offset conditions.
+* Parent line/curve used for offset or strip geometry.
+* Stated area.
+* Whether adjacent/existing easements might be confused with the easement to build.
+
+Do not build the easement in Prompt 1.
+
+============================================================
+TIE-LINE / OFFSET / FRONTAGE CLASSIFICATION REVIEW
+============================================================
+Before later prompts use any distance as an offset, classify the label.
+
+A dotted, dashed, broken, or leader-style line with its own bearing and distance is normally a TIE_LINE or NON_OFFSET_TIE_LINE, not a perpendicular offset.
+
+Classify visible labels as:
+
+* BOUNDARY_CALL = bearing/distance/curve call directly on the boundary.
+* CENTERLINE_CALL = bearing/distance/curve call directly on a road centerline.
+* COMMENCEMENT_TIE = bearing-distance call from POC/control point to POB or another control point.
+* CONTROL_TIE = bearing-distance call from a monument/control point to another point.
+* OFFSET_DIMENSION = perpendicular offset, usually shown normal to the controlling line and usually without a bearing.
+* ROW_WIDTH_OR_HALF_WIDTH = explicit road width, ROW width, or half-width.
+* STRIP_WIDTH = easement or corridor width.
+* LOT_FRONTAGE_DISTANCE = frontage along lot/parcel line, not a tie or offset.
+* NON_OFFSET_TIE_LINE = dotted/dashed/leader bearing-distance tie, not a width.
+* AMBIGUOUS_CALLOUT = unclear and must be manually reviewed.
+
+Report any label that could be confused with an offset, ROW width, frontage, or tie.
+
+============================================================
+CURVE / RADIAL REVIEW
+============================================================
+For every visible curve label that may affect a boundary, road centerline, or easement:
+
+Identify when readable:
+
+* Curve ID.
+* Feature type: boundary, centerline, ROW/edge, easement, unknown.
+* Direction of travel, if shown.
+* LEFT or RIGHT direction, if determinable.
+* Radius.
+* Delta.
+* Arc length.
+* Tangent.
+* Chord bearing.
+* Chord length.
+* Start radial bearing.
+* End radial bearing.
+* Radial table ID.
+* Whether the curve appears tangent-controlled, radial-controlled, chord-controlled, or unknown.
+
+Report warnings for:
+
+* curve label may belong to nearby road edge/ROW rather than centerline/boundary;
+* radial direction ambiguous;
+* chord/arc/radius values missing;
+* curve table label unreadable;
+* likely reversed bearing or radial;
+* legal/map/table conflict;
+* curve data insufficient for CAD construction.
+
+Do not invent missing curve data.
+
+============================================================
+SCALED PDF / IMAGE OVERLAY REVIEW
+============================================================
+Prompt 1 may comment on whether overlay QA will likely be useful later, but it does not create geometry to overlay.
+
+Review whether the PDF/image appears suitable for overlay QA:
+
+* Is the map sheet legible?
+* Are scale and north arrow readable?
+* Is the scan distorted, skewed, cropped, or blurry?
+* Are tables legible enough for CAD extraction?
+* Are highlighted routes visible?
+
+Report overlay concerns that may affect Prompt 2/3/Easement.
+
+============================================================
+ON-SCREEN OUTPUT ONLY
+============================================================
+The default output for Prompt 1 is an on-screen report only.
+
+Do not create files unless the user specifically asks for a downloadable report.
+Do not create CSV files from Prompt 1.
+Do not create CAD import rows from Prompt 1.
+
+============================================================
+REQUIRED ON-SCREEN REPORT SECTIONS
+============================================================
+Produce the following sections in order.
+
+A. QUICK STATUS DASHBOARD
+
+Use this table:
+
+Check,Status,KeyResult,ActionNeeded
+
+Include:
+
+* Source PDF/image reviewed.
+* Map/document identification found.
+* Legal description found.
+* POC/control anchor identified.
+* POB identified.
+* Tie/commencement calls readable.
+* Boundary route identified.
+* Boundary calls readable.
+* Curve/radial data readable.
+* Line/curve tables reviewed.
+* Highlight colors identified.
+* Tie-line/offset/frontage risks reviewed.
+* Prompt 2 readiness.
+* Prompt 3 readiness.
+* Prompt Easement readiness, if applicable.
+
+Use:
+
+* PASS / ✅ = usable.
+* WARN / ⚠️ = usable but check manually.
+* FAIL / ❌ = do not proceed until corrected.
+* INFO / ℹ️ = informational only.
+
+B. CRITICAL ISSUE SPOTLIGHT
+
+Use this table:
+
+Priority,IssueType,AffectedFeature,ObservedProblem,Severity,RecommendedAction
+
+Show issues such as:
+
+* POC missing.
+* POB missing.
+* POC/POB conflict.
+* Missing tie call.
+* Unreadable boundary call.
+* Missing curve data.
+* Legal/map conflict.
+* Dotted tie possibly mistaken as offset.
+* Road edge label possibly mistaken as centerline.
+* Easement strip width ambiguous.
+* Scan/PDF too blurry.
+
+If no critical issues are found, state:
+
+No critical pre-drafting issues were identified from the available PDF/image review, subject to CAD verification in later prompts.
+
+C. PROJECT / MAP IDENTIFICATION
+
+Table:
+
+Item,Value,Confidence,Notes
+
+Include map name, recording number, sheet numbers, county/state, APN, scale, units, basis of bearing, north arrow, PLSS, and source details.
+
+D. HIGHLIGHT / MARKUP INTERPRETATION
+
+Table:
+
+ColorOrMarkup,ObservedFeature,InterpretedPurpose,LaterPromptAffected,Confidence,Notes
+
+E. LEGAL DESCRIPTION / SOURCE TEXT REVIEW
+
+Table:
+
+Item,ExtractedTextOrValue,SourceSheetOrPage,Confidence,Notes
+
+F. POC / POB / TIE REVIEW
+
+Table:
+
+PointOrTie,Description,SourceCall,SourceSheet,LaterPromptUse,Confidence,Notes
+
+G. BOUNDARY READINESS REVIEW FOR PROMPT 2
+
+Table:
+
+BoundaryItem,ObservedSource,Readable,PotentialIssue,Prompt2Impact,RecommendedAction
+
+End with one of these exact statements:
+
+* PROMPT 2 READY - BOUNDARY CAN BE BUILT FROM POC/POB/TIES
+* PROMPT 2 READY WITH QA - VERIFY FLAGGED ITEMS BEFORE IMPORT
+* PROMPT 2 NOT READY - MANUAL REVIEW REQUIRED BEFORE BOUNDARY BUILD
+
+H. ROAD CENTERLINE READINESS REVIEW FOR PROMPT 3
+
+Table:
+
+RoadOrCenterlineItem,ObservedSource,Readable,PotentialIssue,Prompt3Impact,RecommendedAction
+
+End with one of these exact statements:
+
+* PROMPT 3 READY AFTER PROMPT 2 BOUNDARY IS BUILT
+* PROMPT 3 READY WITH QA AFTER PROMPT 2
+* PROMPT 3 NOT READY - CENTERLINE TIES OR LABELS NEED REVIEW
+
+I. EASEMENT READINESS REVIEW, IF APPLICABLE
+
+Table:
+
+EasementItem,ObservedSource,Readable,PotentialIssue,EasementPromptImpact,RecommendedAction
+
+End with one of these exact statements when an easement is present:
+
+* PROMPT EASEMENT READY - EASEMENT CAN BE BUILT FROM POC/POB/TIES
+* PROMPT EASEMENT READY WITH QA - VERIFY FLAGGED ITEMS BEFORE IMPORT
+* PROMPT EASEMENT NOT READY - MANUAL REVIEW REQUIRED BEFORE EASEMENT BUILD
+
+If no easement is present, state:
+
+No easement-specific linework was identified for Prompt Easement from the available review.
+
+J. TIE-LINE / OFFSET / FRONTAGE CLASSIFICATION REVIEW
+
+Table:
+
+CalloutOrLabel,GraphicType,ClassifiedAs,Reason,PossibleMisuseRisk,RecommendedAction
+
+K. CURVE / RADIAL PRELIMINARY REVIEW
+
+Table:
+
+CurveID,FeatureType,Radius,Delta,ArcLength,ChordBearing,ChordLength,RadialData,CurveControlType,Issue,RecommendedAction
+
+L. LEGAL DESCRIPTION VS MAP PRELIMINARY ERROR REVIEW
+
+Table:
+
+IssueID,LegalCallOrClause,RelatedMapFeature,LegalValue,MapValue,PreliminaryErrorType,Severity,RecommendedFollowUp,AffectsLaterPrompt
+
+PreliminaryErrorType options:
+
+* NONE
+* POSSIBLE_BEARING_ERROR
+* POSSIBLE_DISTANCE_ERROR
+* POSSIBLE_CURVE_ERROR
+* POSSIBLE_RADIAL_ERROR
+* POSSIBLE_SEQUENCE_ERROR
+* POSSIBLE_MISSING_CALL
+* POSSIBLE_EXTRA_CALL
+* LEGAL_MAP_CONFLICT
+* LEGAL_TABLE_CONFLICT
+* LEGAL_CALL_REVERSED
+* POC_OR_POB_CONFLICT
+* TIE_OR_OFFSET_CONFLICT
+* UNREADABLE_OR_AMBIGUOUS_TEXT
+* MANUAL_REVIEW_REQUIRED
+
+M. PDF / IMAGE QUALITY AND OVERLAY READINESS
+
+Table:
+
+ReviewItem,Result,Concern,RecommendedAction
+
+N. FINAL PRE-DRAFTING RECOMMENDATION
+
+Give a short summary of what to run next:
+
+* Run Prompt 2 next.
+* Run Prompt 2 with QA.
+* Do not run Prompt 2 until issues are checked.
+* Run Prompt Easement instead, if the document is primarily an easement.
+* Run Prompt 3 only after Prompt 2 boundary/control geometry exists.
+
+============================================================
+FINAL IMPORTANT RULES
+============================================================
+* Prompt 1 is review only.
+* Do not create CAD linework.
+* Do not create CSV files unless the user specifically asks for a storage/export file.
+* Do not calculate final coordinates except simple explanatory POC/POB review if clearly provided.
+* Do not replace Prompt 2, Prompt 3, or Prompt Easement.
+* Do not rely on OCR if the image is readable by visual review; use OCR only as a last resort.
+* Report uncertainty clearly.
+* Keep the on-screen report concise enough to review before drafting.
+* Prompt 4 has been removed from the required workflow.

@@ -1,0 +1,9 @@
+PROMPT 4 REMOVED
+
+Prompt 4 has been removed from the active boundary workflow as of 2026-07-09.
+
+Current workflow:
+1. Prompt 1 - Map / Legal / Linework Review Only
+2. Prompt 2 - Standalone Boundary From POC / POB / Tie Calls
+3. Prompt 3 - Road Centerlines From Prompt 2 Boundary / POC Framework
+4. Prompt Easement - Standalone Easement From POC / POB / Tie Calls

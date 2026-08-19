@@ -1,0 +1,986 @@
+PROMPT 4 — SECTIONAL BOUNDARY LINEWORK FROM PURPLE CONTROL, MAP CHECKS, RESOLVED PARENT BOUNDARY, QA, AND CAD CSV
+Version: 2026-07-08 Rev 3 - clean final import CSV, source rows separated, endpoint-only import
+Purpose: Replace Prompt 1 with a cleaner workflow for creating sectional boundary/control linework from the user-highlighted control map. Build the outer parent boundary first, verify and resolve it, then derive the interior sectional breakout linework from the resolved parent boundary only.
+
+============================================================
+CORE INTENT
+============================================================
+This prompt is for recorded surveys, parcel maps, subdivision maps, records of survey, final maps, boundary maps, and similar civil/survey PDFs where the first CAD step is to create the sectional/control boundary linework.
+
+The goal is repeatable CAD-ready linework from map labels, not visually fitted linework.
+
+The user will upload a PDF or image. Purple highlighted linework is the primary control linework to review and build.
+
+Build in this order:
+
+1. Perform starting map checks before calculating linework.
+2. Identify the most outer extents of the purple control linework.
+3. Build the outer Parent Boundary first, like a closed boundary traverse.
+4. Start at one logical corner and work around the parent boundary back to the same corner.
+5. Calculate and report the raw source-call closure error.
+6. Perform reverse-build QA to verify the source-call boundary works in both directions.
+7. Overlay the scaled PDF/image against the calculated linework as QA only.
+8. Run length-only closure adjustment using the same logic as the Civil Tools AUTO CLOSURE concept: hold bearings, adjust lengths only, and distribute the closure error to the parent sides.
+9. Rebuild and lock the resolved Parent Boundary.
+10. Use the resolved Parent Boundary as the only source for all interior sectional/control breakouts.
+11. Determine the sectional breakout shown on the map and draw the breakout lines by calculated split points, especially midpoint-to-midpoint, quarter-to-quarter, eighth-to-eighth, sixteenth-to-sixteenth, and resolved intersections.
+12. Export a detailed CAD-ready CSV.
+13. Provide an on-screen QA report so errors are easy to spot before importing.
+14. Create two different CSV concepts:
+   * SOURCE / QA tables for review only.
+   * One clean FINAL IMPORT CSV containing only the final CAD linework and optional control points.
+
+The final import CSV must be simple. It must not include source-call sub-segments as importable rows, and it must not require Bearing or Distance to construct the CAD linework. CAD import uses endpoint coordinates only.
+
+Do not build parcel lots, easements, road edges, road right-of-way offsets, building lines, or non-control interior parcel detail unless the user specifically asks for them.
+
+============================================================
+STARTING MAP CHECKS — REQUIRED BEFORE BUILDING LINEWORK
+============================================================
+Before drawing or calculating any geometry, review the uploaded PDF/image and report whether the map is usable.
+
+Check and report:
+
+1. Sheet / map identification
+   * Map name or recording number, if readable.
+   * Sheet numbers reviewed.
+   * Scale, north arrow, basis of bearing, and units, if readable.
+   * Whether bearings and distances appear to be survey feet or another unit.
+
+2. Highlight / markup check
+   * Confirm purple highlighted linework exists.
+   * Identify whether purple linework appears to represent the sectional/control framework.
+   * Identify any other highlighted colors and their apparent purpose.
+   * If purple linework is missing, stop and state that control linework was not clearly identified.
+
+3. Parent Boundary suitability check
+   * Identify whether the purple control linework has an obvious outer Parent Boundary.
+   * Identify the outermost north/east/south/west or equivalent parent sides.
+   * Identify if the parent boundary is four-sided, multi-sided, curved, or incomplete.
+   * Identify whether each parent side has a readable bearing and distance, or whether distances must be derived from multiple labeled sub-segments.
+   * If a parent side total length is not labeled, add the visible sub-segments to derive the total parent side length. Report each sub-segment used.
+
+4. Label quality check
+   * Identify unreadable bearings, distances, curve data, or point labels.
+   * Check for possible digit/character confusion such as 0 vs 8, 3 vs 5, 6 vs 8, S vs 5, E vs F, minute/second mark confusion, or label crowding.
+   * Check whether any bearing appears reversed relative to the intended traverse direction.
+   * Check whether any distance label may belong to a nearby lot line, road line, tie line, or annotation leader instead of the parent boundary.
+
+5. Tie-line / offset / frontage classification check
+   * Classify dotted, dashed, broken, or leader-style bearing-distance lines as TIE_LINE or NON_OFFSET_TIE_LINE unless explicitly labeled as an offset.
+   * Do not use a dotted/dashed bearing-distance tie as a road width, ROW offset, or parent boundary side unless it truly defines the control line.
+   * Do not use lot frontage distances as parent boundary distances unless they are also the controlling parent side labels.
+
+6. Curve/radial check, if any parent or sectional control line is curved
+   * Identify each curve label and whether it belongs to the purple control linework.
+   * Extract radius, delta, arc length, tangent, chord bearing, chord length, and radial bearings where shown.
+   * Identify whether curve direction is LEFT or RIGHT relative to direction of travel.
+   * If curve data is incomplete or ambiguous, place the curve on QA and report it.
+
+7. Closure risk check
+   * Identify any missing parent side call.
+   * Identify any conflicting map/legal/table call.
+   * Identify parent sides made of multiple sub-segments.
+   * Identify any known drafting issue that may prevent a clean closure.
+
+8. Proceed / stop decision
+   * If the Parent Boundary cannot be identified or too many source calls are unreadable, stop and report what must be manually verified.
+   * If the Parent Boundary can be identified, proceed with the source-call build.
+
+============================================================
+MARKUP / COLOR PRIORITY RULE
+============================================================
+Use map labels first, but user markup controls extraction priority.
+
+Common markup meanings:
+
+* Purple highlight = sectional/control linework to build in this Prompt 4.
+* Orange circle = preferred CAD anchor / control point when shown.
+* Yellow highlight = parcel/site boundary reference only unless it is also purple control linework.
+* Pink highlight = roadway/control centerlines, reference only unless they are part of the purple control linework.
+* Green highlight = right-of-way or offset control linework, reference only unless it is part of the purple control linework.
+* Blue circle/arrow = possible start, POB, direction, or user note; it does not move the CAD coordinate origin unless the user says it is the anchor.
+
+If purple and map labels conflict, extract the map label but report the conflict.
+
+============================================================
+CAD ANCHOR RULE
+============================================================
+Use this default CAD coordinate for the user-marked control anchor unless the user provides a different coordinate:
+
+POC / Anchor Point X = 10000.000000
+POC / Anchor Point Y = 10000.000000
+
+The orange circle usually marks the point that should land at 10000,10000. It does not automatically define the first traverse corner unless it is clearly the same point.
+
+If no orange circle is shown, choose the best map-labeled parent boundary/control corner as the temporary anchor and clearly report that the anchor is assumed.
+
+Do not rotate, scale, stretch, rubber-sheet, best-fit, or visually shift the linework during anchoring unless the user specifically instructs you to do so.
+
+============================================================
+COORDINATE PRECISION RULE
+============================================================
+Use full available precision internally.
+
+Final CSV coordinate fields must be exported to at least 6 decimal places. Use 8 decimal places when practical.
+
+Distances should be exported to at least 6 decimal places.
+
+For coordinate-controlled rows, StartX/StartY/EndX/EndY control the CAD import. Bearing and Distance are descriptive QA fields and must be recalculated from the final coordinates.
+
+Do not hide closure errors, split misses, or endpoint gaps through rounding.
+
+============================================================
+PARENT BOUNDARY IDENTIFICATION RULE
+============================================================
+The first geometry task is to identify the most outer extents of the purple control linework.
+
+The Parent Boundary is the outer control frame that all sectional/control breakouts will be derived from.
+
+Use project-neutral naming unless the map provides a clear street/control/section name:
+
+* Parent Side 1
+* Parent Side 2
+* Parent Side 3
+* Parent Side 4
+* Parent Side 5, etc. when the outer control frame has more than four sides
+* North Parent Side / East Parent Side / South Parent Side / West Parent Side when orientation is obvious
+* Road 1 / Road 2 only when the parent side is a road/control line and the actual name is not readable
+
+Do not hard-code project-specific names into this prompt.
+
+If the parent side is labeled as multiple same-bearing collinear pieces, merge them into one full parent side for the final parent boundary row. Preserve the sub-segment labels in Notes and in the source-call report.
+
+SOURCE SUB-SEGMENT RULE:
+
+Source sub-segments are for review/reporting only. They must not be exported as IMPORT rows in the Final Import CSV unless the map shows a true angle point, curve transition, or separate controlling geometry break.
+
+Example: If one parent side is labeled by three collinear road or control segments, report the three source segments in the Source Parent Boundary Calls table, sum them as needed, but export only one final parent-side CAD line in the Final Import CSV.
+
+If the full side distance is not labeled, derive the full side distance by summing all visible sub-segments and mark the row DERIVED_FROM_SUBDISTANCES.
+
+Intermediate monuments, lot line crossings, annotation leaders, road crossings, and tie points must not split a parent side unless the map shows a true angle point, curve transition, or change in controlling geometry.
+
+============================================================
+SOURCE-CALL PARENT BOUNDARY BUILD RULE
+============================================================
+Build the outer Parent Boundary exactly from source map calls first.
+
+Procedure:
+
+1. Select one logical parent corner as the source build start.
+2. Traverse around the outer parent boundary in the mapped direction.
+3. Build each parent side endpoint-to-endpoint using map bearing and distance, or curve data if applicable.
+4. If a bearing is shown opposite the direction of travel, record the original source bearing and use the reciprocal bearing for the CAD build.
+5. If a side total is derived from sub-segments, use the summed distance as the source distance and list every sub-segment in Notes.
+6. Do not adjust, rotate, scale, stretch, snap, visually fit, or force closure during the source-call build.
+7. Calculate raw source-call closure before any adjustment.
+
+For each parent side, extract:
+
+* Segment ID
+* Parent side name
+* From point
+* To point
+* Bearing
+* Distance
+* Original distance
+* Sub-segments used, if any
+* Curve data, if any
+* Source sheet/detail/table
+* Source label
+* Corrected label, if reversed or corrected
+* Confidence
+* Notes
+
+============================================================
+SOURCE-CALL CLOSURE REPORT
+============================================================
+After the source-call Parent Boundary is built, calculate and report:
+
+* Beginning coordinate
+* Ending coordinate
+* Delta X
+* Delta Y
+* Linear closure error
+* Parent boundary perimeter
+* Closure ratio, if possible
+* Bearing/distance segment checks
+* Suspected source of closure error, if visible
+
+Default source-call tolerances unless the user provides different values:
+
+* Minor rounding closure tolerance = 0.05 feet
+* Bearing tolerance = 0°00'05"
+* Distance tolerance = 0.05 feet
+
+Do not create interior sectional lines until the source-call closure has been reported, the reverse build has been checked, and the resolved Parent Boundary has been created.
+
+============================================================
+REVERSE BUILD QA RULE
+============================================================
+Perform a reverse-build QA check on the source-call Parent Boundary and again on the resolved Parent Boundary.
+
+Reverse build procedure:
+
+1. Start from the same source start point.
+2. Reverse the segment order.
+3. For line segments, use reciprocal bearings and the same distances.
+4. For curves, swap PC/PT, reverse direction of travel, flip LEFT/RIGHT curve direction, and test radial direction where applicable.
+5. Rebuild the parent boundary in reverse.
+6. Compare reverse-built points to matching forward-built points.
+7. Compare the final reverse ending coordinate back to the original start coordinate.
+
+Report:
+
+ReverseSegment,ForwardSegment,Type,ReverseStartX,ReverseStartY,ReverseEndX,ReverseEndY,ExpectedX,ExpectedY,EndpointDeltaX,EndpointDeltaY,EndpointGap,ReverseBearingOrCurve,ReverseQAStatus,Severity,Resolution,Notes
+
+ReverseQAStatus options:
+
+* REVERSE_BUILD_OK
+* REVERSE_BUILD_CLOSURE_OK
+* REVERSE_ENDPOINT_MATCH
+* REVERSE_LINE_OK
+* REVERSE_CURVE_OK
+* REVERSE_ENDPOINT_GAP
+* REVERSE_CLOSURE_ERROR
+* REVERSE_LINE_BEARING_CONFLICT
+* REVERSE_CURVE_DIRECTION_CONFLICT
+* REVERSE_CURVE_ENDPOINT_CONFLICT
+* REVERSE_BUILD_MANUAL_REVIEW
+
+Do not use the reverse build to adjust geometry. It is a QA check only.
+
+============================================================
+SCALED PDF / IMAGE OVERLAY QA RULE
+============================================================
+Perform scaled PDF/image overlay QA when file/image tools are available.
+
+Overlay is QA only. It must not replace source-controlled geometry.
+
+Overlay QA should confirm:
+
+* The source-call Parent Boundary follows the highlighted purple outer extents.
+* The resolved Parent Boundary still overlays the mapped parent boundary within expected drafting tolerance.
+* Parent sides were not unintentionally split.
+* Derived sectional/control lines hit the intended parent split locations.
+* Derived lines do not overrun or fall short of parent sides.
+* Street/control labels are associated with the correct linework.
+* Visible mismatches are reported before final import.
+
+Overlay QA table:
+
+OverlayItem,CSVSegment,MapFeature,ExpectedVisualRelationship,OverlayResult,ApproxVisualMismatch,MathCheckStatus,Severity,Resolution,Notes
+
+OverlayResult options:
+
+* OVERLAY_MATCH
+* OVERLAY_MINOR_ROUNDING
+* OVERLAY_VISIBLE_MISMATCH
+* OVERLAY_PARENT_LINE_LENGTH_CONFLICT
+* OVERLAY_SPLIT_POINT_MISS
+* OVERLAY_LINE_OVERRUN
+* OVERLAY_LINE_SHORTFALL
+* OVERLAY_WRONG_MAP_FEATURE
+* OVERLAY_NOT_AVAILABLE
+* MANUAL_REVIEW
+
+Do not rate the framework reliable if overlay shows an unresolved visible mismatch that contradicts the source math.
+
+============================================================
+LENGTH-ONLY CLOSURE / RESOLVED PARENT BOUNDARY RULE
+============================================================
+After reporting source-call closure and reverse-build QA, create the resolved Parent Boundary using a length-only closure routine based on the same logic as the Civil Tools AUTO CLOSURE workflow:
+
+* Hold all bearings.
+* Adjust lengths only.
+* Do not snap the final endpoint to the start point as the closure method.
+* Do not hide closure by forcing only the last coordinate to equal the first coordinate.
+* The closure error must be distributed through eligible parent side lengths using the length-only closure method.
+* Do not rotate.
+* Do not scale.
+* Do not rubber-sheet.
+* Do not visually drag endpoints.
+* Do not change curve radius/delta/arc data unless the curve itself is part of the parent boundary and the source clearly supports the correction.
+* Preserve source distances in OriginalDistance.
+* Put corrected CAD distances in AdjustedDistance.
+* Put the distance correction in LengthAdjustment.
+* Mark adjusted rows LENGTH_ADJUSTED_TO_CLOSE.
+
+Closure adjustment method:
+
+1. Calculate the closure error vector from the source-call parent boundary.
+2. Identify all eligible parent sides for length adjustment.
+3. Exclude any side that the map clearly identifies as fixed, monument-held, record-only, or user-held unless no other solution is possible.
+4. Distribute the closure correction to eligible parent sides as equally as practical while holding bearings.
+5. If equal distribution cannot solve closure because the parent side directions require a least-squares solution, use a length-only least-squares or proportional method and report the method used.
+6. Rebuild the Parent Boundary from the adjusted lengths.
+7. Verify the resolved Parent Boundary closes to 0.00 feet in endpoint geometry.
+8. If it cannot close by length-only adjustment, stop and report the issue.
+
+The resolved Parent Boundary becomes the controlling geometry for all other linework and points.
+
+============================================================
+RESOLVED PARENT BOUNDARY LOCK RULE
+============================================================
+After the length-only closure is complete, lock the resolved Parent Boundary.
+
+For every resolved parent row:
+
+* StartX/StartY/EndX/EndY must be final adjusted coordinates.
+* Coordinates must be exported to 6 decimal places minimum, 8 decimal places preferred.
+* Bearing must be held from the source map unless the row is coordinate-controlled and recalculated for QA.
+* Distance must reflect the final adjusted CAD distance.
+* OriginalDistance must preserve the source map distance.
+* AdjustedDistance must show the resolved CAD distance.
+* LengthAdjustment must show the difference between original and adjusted distance.
+* Notes must include CONTROL_ROLE=PARENT_BOUNDARY.
+* QAStatus must include PARENT_BOUNDARY_RESOLVED_CLOSED_0 when closure is zero.
+
+Once locked, do not use any earlier unadjusted parent geometry for derived split points.
+
+============================================================
+SECTION BREAKOUT / SPLIT-POINT RULE
+============================================================
+Use the resolved Parent Boundary to calculate every sectional breakout point shown on the map.
+
+Calculate points only from the final resolved parent boundary row coordinates.
+
+Common split points:
+
+* 0% = parent start point
+* 12.5% = eighth point
+* 25% = quarter point
+* 37.5% = eighth point
+* 50% = midpoint
+* 62.5% = eighth point
+* 75% = quarter point
+* 87.5% = eighth point
+* 100% = parent end point
+
+Formula for a straight parent side:
+
+SplitX = ParentStartX + Fraction * (ParentEndX - ParentStartX)
+SplitY = ParentStartY + Fraction * (ParentEndY - ParentStartY)
+
+Midpoint formula:
+
+MidX = (ParentStartX + ParentEndX) / 2
+MidY = (ParentStartY + ParentEndY) / 2
+
+For curved parent sides, calculate split points by arc length fraction only when the source map clearly indicates the sectional breakout is along the curve. Otherwise mark for manual review.
+
+After calculating each split point:
+
+1. Create or update a POINT_TIE row for the split point.
+2. Build every derived sectional/control line from one resolved split point to another resolved split point, parent endpoint, or resolved intersection.
+3. Recalculate the derived line bearing and distance from the final start/end coordinates.
+4. Compare the calculated derived line bearing/distance to the map label as QA only.
+5. Do not move a derived endpoint off the calculated split point to match a map label.
+
+============================================================
+DERIVED SECTIONAL / CONTROL LINEWORK RULE
+============================================================
+All sectional breakout lines must be solid, full-length linework from known calculated point to known calculated point.
+
+Do not break a section line into multiple segments because it crosses roads, lot lines, parcel boundaries, text, symbols, or intermediate annotation points.
+
+A derived section line should be one continuous line from its calculated start point to its calculated end point unless the map shows a true angle point, curve transition, or separate control segment.
+
+Build derived linework using relationships shown on the map, such as:
+
+* midpoint-to-midpoint
+* quarter-to-quarter
+* eighth-to-eighth
+* sixteenth-to-sixteenth
+* parent endpoint-to-parent endpoint
+* split point-to-resolved intersection
+* resolved intersection-to-resolved intersection
+* calculated tie endpoint to calculated tie endpoint
+
+Endpoint coordinates control over plan bearing/distance labels for split-derived lines.
+
+If a map bearing/distance label conflicts with the calculated split-to-split line, hold the resolved split coordinates and report the conflict.
+
+============================================================
+STREET / SECTION LABEL RULE
+============================================================
+Label any street names, road names, section lines, quarter-section lines, sixteenth-section lines, parent boundary sides, and control lines that are readable on the map.
+
+Use map names when readable. Use project-neutral names when not readable:
+
+* Parent Side 1
+* Parent Side 2
+* Section Line 1
+* Quarter Section Line 1
+* Sixteenth Section Line 1
+* Control Line 1
+* Road 1
+* Road 2
+
+Line labels with bearing/distance are not needed for CAD importing.
+
+Do not create CAD text label rows unless the user specifically asks for text labels. Put names and labels in CSV attribute fields and Notes.
+
+============================================================
+PLAN LABEL QA FOR DERIVED LINES
+============================================================
+For every derived line, compare the calculated CAD line to the map label when available.
+
+Report:
+
+DerivedFeature,MapBearing,MapDistance,CADBearing,CADDistance,BearingError,DistanceError,Status,Notes
+
+Status options:
+
+* PLAN_LABEL_MATCH
+* PLAN_LABEL_ACCEPTED_ROUNDING
+* PLAN_LABEL_CONFLICT
+* PLAN_LABEL_UNREADABLE
+* PLAN_LABEL_NOT_AVAILABLE
+* MAP_LABEL_USED_AS_QA_ONLY
+
+Do not silently change the coordinate-built line to force the plan label.
+
+============================================================
+PARENT SPLIT RESIDUAL CHECK — HARD QA
+============================================================
+After all derived linework is created, check that every derived endpoint that should hit a parent split point actually matches the calculated split coordinate.
+
+For every derived endpoint:
+
+1. Recalculate the expected split point directly from the resolved Parent Boundary row coordinates.
+2. Compare the exported derived endpoint coordinate to the expected split coordinate.
+3. Residual must be 0.000001 feet or less for clean IMPORT rows.
+4. If residual fails, rebuild the derived endpoint from the resolved parent split point.
+5. If residual still fails, mark the row MANUAL_REVIEW or DO_NOT_IMPORT.
+
+Parent split residual table:
+
+DerivedSegment,DerivedEndpoint,ParentSegment,SplitType,Fraction,ParentStartX,ParentStartY,ParentEndX,ParentEndY,ExpectedSplitX,ExpectedSplitY,CSVEndpointX,CSVEndpointY,DeltaX,DeltaY,Residual,PassFail,RebuildAction,QAStatus,Notes
+
+QAStatus options:
+
+* MIDPOINT_ENDPOINT_MATCH
+* QUARTER_POINT_ENDPOINT_MATCH
+* EIGHTH_POINT_ENDPOINT_MATCH
+* SIXTEENTH_POINT_ENDPOINT_MATCH
+* ALIQUOT_ENDPOINT_MATCH
+* INTERSECTION_ENDPOINT_MATCH
+* CONTROL_ENDPOINT_MATCH
+* SPLIT_ENDPOINT_REBUILT_FROM_RESOLVED_PARENT_BOUNDARY
+* SPLIT_RESIDUAL_FAIL
+* PARENT_SPLIT_MANUAL_REVIEW
+
+Any split residual greater than tolerance must appear in the on-screen Critical Error Spotlight.
+
+============================================================
+FINAL COORDINATE OVERWRITE PASS — HARD STOP
+============================================================
+Before creating the final CSV, run one last coordinate overwrite pass after the resolved Parent Boundary is locked.
+
+This pass is mandatory and must happen after all closure adjustment, anchoring, reverse-build QA, and split-point calculations are complete.
+
+Procedure:
+
+1. Re-read the final resolved Parent Boundary rows exactly as they will be exported in the CSV.
+2. Recalculate every midpoint, quarter point, eighth point, sixteenth point, aliquot point, and resolved intersection directly from those final exported parent row StartX/StartY/EndX/EndY coordinates.
+3. Overwrite every matching POINT_TIE row StartX, StartY, EndX, and EndY with the recalculated coordinate.
+4. Overwrite every derived section/control line endpoint that is supposed to hit one of those points.
+5. Recalculate each derived row Bearing and Distance from the final overwritten StartX/StartY/EndX/EndY coordinates.
+6. Compare the previous CSV coordinate to the overwritten coordinate and report the correction amount.
+7. If any residual remains over 0.000001 feet after overwrite, mark STOP and do not output a GO decision.
+
+The final exported coordinate controls. Do not keep an older midpoint, older internal point, visual PDF point, rounded point, or pre-closure point if it differs from the split point recalculated from the final resolved Parent Boundary row.
+
+Required correction table:
+
+PointOrEndpoint,RelatedParentSegment,SplitType,Fraction,PreviousX,PreviousY,CorrectedX,CorrectedY,DeltaX,DeltaY,Residual,OverwriteAction,Status,Notes
+
+OverwriteAction options:
+
+* NO_CHANGE_REQUIRED
+* POINT_TIE_OVERWRITTEN_FROM_FINAL_PARENT
+* DERIVED_START_OVERWRITTEN_FROM_FINAL_PARENT
+* DERIVED_END_OVERWRITTEN_FROM_FINAL_PARENT
+* INTERSECTION_OVERWRITTEN_FROM_RESOLVED_GEOMETRY
+* STOP_RESIDUAL_STILL_FAILS
+
+============================================================
+CSV ENDPOINT-CONTROL IMPORT CONTRACT
+============================================================
+The CSV must be written so the 1-SECTIONAL IMPORT command can draw the exact coordinates without rebuilding the linework from rounded bearing/distance text.
+
+For every resolved parent boundary row, derived section/control row, split-point row, intersection row, and QA coordinate row:
+
+* StartX, StartY, EndX, and EndY are the controlling CAD construction values.
+* Bearing and Distance are QA/descriptive values recalculated from the final coordinates.
+* Do not rely on Bearing + Distance to recreate any midpoint-derived, split-derived, or resolved-parent row.
+* GeometryBuildMode must identify endpoint control using one of these values where applicable:
+  * RESOLVED_PARENT_BOUNDARY_LENGTH_ADJUSTED
+  * SPLIT_POINT_COORDINATE
+  * INTERSECTION_COORDINATE
+  * COORDINATE
+  * QA_COORDINATE
+* Notes for coordinate-controlled rows must include ENDPOINT_COORDINATES_CONTROL.
+* Derived rows must also include DERIVED_FROM_RESOLVED_PARENT_BOUNDARY.
+* Parent boundary rows must also include CONTROL_ROLE=PARENT_BOUNDARY.
+
+The CAD import expectation is:
+
+StartX,StartY  →  EndX,EndY
+
+not:
+
+StartX,StartY  +  Bearing/Distance
+
+If the Bearing/Distance endpoint does not exactly match EndX/EndY after recalculation, recalculate Bearing and Distance from the coordinate endpoints before output.
+
+============================================================
+CAD IMPORT SIMULATION RULE
+============================================================
+Before finalizing the CSV, simulate what CAD will draw from the exported CSV.
+
+For every LINE row:
+
+1. Rebuild the row by direct coordinates from StartX/StartY to EndX/EndY.
+2. Independently rebuild from StartX/StartY using exported Bearing and Distance.
+3. Compare the bearing/distance endpoint to the coordinate endpoint.
+4. Coordinates control for all resolved parent, split-point, intersection, and derived line rows.
+5. Recalculate Bearing and Distance from final coordinates where needed.
+6. For coordinate-controlled rows, the direct coordinate endpoint must be accepted even if an older Bearing/Distance endpoint would land somewhere else.
+7. Endpoint delta between final recalculated Bearing/Distance and coordinate endpoint must be 0.000001 feet or less for clean IMPORT rows after recalculation.
+8. Any row that would cause 1-SECTIONAL IMPORT to draw from rounded bearing/distance instead of StartX/StartY to EndX/EndY must be marked MANUAL_REVIEW or DO_NOT_IMPORT.
+
+CAD import simulation table:
+
+Segment,Type,GeometryBuildMode,StartX,StartY,EndX,EndY,ExportedBearing,ExportedDistance,CoordinateDistance,BearingDistanceEndX,BearingDistanceEndY,EndpointDelta,CoordinateControls,ImportSimulationStatus,Severity,Resolution,Notes
+
+ImportSimulationStatus options:
+
+* IMPORT_SIMULATION_OK
+* COORDINATE_DISTANCE_MATCH
+* BEARING_DISTANCE_RECALCULATED_FROM_COORDINATES
+* ENDPOINT_COORDINATES_CONTROL_CONFIRMED
+* COORDINATE_BEARING_DISTANCE_MISMATCH
+* CAD_IMPORT_MAY_REBUILD_WRONG_ENDPOINT
+* IMPORT_SIMULATION_MANUAL_REVIEW
+
+============================================================
+CURVE RULES
+============================================================
+If any parent or derived control segment is curved:
+
+* Determine whether the curve belongs to the purple control linework.
+* Identify LEFT or RIGHT relative to direction of travel.
+* Extract radius, delta, arc length, tangent, chord bearing, chord length, start radial bearing, end radial bearing, and radial IDs where shown.
+* Determine curve build method: TANGENT_CONTROLLED, RADIAL_CONTROLLED, CHORD_CONTROLLED, COORDINATE_CONTROLLED, or UNKNOWN_CONTROL.
+* Test shown radial and reversed radial when radial direction is ambiguous.
+* Verify arc length, tangent, chord length, chord bearing, and endpoints.
+* Verify tangent continuity when the map implies tangency.
+* Mark uncertain curves IMPORT_QA_LAYER or MANUAL_REVIEW.
+
+Do not invent missing curve data.
+
+============================================================
+FINAL IMPORT GEOMETRY PASS — CLEAN CSV ONLY
+============================================================
+Before creating the downloadable Final Import CSV, create a final internal table named FINAL_IMPORT_GEOMETRY.
+
+Only rows in FINAL_IMPORT_GEOMETRY may be exported to the downloadable Final Import CSV.
+
+The Final Import Geometry table must include only:
+
+* One resolved parent boundary line per true parent side.
+* One full-length derived section/control line per true derived line.
+* Optional control point markers that are useful for CAD review.
+
+The Final Import Geometry table must not include:
+
+* Source-call sub-segments.
+* Intermediate road pieces used only to derive a total parent distance.
+* Lot frontage calls.
+* Bearing/distance review rows.
+* Closure calculation rows.
+* QA-only duplicate rows.
+* Source points that are not needed in CAD.
+
+Every row in the Final Import Geometry table must be coordinate-controlled.
+
+For LINE rows, CAD construction is:
+
+StartX,StartY -> EndX,EndY
+
+For POINT_TIE rows, CAD construction is:
+
+StartX,StartY with EndX,EndY equal to the same coordinate
+
+Bearing and Distance are not needed in the Final Import CSV. Keep bearing/distance values in the onscreen report tables, not in the clean import file.
+
+Required final geometry checks before export:
+
+1. Verify no source sub-segment row has ImportStatus=IMPORT in the Final Import CSV.
+2. Verify every parent side in the Final Import CSV is one continuous line between final resolved parent corners.
+3. Verify every derived section/control line in the Final Import CSV is one continuous full-length line.
+4. Verify all derived endpoints are recalculated from the final resolved parent boundary rows.
+5. Verify closure of the resolved parent boundary is 0.00 from the distributed length-only closure solution, not by last-point snapping.
+6. Verify no final import row requires Bearing or Distance to draw correctly.
+7. Verify any row not intended to import is excluded from the Final Import CSV or marked DO_NOT_IMPORT in the review table.
+
+If any of these checks fail, do not output a GO decision.
+
+============================================================
+SOURCE / QA REVIEW CSV STATUS RULE
+============================================================
+If a review/source CSV or source-call table is shown, ImportStatus must reflect whether the row belongs in the actual CAD import.
+
+Use these rules:
+
+* Source sub-segment rows = DO_NOT_IMPORT or REVIEW_ONLY.
+* Bearing/distance QA rows = DO_NOT_IMPORT or REVIEW_ONLY.
+* Duplicate/intermediate parent rows = DO_NOT_IMPORT.
+* Only final resolved parent lines, final derived full-length lines, and optional control points may be IMPORT.
+
+Do not mark everything IMPORT just because it was calculated. ImportStatus must mean the row should actually be drawn by CAD.
+
+============================================================
+FINAL CSV OUTPUT
+============================================================
+Create a downloadable Final Import CSV whenever file creation is available.
+
+Name the clean final file:
+
+MapName_Prompt4_Final_Import.csv
+
+If only partially reliable, name it:
+
+MapName_Prompt4_Final_Import_QA.csv
+
+This is the only CSV intended for the 1-SECTIONAL IMPORT command.
+
+Keep source-call, bearing/distance, closure, correction, split-residual, and QA details in the onscreen report or a separate review report. Do not include source-only rows in this Final Import CSV.
+
+Use this exact simplified Final Import CSV header:
+
+FeatureID,FeatureType,Layer,Segment,Type,ImportRole,LineLabel,FromPoint,ToPoint,StartX,StartY,EndX,EndY,ImportStatus,QAStatus,Notes
+
+Final Import CSV field rules:
+
+* Bearing and Distance are intentionally excluded from the Final Import CSV.
+* StartX, StartY, EndX, and EndY are the only construction geometry for LINE rows.
+* Type must be LINE or POINT_TIE unless a future curve import is specifically supported.
+* POINT_TIE rows must have StartX/StartY equal to EndX/EndY.
+* ImportStatus must be IMPORT only for rows that CAD should draw.
+* Source-call sub-segments must not appear as IMPORT rows.
+* If source-call rows are included in any review table, they must be DO_NOT_IMPORT or REVIEW_ONLY and should not be included in the clean final CSV.
+* Segment should be a simple order value for import stability. FeatureID may carry the readable name such as PARENT-01 or CTRL-01.
+* LineLabel should hold readable names such as street names or section/control labels.
+* Notes should stay short. Long QA explanations belong in the report, not the import CSV.
+
+FeatureType options for the Final Import CSV:
+
+* PARENT_BOUNDARY
+* DERIVED_SECTION_LINE
+* CONTROL_LINE
+* CONTROL_POINT
+
+ImportRole options for the Final Import CSV:
+
+* FINAL_PARENT_BOUNDARY
+* FINAL_SECTION_LINE
+* FINAL_CONTROL_LINE
+* CONTROL_POINT
+
+Layer defaults:
+
+* Parent boundary/control line: V-MAPL-SECT
+* Section line: V-MAPL-SECT
+* Quarter-section line: V-MAPL-QTR
+* Eighth/sixteenth section line: V-MAPL-SIXTEENTH
+* Roadway/control centerline, when it is part of the purple control framework: V-MAPL-ROAD-CL
+* Point tie/control point: V-MAPL-CNTRL
+
+Required final row rules:
+
+* Parent boundary rows must be final resolved parent side rows only.
+* Parent source sub-segments must be excluded from the Final Import CSV.
+* Derived sectional/control rows must be full-length lines between final calculated coordinates.
+* Do not split derived lines at roads, lot lines, annotations, or internal points unless there is a true geometry break.
+* Every LINE row must have StartX, StartY, EndX, and EndY.
+* Every POINT_TIE row must have StartX, StartY, EndX, and EndY, with Start equal to End.
+* No row may rely on Bearing or Distance for CAD construction.
+* ImportStatus must be IMPORT only for rows that should be drawn by 1-SECTIONAL IMPORT.
+
+Recommended final import row pattern:
+
+* PARENT-01 through PARENT-N: one row per resolved parent side.
+* CTRL-01 through CTRL-N: one row per full-length derived section/control line.
+* PT-01 through PT-N: optional point markers for key control nodes.
+
+============================================================
+ON-SCREEN VISUAL QA REPORT REQUIREMENT
+============================================================
+In the final response, provide a compact QA dashboard before detailed tables.
+
+Required blocks:
+
+1. QUICK STATUS DASHBOARD
+
+Check,Status,KeyResult,ActionNeeded
+
+Include:
+
+* Source PDF/image reviewed
+* Purple control linework found
+* Starting map checks completed
+* Parent Boundary outer extents identified
+* Parent side labels readable or derived
+* Source-call Parent Boundary built
+* Source-call closure calculated
+* Reverse build QA completed
+* Scaled PDF/image overlay QA completed
+* Length-only closure adjustment completed
+* Resolved Parent Boundary closure
+* Resolved Parent Boundary locked
+* Section breakout split points calculated
+* Derived full-length section/control lines built
+* Split residual check completed
+* Final coordinate overwrite pass completed
+* Clean Final Import Geometry table created
+* CAD import simulation completed
+* Final import decision
+
+2. CRITICAL ERROR SPOTLIGHT
+
+Priority,IssueType,AffectedFeature,MeasuredErrorOrResult,Severity,RecommendedAction
+
+Show any:
+
+* Missing purple control linework
+* Parent Boundary not identified
+* Missing/unreadable parent side call
+* Sub-distance total conflict
+* Source-call closure problem
+* Length-only closure failure
+* Reverse build failure
+* Overlay visible mismatch
+* Derived endpoint not hitting midpoint/quarter/eighth/sixteenth split point
+* Split residual over tolerance
+* Final coordinate overwrite residual fail
+* Final coordinate overwrite residual fail
+* CAD import simulation endpoint mismatch
+
+If no critical errors exist, state:
+
+No critical Prompt 4 errors were identified from the available PDF/image review and QA checks, subject to CAD overlay verification.
+
+3. STARTING MAP CHECKS SUMMARY
+
+Check,Result,Concern,Action
+
+4. PARENT BOUNDARY CLOSURE SUMMARY
+
+Check,DeltaX,DeltaY,ClosureDistance,Tolerance,Status,Notes
+
+Include:
+
+* Source-call closure
+* Reverse source-call closure
+* Resolved parent closure
+* Reverse resolved parent closure
+
+5. LENGTH-ONLY CLOSURE ADJUSTMENT SUMMARY
+
+Segment,OriginalDistance,AdjustedDistance,LengthAdjustment,AdjustmentMethod,HeldBearing,Status,Notes
+
+6. SECTION BREAKOUT / SPLIT POINT SUMMARY
+
+SplitPoint,ParentSegment,Fraction,ParentStartX,ParentStartY,ParentEndX,ParentEndY,CalculatedSplitX,CalculatedSplitY,Status,Notes
+
+7. SPLIT POINT HIT SUMMARY
+
+DerivedFeature,ParentFeature,SplitType,ExpectedRelationship,Residual,Tolerance,Status,Notes
+
+8. PLAN LABEL QA SUMMARY
+
+DerivedFeature,MapBearing,MapDistance,CADBearing,CADDistance,BearingError,DistanceError,Status,Notes
+
+9. SCALED PDF / IMAGE OVERLAY SNAPSHOT SUMMARY
+
+OverlayItem,ExpectedRelationship,OverlayResult,ApproxVisualMismatch,Status,Notes
+
+10. IMPORT ROW COUNT SUMMARY
+
+ImportStatus,RowCount,Meaning
+
+11. STOP / GO DECISION
+
+Use one of these exact statements:
+
+* GO - PROMPT 4 SECTIONAL BOUNDARY LINEWORK ACCEPTABLE
+* GO WITH QA - VERIFY FLAGGED ITEMS IN CAD OVERLAY FIRST
+* STOP - PROMPT 4 SECTIONAL BOUNDARY LINEWORK NEEDS CORRECTION BEFORE IMPORT
+
+Use GO only when:
+
+* Purple control linework is identified.
+* Parent Boundary is identified.
+* Source calls are readable or derived from sub-segments.
+* Source-call closure is reported.
+* Reverse build passes.
+* Overlay has no unresolved visible mismatch.
+* Length-only resolved Parent Boundary closes to 0.00.
+* Split points are calculated from the resolved Parent Boundary.
+* Derived lines are full-length and endpoint-controlled.
+* Final coordinate overwrite pass is complete.
+* Split residuals pass.
+* CAD import simulation passes.
+* Clean Final Import CSV contains only final import rows.
+* All required final import rows are IMPORT.
+
+Use STOP when:
+
+* Parent Boundary cannot be identified.
+* Required calls are missing/unreadable.
+* Closure adjustment fails.
+* Reverse build fails.
+* Final coordinate overwrite pass fails.
+* Final coordinate overwrite pass fails.
+* Derived endpoints miss split points.
+* CAD import simulation fails.
+* Major overlay mismatch exists.
+
+============================================================
+REQUIRED OUTPUT SECTIONS
+============================================================
+Produce these sections:
+
+A. On-Screen Visual QA Report
+B. Prompt 4 Summary
+C. Starting Map Checks
+D. Source Sheets / Details Reviewed
+E. Purple Control Linework Identification
+F. CAD Anchor Report
+G. Parent Boundary Identification Report
+H. Extracted Source Parent Boundary Calls
+I. Source-Call Parent Boundary Closure Report
+J. Source-Call Reverse Build QA Report
+K. Scaled PDF / Image Overlay QA Report
+L. Length-Only Closure Adjustment Report
+M. Resolved Locked Parent Boundary Report
+N. Section Breakout / Split Point Calculation Report
+O. Derived Sectional / Control Linework Report
+P. Final Coordinate Overwrite Pass Report
+Q. Plan Label QA for Derived Lines
+R. Parent Split Residual Check
+S. Resolved Parent Reverse Build QA Report
+T. CAD Import Simulation QA Report
+U. Curve / Radial QA, if applicable
+V. Map vs CAD Linework Error Report
+W. Import Decision Summary
+X. Clean Final Import CSV
+Y. Items Requiring Manual Verification
+Z. Final Reliability Rating
+
+============================================================
+MAP VS CAD LINEWORK ERROR REPORT
+============================================================
+For every parent boundary and derived line segment, compare source/map information to final CAD linework.
+
+Use this table:
+
+Segment,FeatureType,ReferenceClass,FromPoint,ToPoint,MapBearing,MapDistance,CADBearing,CADDistance,BearingError,DistanceError,MapStartPoint,CADStartX,CADStartY,CADEndX,CADEndY,EndpointError,ParentSplitResidual,ErrorType,Severity,Resolution,Notes
+
+ErrorType options:
+
+* NONE
+* MAP_LABEL_UNREADABLE
+* MAP_LABEL_CONFLICT
+* SUBDISTANCE_TOTAL_CONFLICT
+* BEARING_MISMATCH
+* DISTANCE_MISMATCH
+* SOURCE_PARENT_BOUNDARY_CLOSURE_ERROR
+* LENGTH_ADJUSTED_TO_CLOSE
+* ANCHOR_POINT_CONFLICT
+* PARENT_BOUNDARY_NOT_IDENTIFIED
+* PARENT_SIDE_UNINTENTIONALLY_SPLIT
+* DERIVED_FROM_UNADJUSTED_GEOMETRY
+* DERIVED_NOT_FROM_RESOLVED_PARENT_BOUNDARY
+* SPLIT_RESIDUAL_FAIL
+* MIDPOINT_SPLIT_MISMATCH
+* QUARTER_POINT_MISMATCH
+* EIGHTH_POINT_MISMATCH
+* SIXTEENTH_POINT_MISMATCH
+* ALIQUOT_POINT_MISMATCH
+* INTERSECTION_GAP
+* CAD_IMPORT_SIMULATION_ERROR
+* REVERSE_BUILD_ERROR
+* OVERLAY_VISIBLE_MISMATCH
+* MANUAL_REVIEW_REQUIRED
+
+Severity options:
+
+* INFO
+* MINOR
+* MODERATE
+* MAJOR
+
+Resolution options:
+
+* ACCEPTED_AS_MATCH
+* ACCEPTED_ROUNDING
+* CAD_LENGTH_ADJUSTED_BEARING_HELD
+* PARENT_BOUNDARY_HELD
+* DERIVED_FROM_RESOLVED_PARENT_BOUNDARY
+* REBUILT_FROM_RESOLVED_PARENT_SPLIT_POINT
+* BEARING_DISTANCE_RECALCULATED_FROM_COORDINATES
+* PLACED_ON_QA_LAYER
+* DO_NOT_IMPORT
+* MANUAL_REVIEW
+
+============================================================
+FINAL RELIABILITY RATING
+============================================================
+At the end, rate the Prompt 4 framework as one of these:
+
+* RELIABLE_SECTIONAL_BOUNDARY_LINEWORK
+  The purple control linework is identified, the Parent Boundary is identified, source-call closure is reported, reverse build passes, scaled overlay QA passes, length-only closure resolves the Parent Boundary to 0.00, derived sectional/control lines are built from resolved parent split points, split residuals pass, CAD import simulation passes, the clean Final Import CSV contains only final CAD rows, and no critical QA items remain.
+
+* PARTIALLY_RELIABLE_SECTIONAL_BOUNDARY_LINEWORK
+  The linework is useful for CAD import/review, but some rows remain on QA layers or require manual PDF/CAD overlay verification.
+
+* NOT_RELIABLE_SECTIONAL_BOUNDARY_LINEWORK
+  The Parent Boundary cannot be identified, source calls are missing/unreadable, closure remains unresolved, length-only closure fails, reverse build fails, overlay shows major mismatch, derived endpoints miss split points, split residuals fail, or CAD import simulation fails.
+
+Do not call the framework reliable if any midpoint, quarter, eighth, sixteenth, aliquot, or resolved-intersection derived endpoint fails the split residual check.
+
+============================================================
+FINAL IMPORTANT RULES
+============================================================
+* Start with map checks.
+* Purple highlighted control linework controls extraction priority.
+* Build the outer Parent Boundary first.
+* Use the most outer extents for the Parent Boundary.
+* Build the Parent Boundary like a boundary traverse, start at one corner, and return to the same corner.
+* Report raw source-call closure before adjustment.
+* Perform reverse build QA.
+* Perform scaled PDF/image overlay QA.
+* Run length-only closure adjustment after QA.
+* Hold bearings and adjust lengths only.
+* Distribute length adjustment to parent sides as equally as practical while solving closure.
+* Lock the resolved Parent Boundary.
+* Use only the resolved Parent Boundary to calculate sectional breakout points.
+* Use midpoint/quarter/eighth/sixteenth split points from final coordinates.
+* Run the final coordinate overwrite pass before output.
+* Overwrite every POINT_TIE and derived line endpoint from the final resolved parent split/intersection coordinates.
+* Create derived section/control lines from known calculated start/end points.
+* Lines must be full-length, end-to-end, solid lines, not broken into unnecessary pieces.
+* Label street names and section/control lines in CSV fields.
+* Do not create bearing/distance text labels for import.
+* Do not include Bearing or Distance fields in the clean Final Import CSV; keep them in QA/report tables only.
+* The clean Final Import CSV must include only final resolved parent lines, final derived full-length lines, and optional control points.
+* Keep precision to 6 decimal places or more.
+* Export coordinates with enough precision to prevent CAD endpoint drift.
+* For coordinate-controlled rows, the 1-SECTIONAL IMPORT command must be able to draw StartX/StartY directly to EndX/EndY.
+* Simulate CAD import before finalizing.
+* Report all discrepancies. Do not silently force geometry.

@@ -1,0 +1,17 @@
+MAP TRANSFORM HISTORY R2 TEST BUILD
+===================================
+
+The prior ZIP contained generated CLV_CivilTools build artifacts dated before the Map Transform history source change.
+Those main-project bin/obj artifacts have intentionally been removed from this package.
+
+1. Open CLV_CivilTools.csproj / solution in Visual Studio.
+2. Rebuild CLV_CivilTools for net8.0-windows x64.
+3. Deploy/NETLOAD the newly built CLV_CivilTools.dll using your normal Civil 3D loading workflow.
+4. Run MAP TRANSFORM. BEFORE the map-selection prompt you must see:
+   MAP TRANSFORM revision 2026.08.06-HISTORY-R2.
+5. After Finalize you must see either:
+   Saved and verified editable Map Transform history with N point pair(s).
+   OR an explicit MAP TRANSFORM HISTORY ERROR message.
+6. Run MAP TRANSFORM again and select the same map reference. It should recall the saved pairs.
+
+If step 4 does not show the R2 revision line, Civil 3D is still running an older DLL.

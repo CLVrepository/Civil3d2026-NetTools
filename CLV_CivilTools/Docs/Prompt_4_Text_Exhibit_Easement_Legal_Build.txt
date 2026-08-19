@@ -1,0 +1,105 @@
+PROMPT — TEXT / EXHIBIT EASEMENT LEGAL DESCRIPTION BUILD, CLOSURE CHECK, AND CAD CSV
+
+You are reviewing a separate easement document, exhibit, grant, legal description, or text-only legal description for CAD reconstruction.
+
+The goal is to extract the easement geometry from the legal description, calculate its CAD coordinates, check closure and area, identify the Point of Commencement (POC) and Point of Beginning (POB), and create an import-ready CSV.
+
+Default coordinate rule:
+- Place the legal POC at X=10000.0000, Y=10000.0000 unless I provide a different anchor.
+- If the legal has no POC and begins directly at the POB, place the POB at X=10000.0000, Y=10000.0000.
+- Do not force the POB to 10000,10000 when a POC and tie calls are provided. Calculate the POB from the POC using the commencement/tie calls.
+- If the legal ties to a PLSS corner, section corner, quarter corner, sixteenth corner, monument, subdivision corner, roadway centerline, or right-of-way line, list that point clearly as the anchor/control reference.
+
+Primary tasks:
+
+1. Read the easement document or image.
+Extract:
+- Document title / exhibit name.
+- APN or owner, if shown.
+- Purpose of easement, if shown.
+- Prepared by / job number / file name, if shown.
+- Governing entity, if shown.
+- Section, township, range, meridian, subdivision, book/page, lot, common lot, parcel, or other control reference.
+- POC wording.
+- POB wording.
+- Commencement/tie calls from POC to POB.
+- Easement boundary calls.
+- Stated area.
+- Any widths, offsets, road right-of-way references, or exceptions.
+
+2. Classify geometry.
+Use these line types:
+- COMMENCEMENT_TIE: calls from POC to POB.
+- EASEMENT_BOUNDARY: the actual easement perimeter.
+- CONTROL_REFERENCE: PLSS, subdivision, monument, centerline, or right-of-way references not intended as drawn boundary.
+- QA_REFERENCE: ambiguous tie, note, offset, or call needing review.
+
+3. Bearing handling.
+- Convert each bearing to CAD azimuth using north-based clockwise azimuth.
+- Preserve original legal bearing text.
+- If the call is reversed to match the traverse direction, report both source bearing and CAD bearing.
+- Do not invent missing calls. Mark uncertain text as UNCERTAIN.
+
+4. Coordinate build.
+- Start at the POC coordinate when a POC exists.
+- Traverse all commencement/tie calls to calculate the POB.
+- Start the easement perimeter at the calculated POB.
+- Calculate each easement boundary vertex in sequence.
+- Include both the start and end coordinates for every segment.
+- Keep separate point IDs for POC, POB, intermediate tie points, easement corners, and calculated closing point.
+
+5. Closure check.
+For the easement boundary only, calculate:
+- Beginning POB coordinate.
+- Calculated closing coordinate.
+- Easting error.
+- Northing error.
+- Linear closure error.
+- Easement perimeter.
+- Closure ratio, if possible.
+- Closure status.
+
+6. Area check.
+- Calculate the easement area from the closed polygon.
+- Compare calculated area to the stated legal area, if given.
+- Report the difference.
+- If the legal states “more or less,” still report the numeric difference.
+
+7. Preliminary legal review.
+Create a distinct section named:
+PRELIMINARY LEGAL DESCRIPTION REVIEW AND POSSIBLE ERRORS
+
+Call out possible issues such as:
+- POC/POB conflict.
+- Missing POB.
+- Missing closing call.
+- Bearing or distance that does not close.
+- Stated area not matching calculated area.
+- Right-of-way or lot reference conflict.
+- Ambiguous or unreadable text.
+- Calls that appear reversed.
+- Text-only legal requiring map verification.
+
+Use severity: INFO, MINOR, MODERATE, MAJOR.
+
+8. CSV output.
+Create an import-ready CSV with these columns:
+SegmentID, LineType, FromPoint, ToPoint, Bearing, Azimuth_Deg, Distance_Ft, Start_X, Start_Y, End_X, End_Y, Delta_E, Delta_N, Source_Note
+
+Also create a point CSV when possible:
+PointID, Description, X, Y
+
+9. Report output.
+Create a review report with:
+- Source summary.
+- Anchor/control reference.
+- POC and POB interpretation.
+- Commencement/tie call table.
+- Easement boundary call table.
+- Closure check.
+- Area check.
+- Preliminary legal review and possible errors.
+- Import decision.
+
+10. QA rule.
+If the legal description is text-only and no exhibit drawing/map is available, state that geometry is mathematically checked from the legal but still needs final overlay verification against the recorded plat, right-of-way, or survey linework.

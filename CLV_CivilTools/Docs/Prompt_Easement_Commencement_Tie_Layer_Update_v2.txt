@@ -1,0 +1,55 @@
+PROMPT EASEMENT UPDATE v2 — COMMENCEMENT TIE LAYER / POC-POB QA RULE
+
+Replace the previous commencement tie layer rule with this version.
+
+COMMENCEMENT TIE LAYER / QA RULE
+
+Commencement tie lines from the POC to the POB are control/tie geometry and must not be automatically treated as easement boundary geometry.
+
+1. Commencement tie geometry layer
+- Export commencement tie LINE rows on:
+  V-MAPL-CNTRL
+- Use LineType = COMMENCEMENT_TIE.
+- Do not classify these rows as EASEMENT_BOUNDARY.
+- Do not use FeatureType = EASEMENT by itself to decide whether a row is boundary geometry, because Prompt Easement CSV files may use FeatureType = EASEMENT for every row.
+- Boundary geometry must be identified by LineType = EASEMENT_BOUNDARY, ClosureGroup = EASEMENT_BOUNDARY, a boundary segment ID such as ESMT-B#, or equivalent boundary-specific field.
+
+2. Reliability status for commencement ties
+- If the POC/control point is calculated from resolved Prompt 1 PLSS/control coordinates, use ImportStatus = IMPORT, Confidence = DIRECT or DERIVED, and QAStatus = COMMENCEMENT_TIE_OK or COMMENCEMENT_TIE_FROM_RESOLVED_PROMPT1_CONTROL.
+- If the POC/control point is assumed, visually inferred, image-only, manually assigned, or not confirmed from resolved Prompt 1 coordinates, keep the commencement tie geometry on V-MAPL-CNTRL, but use Confidence = APPROXIMATE or UNCERTAIN and QAStatus = COMMENCEMENT_TIE_POC_ASSUMED_MANUAL_REVIEW.
+- Notes must clearly state that the tie geometry is useful for CAD review, but the POC/control coordinate should be replaced with resolved Prompt 1 PLSS/control coordinates before final use.
+
+3. QA layer usage
+- Use V-MAPL-QA for bad, conflicting, or manual-review geometry that should visually warn the drafter of a geometry problem.
+- Do not put normal commencement tie lines on V-MAPL-QA solely because the POC is assumed. The reliability warning should be carried by QAStatus, Confidence, Notes, and final reliability rating.
+
+4. Required visible point markers
+Always export or create separate visible POINT_TIE markers for:
+- POC / Commencing Point
+- POB / Easement Beginning Point
+
+The POC marker must be located at the actual commencement/control coordinate used for the tie sequence.
+The POB marker must be located at the last commencement tie endpoint and must exactly match the first easement boundary StartX/StartY.
+
+5. Required POB coordinate verification
+Before final CSV export, verify:
+- The last commencement tie endpoint equals the POB POINT_TIE coordinate.
+- The POB POINT_TIE coordinate equals the first easement boundary StartX/StartY.
+- The POB is not incorrectly assigned to 10000,10000 unless the legal POB is truly the POC/control anchor.
+
+If any of these checks fail, set the affected rows to ImportStatus = MANUAL_REVIEW and QAStatus = POC_POB_COORDINATE_MISMATCH.
+
+6. Importer classification requirement
+The CAD importer must not classify commencement tie rows as boundary rows just because FeatureType = EASEMENT. This prevents the POB marker from being placed at the POC when the first CSV rows are commencement ties.
+
+7. Final reliability impact
+Do not assign RELIABLE_EASEMENT_FROM_LEGAL_TEXT if the POC/control point was assumed, image-only, or not tied to resolved Prompt 1 control.
+
+Use PARTIALLY_RELIABLE_EASEMENT_FROM_LEGAL_TEXT when the easement boundary itself closes and matches the legal calls, but the commencement POC/control coordinate needs Prompt 1 verification.
+
+Use RELIABLE_EASEMENT_FROM_LEGAL_TEXT only when:
+- The commencement POC/control point is tied to resolved Prompt 1 PLSS/control coordinates.
+- The commencement tie sequence reaches the POB within tolerance.
+- The POB POINT_TIE exactly matches the first easement boundary StartX/StartY.
+- The easement boundary closes within tolerance.
+- CAD bearing/distance echo QA passes from exported coordinates.

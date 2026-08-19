@@ -1,0 +1,131 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<!-- Switch to Windows TFM so WinForms is available -->
+		<TargetFramework>net8.0-windows</TargetFramework>
+
+		<!-- Enable Windows Forms (gives you System.Windows.Forms, Control, Button, etc.) -->
+		<UseWindowsForms>true</UseWindowsForms>
+
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<PlatformTarget>x64</PlatformTarget>
+		<NoWarn>$(NoWarn);MSB3277</NoWarn>
+
+		<!-- Preserve normal dependency copy behavior for the Civil Tools assembly.
+		     PDFium/SkiaSharp dependencies are isolated under PdfRenderer. -->
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <Compile Remove="Aec\AecNetworkUtils.cs" />
+	  <Compile Remove="PdfRenderHost\**\*.cs" />
+	</ItemGroup>
+
+
+	<ItemGroup>
+		<Reference Include="accoremgd">
+			<HintPath>..\..\..\..\..\..\Program Files\Autodesk\AutoCAD 2026\accoremgd.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+		<Reference Include="Acdbmgd">
+			<HintPath>..\..\..\..\..\..\Program Files\Autodesk\AutoCAD 2026\acdbmgd.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+		<Reference Include="Acmgd">
+			<HintPath>..\..\..\..\..\..\Program Files\Autodesk\AutoCAD 2026\acmgd.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+		<Reference Include="AeccDbMgd">
+			<HintPath>..\..\..\..\..\..\Program Files\Autodesk\AutoCAD 2026\C3D\AeccDbMgd.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+		<Reference Include="AecBaseMgd">
+			<HintPath>..\..\..\..\..\..\Program Files\Autodesk\AutoCAD 2026\ACA\AecBaseMgd.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+
+		<Reference Include="ManagedMapApi">
+			<HintPath>..\..\..\..\..\..\Program Files\Autodesk\AutoCAD 2026\Map\ManagedMapApi.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+
+		<!-- NEW: Map 3D managed API -->
+		<Reference Include="Autodesk.Map.Platform">
+			<HintPath>..\..\..\..\..\..\Program Files\Autodesk\AutoCAD 2026\Map\Autodesk.Map.Platform.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+
+		<!-- Required by Autodesk.Map.Platform (MgMapBase / MapGuide types) -->
+		<Reference Include="OSGeo.MapGuide.PlatformBase">
+			<HintPath>..\..\..\..\..\..\Program Files\Autodesk\AutoCAD 2026\Map\bin\GisPlatform\OSGeo.MapGuide.PlatformBase.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+
+		<!-- Often required as well; include now to avoid the next missing-type error -->
+		<Reference Include="OSGeo.MapGuide.Foundation">
+			<HintPath>..\..\..\..\..\..\Program Files\Autodesk\AutoCAD 2026\Map\bin\GisPlatform\OSGeo.MapGuide.Foundation.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+	</ItemGroup>
+
+
+	<ItemGroup>
+	  <Folder Include="Aec\" />
+	  <Folder Include="BlockUtils\" />
+	</ItemGroup>
+	<ItemGroup>
+		<EmbeddedResource Include="Reference\SurveyLegend.csv" />
+		<EmbeddedResource Include="Reference\LegalDescriptionTextStyles.json" LogicalName="CLV_CivilTools.Embedded.LegalDescriptionTextStyles.json" />
+		<EmbeddedResource Include="Reference\LegalDescriptionPhraseLibrary.json" LogicalName="CLV_CivilTools.Embedded.LegalDescriptionPhraseLibrary.json" />
+		<EmbeddedResource Include="Reference\Legal Templates\Basic Template.dotx" LogicalName="CLV_CivilTools.Embedded.BasicTemplate.dotx" />
+	</ItemGroup>
+
+	<Target Name="BuildAndCopyPdfRenderHost" BeforeTargets="PostBuildEvent">
+		<PropertyGroup>
+			<PdfRenderHostProject>$(MSBuildProjectDirectory)\PdfRenderHost\CLV.PdfRenderHost.csproj</PdfRenderHostProject>
+			<PdfRenderDestination>$(TargetDir)PdfRenderer\</PdfRenderDestination>
+		</PropertyGroup>
+
+		<!-- Publish directly to the final isolated-renderer folder. This avoids
+		     assuming whether Visual Studio used bin\Debug, bin\x64\Debug,
+		     or another RID-specific intermediate output path. -->
+		<RemoveDir Directories="$(PdfRenderDestination)" />
+		<MakeDir Directories="$(PdfRenderDestination)" />
+		<MSBuild
+			Projects="$(PdfRenderHostProject)"
+			Targets="Restore;Publish"
+			Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;PlatformTarget=x64;SelfContained=false;PublishDir=$(PdfRenderDestination)" />
+
+		<Error
+			Condition="!Exists('$(PdfRenderDestination)CLV.PdfRenderHost.exe')"
+			Text="PDF Viewer deployment failed: isolated renderer publish did not create CLV.PdfRenderHost.exe. Check the PdfRenderHost restore/publish output above." />
+	</Target>
+
+<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<PropertyGroup>
+			<Civil3DDevFolder>C:\Temp\C3DDev</Civil3DDevFolder>
+		</PropertyGroup>
+
+		<MakeDir Directories="$(Civil3DDevFolder)" />
+
+		<!-- Copy the complete build output. PDFium and SkiaSharp remain isolated
+		     under PdfRenderer and are never loaded into the Civil 3D process. -->
+		<ItemGroup>
+			<CivilToolsRuntimeFiles Include="$(TargetDir)**\*" />
+		</ItemGroup>
+		<Copy
+			SourceFiles="@(CivilToolsRuntimeFiles)"
+			DestinationFiles="@(CivilToolsRuntimeFiles->'$(Civil3DDevFolder)\%(RecursiveDir)%(Filename)%(Extension)')"
+			SkipUnchangedFiles="true" />
+
+		<!-- Keep the established short random-number development filename,
+		     e.g. CLV_CivilTools_20145.dll, to avoid Civil 3D DLL locking. -->
+		<Exec Command="copy /Y &quot;$(TargetPath)&quot; &quot;$(Civil3DDevFolder)\CLV_CivilTools_%25RANDOM%25.dll&quot;" />
+
+		<Error
+			Condition="!Exists('$(Civil3DDevFolder)\PdfRenderer\CLV.PdfRenderHost.exe')"
+			Text="PDF Viewer deployment failed: PdfRenderer\CLV.PdfRenderHost.exe was not copied to $(Civil3DDevFolder). Clean, restore NuGet packages, and rebuild." />
+	</Target>
+
+</Project>

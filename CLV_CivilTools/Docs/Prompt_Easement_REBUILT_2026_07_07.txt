@@ -1,0 +1,427 @@
+PROMPT EASEMENT - REBUILT STANDARD
+Version: 2026-07-07 Rev 2 - Curve/Radial QA expanded
+Purpose: Create one CAD-import-ready easement CSV for the 4-EASEMENT_IMPORT routine and one review report. The CSV must import directly and must not require a separate points file, calls file, DXF, ZIP, or manual interpretation.
+
+============================================================
+REQUIRED OUTPUTS
+============================================================
+Output exactly two downloadable files unless the user specifically asks for something else:
+
+1. <recording-number>-Easement.csv
+2. <recording-number>-Easement_report.txt
+
+Do NOT output:
+- points.csv
+- calls.csv
+- duplicate import CSV
+- DXF
+- shapefile
+- KML
+- ZIP
+- extra QA CSV
+
+The Easement.csv file is the only import file. It must contain every importable object needed by 4-EASEMENT_IMPORT, including commencement/tie lines, easement boundary linework/curves, and POC/POB marker rows when supported.
+
+============================================================
+STRICT CSV FORMAT - DO NOT CHANGE HEADER NAMES
+============================================================
+The CSV must use this exact header row and column order:
+
+FeatureID,FeatureType,Layer,Segment,Type,ImportRole,From,To,StartX,StartY,EndX,EndY,Bearing,Distance,CurveDirection,Radius,Delta,ArcLength,Tangent,ChordBearing,ChordLength,RadialBearing,StartRadialBearing,EndRadialBearing,RadialDirectionUsed,MarkerLabel,LabelText,SourceLabel,CorrectedLabel,ImportStatus,QAStatus,Notes
+
+Required rules:
+- Do not add, remove, rename, or reorder columns.
+- Every row with ImportStatus=IMPORT must have FeatureID, FeatureType, Layer, Segment, Type, ImportRole, StartX, StartY, EndX, EndY, and enough geometry fields to construct the object.
+- Type must be one of: LINE, CURVE, POINT_MARKER.
+- ImportRole must be one of: COMMENCEMENT, EASEMENT, POB_MARKER, POC_MARKER.
+- ImportStatus must be one of: IMPORT, DO_NOT_IMPORT.
+- Do not place long QA narrative in the CSV. Put long review notes in the report.
+- No blank rows are allowed inside the CSV.
+- No merged cells, formulas, tabs, or markdown tables. Plain CSV only.
+
+============================================================
+STANDARD FEATURE / LAYER MAPPING
+============================================================
+Use these layer names unless the user provides project-specific layer names or the CAD routine is known to require a different exact layer name:
+
+- Easement boundary lines/curves:
+  Layer = V-ESMT-LINE
+  FeatureType = EASEMENT_BOUNDARY
+  ImportRole = EASEMENT
+
+- Commencement / tie lines:
+  Layer = V-ESMT-TIE
+  FeatureType = COMMENCEMENT_TIE
+  ImportRole = COMMENCEMENT
+
+- POB marker:
+  Layer = V-ESMT-MARK
+  FeatureType = POINT_MARKER
+  Type = POINT_MARKER
+  ImportRole = POB_MARKER
+  MarkerLabel = POB
+  LabelText must clearly identify the point as POINT OF BEGINNING.
+
+- POC marker:
+  Layer = V-ESMT-MARK
+  FeatureType = POINT_MARKER
+  Type = POINT_MARKER
+  ImportRole = POC_MARKER
+  MarkerLabel = POC
+  LabelText must clearly identify the point as POINT OF COMMENCEMENT and include the PLSS/control description when available.
+
+If the import routine does not support point marker rows, still include the POB and POC rows with Type=POINT_MARKER and ImportStatus=IMPORT unless the user says not to. The report must also list POB and POC coordinates so the user can verify whether markers imported.
+
+============================================================
+COORDINATE RULES
+============================================================
+Use X/Y coordinates in feet.
+
+Default placement:
+- If no project/control coordinates are provided, set the Point of Commencement (POC) at:
+  X = 10000.0000
+  Y = 10000.0000
+- Calculate all commencement/tie lines and the POB from that POC using the document bearings and distances.
+- Calculate the easement boundary from the POB using the legal description sequence.
+
+Coordinate conventions:
+- Easting = X
+- Northing = Y
+- Bearing conversion must follow standard quadrant bearing math:
+  N theta E: +X, +Y
+  S theta E: +X, -Y
+  S theta W: -X, -Y
+  N theta W: -X, +Y
+- Decimal precision for coordinates: minimum 4 decimals, preferred 6 decimals for QA.
+- Distances must be in feet.
+- Do not round coordinates so aggressively that closure changes.
+
+POC / POB handling:
+- POC is the control/commencement point described in the document.
+- POB is where the easement boundary begins.
+- Commencement/tie calls are NOT easement boundary area lines.
+- Boundary closure and area must be calculated only from the easement boundary, not from the commencement/tie lines.
+
+============================================================
+LEGAL DESCRIPTION EXTRACTION REQUIREMENTS
+============================================================
+Extract and report the following when readable:
+- recording number / document number
+- APN / parcel number
+- grantor / owner / party name
+- grantee / easement holder
+- purpose of easement
+- source exhibit/page
+- county/state
+- PLSS location: section, township, range, meridian, aliquot parts
+- plat/book/page references
+- Point of Commencement description
+- Point of Beginning description
+- all commencement/tie calls
+- all easement boundary calls
+- stated area
+- curve table information, if present
+- exhibit/sketch information, if present
+
+If any item is unreadable or missing, write UNKNOWN/UNREADABLE in the report. Do not guess.
+
+============================================================
+BOUNDARY BUILD RULES
+============================================================
+1. Build the POC and all commencement/tie calls first.
+2. Calculate the POB coordinate from the commencement/tie sequence.
+3. Build the easement boundary from the POB exactly in legal-description order.
+4. Add one CSV row for every importable line or curve segment.
+5. Add POC and POB marker rows with marker text.
+6. Do not include adjacent easements, existing easements, lot lines, right-of-way lines, common elements, section lines, or exhibit reference lines as easement boundary unless the legal description clearly makes them part of the boundary.
+7. If the boundary call says it is along a line, include that phrase in SourceLabel or Notes, but still construct the actual segment using the bearing/distance/curve data.
+8. If two consecutive line calls have the same bearing and are clearly intended as one continuous easement boundary segment, combine them only when the legal description supports it and the combined segment does not hide a monument, corner, change in ownership, or POB/POC reference. Otherwise keep the calls separate.
+
+============================================================
+CURVE / RADIAL RULES
+============================================================
+For every easement boundary curve or commencement/tie curve, extract and populate as much of the curve data as available without changing the required CSV header:
+- CurveDirection: LEFT, RIGHT, UNKNOWN, or blank when not applicable. LEFT/RIGHT must be relative to the direction of travel for that CSV row.
+- Radius
+- Delta
+- ArcLength
+- Tangent
+- ChordBearing
+- ChordLength
+- RadialBearing
+- StartRadialBearing
+- EndRadialBearing
+- RadialDirectionUsed
+
+Curve/radial extraction requirements:
+- Identify the curve ID or source curve label, if shown.
+- Identify the direction of travel through the legal description.
+- Identify LEFT or RIGHT curve direction relative to that direction of travel.
+- Identify clockwise or counterclockwise direction when determinable, but do not substitute CW/CCW for LEFT/RIGHT unless the import routine requires it.
+- Identify radius, delta, arc length, tangent, chord bearing, chord length, start radial bearing, end radial bearing, and radial IDs where shown.
+- If a radial table provides a radial ID and bearing, include the actual radial bearing text in the CSV radial fields when known, not only the radial ID.
+- Determine whether each radial appears to be center-to-curve-point or curve-point-to-center.
+- Determine whether the curve is tangent to the incoming segment and outgoing segment where the legal description, exhibit, or curve table implies tangency.
+- Determine whether the curve appears radial-controlled rather than tangent-controlled.
+
+Radial bearing rule:
+- Treat every radial bearing as bidirectional unless the document clearly defines the direction.
+- Test the shown radial and the same radial reversed 180 degrees.
+- Use the orientation that best maintains legal-description direction, curve placement, tangency where applicable, chord/arc math, reverse build check, boundary closure, and area match.
+- Do not silently reverse a radial. If reversed radial is used, set RadialDirectionUsed=REVERSED and include RADIAL_REVERSED in QAStatus or Notes.
+- If both shown and reversed radial remain possible, set RadialDirectionUsed=BOTH_TESTED or UNKNOWN and mark the curve for review.
+
+Curve build-control options:
+Use one of these build-control concepts in QAStatus or Notes because the CSV header does not include a separate CurveBuildMethod column:
+- TANGENT_CONTROLLED = curve is built from incoming tangent, radius, delta, and LEFT/RIGHT.
+- RADIAL_CONTROLLED = curve is built from curve start point, start radial bearing, radius, delta, and LEFT/RIGHT.
+- CHORD_CONTROLLED = curve is built or checked from chord bearing and chord length.
+- COORDINATE_CONTROLLED = curve endpoints are fixed by reliable calculated POC/POB/tie/boundary coordinates.
+- UNKNOWN_CONTROL = insufficient information.
+
+Curve construction priority:
+1. Use explicit radius + delta + arc length + LEFT/RIGHT direction when available and internally consistent.
+2. If a curve has a start radial at the PC, prefer RADIAL_CONTROLLED unless the legal description or exhibit clearly shows tangent control.
+3. Use tangent control only when the legal description, exhibit, or table supports tangency. Do not force tangent curves just to improve closure.
+4. Use chord bearing/chord length as a fallback or independent check when arc curve construction cannot be determined.
+5. Use coordinate control only when endpoints are fixed by reliable calculated POC/POB/tie/boundary coordinates.
+6. If curve data is incomplete, do not fabricate missing data. Mark the row QAStatus=CURVE_DATA_INCOMPLETE and explain in the report.
+
+LEFT/RIGHT and radial testing rule:
+- If CurveDirection is uncertain, test LEFT and RIGHT.
+- If a radial is shown, test shown radial and reversed radial.
+- For uncertain curves, the report and Notes should identify which options were evaluated:
+  * Keep = CSV curve direction + shown radial.
+  * FlipCurve = opposite curve direction + shown radial.
+  * ReverseRadial = CSV curve direction + radial reversed 180 degrees.
+  * Both = opposite curve direction + radial reversed 180 degrees.
+- Select the option that best matches the legal description, exhibit sketch, chord data, tangent conditions, closure, reverse build, and stated area.
+- If no option can be confidently selected, set ImportStatus=DO_NOT_IMPORT for that curve or mark the entire file NOT READY FOR 4-EASEMENT_IMPORT - REVIEW REQUIRED.
+
+Curve QAStatus / Notes values to use when applicable:
+- CURVE_OK
+- RADIAL_CONTROLLED
+- TANGENT_CONTROLLED
+- CHORD_CONTROLLED
+- COORDINATE_CONTROLLED
+- RADIAL_REVERSED
+- BOTH_RADIAL_DIRECTIONS_TESTED
+- LEFT_RIGHT_TESTED
+- CW_CCW_CORRECTED
+- LEFT_RIGHT_CORRECTED
+- NON_TANGENT_RADIAL_CONTROL
+- TANGENCY_CONFLICT
+- RADIAL_CONFLICT
+- CURVE_DIRECTION_CONFLICT
+- CURVE_DATA_CONFLICT
+- CURVE_MATH_CONFLICT
+- CURVE_DATA_INCOMPLETE
+- UNKNOWN_CURVE_CONTROL
+- MANUAL_REVIEW
+
+============================================================
+MANDATORY QA / VERIFICATION BEFORE OUTPUT
+============================================================
+Before producing the final files, perform these checks:
+
+A. CSV preflight check
+- Verify the CSV has the exact required header.
+- Verify all IMPORT rows have valid Type and ImportRole values.
+- Verify all LINE rows have numeric StartX, StartY, EndX, EndY, Bearing, and Distance.
+- Verify all CURVE rows have numeric StartX, StartY, EndX, EndY, and enough curve data to construct the curve.
+- Verify POINT_MARKER rows have StartX/StartY and EndX/EndY equal to the marker coordinate.
+- Verify no IMPORT row is missing Layer.
+- Verify no coordinates are blank, text, NaN, or malformed.
+- Verify no row accidentally uses the old unsupported PointID-only format.
+
+B. Forward build check
+- Starting at POB, traverse every easement boundary call forward.
+- Calculate ending coordinate for every segment.
+- Verify the computed endpoint matches the CSV endpoint.
+- Verify the final endpoint closes back to POB.
+
+C. Reverse build check from POB
+- Starting at POB, traverse the easement boundary in reverse order using reversed bearings/curve direction.
+- Verify the reverse traverse returns to POB.
+- List reverse closure in the report.
+
+D. Bearing and distance check
+For every line segment:
+- Calculate bearing from StartX/StartY to EndX/EndY.
+- Compare calculated bearing to document bearing.
+- Calculate distance from StartX/StartY to EndX/EndY.
+- Compare calculated distance to document distance.
+- Report PASS/WARN/FAIL for each segment.
+
+E. Curve / radial check, when curves exist
+For every curve segment:
+- Verify chord endpoints match the start/end coordinates.
+- Verify arc length approximately equals radius x delta in radians when radius and delta are available.
+- Verify tangent approximately equals radius x tan(delta/2) when tangent is shown.
+- Verify chord length approximately equals 2 x radius x sin(delta/2) when chord length is shown.
+- Verify chord bearing from CSV start/end coordinates against the document chord bearing when shown.
+- Verify incoming tangency when tangent-controlled.
+- Verify outgoing tangency where possible.
+- Verify radial bearings are perpendicular to curve tangents at PC/PT where applicable.
+- Test LEFT and RIGHT if curve direction is uncertain.
+- Test shown radial and reversed radial if a radial is shown.
+- Verify radial bearing direction is not reversed unless intentionally corrected and reported.
+- Report curve direction, radial direction used, build-control method, math errors, tangency conflicts, radial conflicts, and any manual-review decision.
+
+F. Area check
+- Compute the closed easement boundary area.
+- Compare computed area to the stated legal area, if stated.
+- Do not include commencement/tie lines in the area.
+
+G. Layer check
+- Verify easement boundary rows use the easement boundary layer.
+- Verify commencement/tie rows use the tie/control layer.
+- Verify POC/POB marker rows use the marker layer.
+
+============================================================
+REPORT FILE REQUIREMENTS
+============================================================
+Create <recording-number>-Easement_report.txt with these sections:
+
+1. EASEMENT EXTRACTION REPORT
+- recording number/document number
+- source file/page/exhibit
+- APN / parcel number
+- parties
+- purpose
+- location / PLSS / plat references
+
+2. START / CONTROL INFORMATION
+- extracted PLSS/control start information
+- POC description
+- POC coordinate
+- POB description
+- POB coordinate
+- commencement/tie calls used to calculate POB
+
+3. CSV IMPORT SUMMARY
+- CSV file name
+- total import rows
+- easement boundary segments
+- commencement/tie segments
+- point marker rows
+- curve count
+- layer summary
+- ready/not ready for 4-EASEMENT_IMPORT
+
+4. BOUNDARY CALL VERIFICATION TABLE
+For each boundary segment, list:
+- segment ID
+- source/document bearing
+- source/document distance or curve data
+- calculated bearing from CSV coordinates
+- calculated distance/chord/arc from CSV geometry
+- start coordinate
+- end coordinate
+- QA status
+- notes
+
+5. CURVE / RADIAL QA TABLE
+When curves exist, list each curve separately with:
+- segment ID
+- source curve label / curve ID
+- curve direction from document
+- CSV CurveDirection used
+- curve build-control method used in Notes or QAStatus
+- radius
+- delta
+- source arc length
+- calculated arc length
+- arc error
+- source tangent
+- calculated tangent
+- tangent error
+- source chord bearing
+- calculated chord bearing
+- source chord length
+- calculated chord length
+- chord error
+- start radial bearing
+- end radial bearing
+- RadialDirectionUsed
+- options tested: Keep / FlipCurve / ReverseRadial / Both
+- curve QA status
+- notes / manual review decision
+
+6. FORWARD CLOSURE CHECK
+- closure delta X
+- closure delta Y
+- closure distance
+- pass/warn/fail
+
+7. REVERSE BUILD CHECK FROM POB
+- reverse closure delta X
+- reverse closure delta Y
+- reverse closure distance
+- pass/warn/fail
+
+8. AREA CHECK
+- computed easement area
+- stated easement area
+- difference
+- pass/warn/fail
+
+9. PRELIMINARY LEGAL / DRAFTING REVIEW
+List possible errors or concerns, including:
+- unreadable calls
+- missing calls
+- missing curve data
+- non-closing boundary
+- area mismatch
+- POB/POC conflict
+- legal description/exhibit mismatch
+- reversed bearing suspicion
+- adjacent easement confusion
+- commencement line confused with boundary line
+- any row that should not be imported
+
+10. FINAL IMPORT STATUS
+Use one of these exact statements:
+- READY FOR 4-EASEMENT_IMPORT
+- NOT READY FOR 4-EASEMENT_IMPORT - REVIEW REQUIRED
+
+============================================================
+ON-SCREEN RESPONSE REQUIREMENTS
+============================================================
+The final chat response must include:
+- link to <recording-number>-Easement.csv
+- link to <recording-number>-Easement_report.txt
+- a short on-screen error/QA summary
+- POC coordinate
+- POB coordinate
+- extracted PLSS/start information
+- forward closure distance
+- reverse closure distance
+- computed area
+- final import status
+
+Do not paste the full CSV in chat unless asked.
+Do not give multiple CSV options.
+Do not say the CSV is ready if any IMPORT row would be skipped because of missing headers, missing Type, missing Layer, missing coordinates, or unsupported geometry.
+
+============================================================
+FAILURE / DISCREPANCY HANDLING
+============================================================
+If the easement cannot be calculated or constructed, still output the report file and clearly state NOT READY FOR 4-EASEMENT_IMPORT - REVIEW REQUIRED.
+
+List likely reasons, such as:
+- legal description is incomplete
+- POB is missing or ambiguous
+- POC tie does not reach a usable POB
+- bearing/distance call is unreadable
+- curve radius/delta/arc/chord is missing
+- curve direction, radial direction, or tangency control is ambiguous
+- shown radial and reversed radial create different plausible curve locations
+- boundary does not close
+- reverse build does not match forward build
+- computed area does not match stated area
+- document text conflicts with exhibit sketch
+- adjacent/existing easement may have been confused with the new easement
+- the easement depends on external record data not provided
+
+Do not create guessed linework just to make the CSV import. If assumptions are required, clearly mark the file NOT READY and explain the assumptions.

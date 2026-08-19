@@ -1,0 +1,180 @@
+{
+  "SamePointBeginnings": [
+    {
+      "Key": "BEGINNING_AT",
+      "Name": "BEGINNING AT",
+      "Template": "BEGINNING AT {POB_DESCRIPTION};",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "BEGINNING_AT_POINT",
+      "Name": "BEGINNING AT A POINT",
+      "Template": "BEGINNING AT A POINT, SAID POINT BEING {POB_DESCRIPTION};",
+      "Placement": "PREFIX"
+    }
+  ],
+  "Commencements": [
+    {
+      "Key": "COMMENCING_AT",
+      "Name": "COMMENCING AT",
+      "Template": "COMMENCING AT {POC_DESCRIPTION};",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "COMMENCING_SAME_BEING",
+      "Name": "COMMENCING / SAME BEING",
+      "Template": "COMMENCING AT {POC_DESCRIPTION}, SAME BEING {POC_RELATIONSHIP};",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "COMMENCING_ALSO_BEING",
+      "Name": "COMMENCING / ALSO BEING",
+      "Template": "COMMENCING AT {POC_DESCRIPTION}, ALSO BEING {POC_RELATIONSHIP};",
+      "Placement": "PREFIX"
+    }
+  ],
+  "FinalTieCalls": [
+    {
+      "Key": "SAID_POINT_POB",
+      "Name": "SAID POINT BEING POB",
+      "Template": "{COURSE_TEXT} TO A POINT, SAID POINT BEING THE POINT OF BEGINNING;",
+      "Placement": "SUFFIX"
+    },
+    {
+      "Key": "TRUE_POB",
+      "Name": "TRUE POINT OF BEGINNING",
+      "Template": "{COURSE_TEXT} TO THE TRUE POINT OF BEGINNING;",
+      "Placement": "SUFFIX"
+    },
+    {
+      "Key": "DIRECT_POB",
+      "Name": "DIRECT POINT OF BEGINNING",
+      "Template": "{COURSE_TEXT} TO THE POINT OF BEGINNING;",
+      "Placement": "SUFFIX"
+    },
+    {
+      "Key": "POINT_ON_FEATURE_POB",
+      "Name": "POINT ON FEATURE / POB",
+      "Template": "{COURSE_TEXT} TO A POINT ON {POB_DESCRIPTION}, ALSO BEING THE POINT OF BEGINNING;",
+      "Placement": "SUFFIX"
+    }
+  ],
+  "ReturnCalls": [
+    {
+      "Key": "RETURN_POB",
+      "Name": "TO POINT OF BEGINNING",
+      "Template": "THENCE TO THE POINT OF BEGINNING.",
+      "Placement": "SUFFIX"
+    },
+    {
+      "Key": "RETURN_TRUE_POB",
+      "Name": "TO TRUE POINT OF BEGINNING",
+      "Template": "THENCE TO THE TRUE POINT OF BEGINNING.",
+      "Placement": "SUFFIX"
+    },
+    {
+      "Key": "CLOSE_POB",
+      "Name": "CLOSING AT POB",
+      "Template": "THENCE RETURNING TO THE POINT OF BEGINNING.",
+      "Placement": "SUFFIX"
+    }
+  ],
+  "LineRelationships": [
+    {
+      "Key": "NONE",
+      "Name": "NONE",
+      "Template": "",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "ALONG_SAID_LINE",
+      "Name": "ALONG SAID LINE",
+      "Template": "ALONG SAID LINE",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "CONTINUING_ALONG",
+      "Name": "CONTINUING ALONG",
+      "Template": "CONTINUING ALONG {REFERENCE}",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "DEPARTING_SAID_LINE",
+      "Name": "DEPARTING SAID LINE",
+      "Template": "DEPARTING SAID LINE",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "ALONG_ROW",
+      "Name": "ALONG RIGHT-OF-WAY",
+      "Template": "ALONG {REFERENCE}",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "ALONG_CENTERLINE",
+      "Name": "ALONG CENTERLINE",
+      "Template": "ALONG THE CENTERLINE OF {REFERENCE}",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "ALONG_LOT_LINE",
+      "Name": "ALONG LOT LINE",
+      "Template": "ALONG {REFERENCE}",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "ALONG_PARCEL_LINE",
+      "Name": "ALONG PARCEL LINE",
+      "Template": "ALONG {REFERENCE}",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "ALONG_SECTION_LINE",
+      "Name": "ALONG SECTION LINE",
+      "Template": "ALONG {REFERENCE}",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "ALONG_EASEMENT_LINE",
+      "Name": "ALONG EASEMENT LINE",
+      "Template": "ALONG {REFERENCE}",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "ALONG_REFERENCE",
+      "Name": "ALONG FEATURE",
+      "Template": "ALONG {REFERENCE}",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "CONTINUING_ALONG_REFERENCE",
+      "Name": "CONTINUING ALONG FEATURE",
+      "Template": "CONTINUING ALONG {REFERENCE}",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "DEPARTING_REFERENCE",
+      "Name": "DEPARTING FEATURE",
+      "Template": "DEPARTING {REFERENCE}",
+      "Placement": "PREFIX"
+    },
+    {
+      "Key": "TO_POINT_ON",
+      "Name": "TO A POINT ON",
+      "Template": "TO A POINT ON {REFERENCE}",
+      "Placement": "SUFFIX"
+    },
+    {
+      "Key": "TO_INTERSECTION",
+      "Name": "TO INTERSECTION WITH",
+      "Template": "TO THE INTERSECTION WITH {REFERENCE}",
+      "Placement": "SUFFIX"
+    },
+    {
+      "Key": "CUSTOM",
+      "Name": "CUSTOM CONTEXT",
+      "Template": "{REFERENCE}",
+      "Placement": "PREFIX"
+    }
+  ]
+}
