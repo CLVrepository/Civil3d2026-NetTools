@@ -867,8 +867,10 @@ namespace CLV_CivilTools.Survey
                 segments[i].ConstraintState = states[i].Describe();
                 segments[i].ConstraintTargetOffset = states[i].ReferenceOffsetDistance;
                 segments[i].ConstraintActualOffset = ComputeSignedOffsetIfReference(segments[i], states[i]);
-                segments[i].ConstraintOffsetDelta = segments[i].ConstraintTargetOffset.HasValue && segments[i].ConstraintActualOffset.HasValue
-                    ? segments[i].ConstraintActualOffset.Value - segments[i].ConstraintTargetOffset.Value
+                double? targetOffset = segments[i].ConstraintTargetOffset;
+                double? actualOffset = segments[i].ConstraintActualOffset;
+                segments[i].ConstraintOffsetDelta = targetOffset.HasValue && actualOffset.HasValue
+                    ? actualOffset.Value - targetOffset.Value
                     : null;
             }
 

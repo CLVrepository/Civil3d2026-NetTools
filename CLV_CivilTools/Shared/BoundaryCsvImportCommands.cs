@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -1364,7 +1365,7 @@ namespace CLV_CivilTools.Shared
             return CurveCreateResult.Ok(arc, end, labelPoint, note);
         }
 
-        private static bool TryCreateChordLineFromRow(BoundaryCsvRow row, Point3d start, out Line? line, out Point3d end, out string note)
+        private static bool TryCreateChordLineFromRow(BoundaryCsvRow row, Point3d start, [NotNullWhen(true)] out Line? line, out Point3d end, out string note)
         {
             line = null;
             end = start;

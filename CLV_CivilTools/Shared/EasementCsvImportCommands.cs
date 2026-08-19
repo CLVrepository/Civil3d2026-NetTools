@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -557,7 +558,7 @@ namespace CLV_CivilTools.Shared
             return TryBearingToVector(row.Bearing, out direction);
         }
 
-        private static bool TryCreateArcFromEndpoints(EasementCsvRow row, Point3d start, Point3d end, out Arc? arc, out string note)
+        private static bool TryCreateArcFromEndpoints(EasementCsvRow row, Point3d start, Point3d end, [NotNullWhen(true)] out Arc? arc, out string note)
         {
             arc = null;
             note = string.Empty;
