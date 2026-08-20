@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -43,11 +44,15 @@ namespace CLV_CivilTools.Ufls
                 if (psr.Status != PromptStatus.OK)
                     return;
 
-                PromptIntegerOptions numberOptions = new PromptIntegerOptions("\nStarting exhibit ID number <1>: ")
+                int highestExistingNumber = FindHighestExistingExhibitNumber(db);
+                int defaultStartNumber = highestExistingNumber + 1;
+
+                PromptIntegerOptions numberOptions = new PromptIntegerOptions(
+                    $"\nStarting exhibit ID number <{defaultStartNumber}>: ")
                 {
                     AllowNegative = false,
                     AllowZero = false,
-                    DefaultValue = 1,
+                    DefaultValue = defaultStartNumber,
                     UseDefaultValue = true
                 };
 
@@ -105,7 +110,7 @@ namespace CLV_CivilTools.Ufls
 
                         PipeTopCheckData.Snapshot updated = check.Snapshot with
                         {
-                            ExhibitId = nextNumber.ToString("00")
+                            ExhibitId = nextNumber.ToString("00", CultureInfo.InvariantCulture)
                         };
 
                         PipeTopCheckData.Write(label, tr, updated);
@@ -116,7 +121,7 @@ namespace CLV_CivilTools.Ufls
                     tr.Commit();
                 }
 
-                ed.WriteMessage($"\nAssigned exhibit IDs to {assignedCount} Pipe Top Check label(s).");
+                ed.WriteMessage($"\nAssigned exhibit IDs to {assignedCount} Pipe Top Check label(s), starting at {numberResult.Value:00}.");
                 if (skippedCount > 0)
                     ed.WriteMessage($" {skippedCount} selected object(s) were not Pipe Top Check labels.");
                 ed.WriteMessage(" Labels remain in Detailed display mode; only their stored exhibit IDs were updated.");
@@ -125,6 +130,38 @@ namespace CLV_CivilTools.Ufls
             {
                 ed.WriteMessage($"\nUFLS-PIPE-TOP-ID error: {ex.Message}");
             }
+        }
+
+        private static int FindHighestExistingExhibitNumber(Database db)
+        {
+            int highest = 0;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                BlockTable blockTable = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+
+                foreach (ObjectId blockRecordId in blockTable)
+                {
+                    if (tr.GetObject(blockRecordId, OpenMode.ForRead, false) is not BlockTableRecord blockRecord)
+                        continue;
+
+                    foreach (ObjectId entityId in blockRecord)
+                    {
+                        if (tr.GetObject(entityId, OpenMode.ForRead, false) is not MText label)
+                            continue;
+
+                        if (!PipeTopCheckData.TryRead(label, tr, out PipeTopCheckData.Snapshot snapshot))
+                            continue;
+
+                        if (int.TryParse(snapshot.ExhibitId, NumberStyles.None, CultureInfo.InvariantCulture, out int value))
+                            highest = Math.Max(highest, value);
+                    }
+                }
+
+                tr.Commit();
+            }
+
+            return highest;
         }
 
         private readonly record struct SelectedCheck(
