@@ -165,7 +165,6 @@ namespace CLV_CivilTools
 
             layout.Controls.Add(CreateSectionLabel("LABEL"));
             layout.Controls.Add(CreateCommandButton("ELEVATION COMPARISON", "UFLS-PIPE-TOP-CHECK"));
-            layout.Controls.Add(CreateCommandButton("LABEL POINTS", "UFLS-PIPE-TOP-ID"));
 
             layout.Controls.Add(CreateSectionLabel("TOLERANCE CHECK"));
             layout.Controls.Add(CreateCommandButton("EXCEEDS TOLERANCE", "UFLS-PIPE-TOP-EXCEEDS-TOLERANCE"));
