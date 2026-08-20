@@ -13,6 +13,8 @@ namespace CLV_CivilTools.Ufls
     /// </summary>
     public static class PipeTopCheckDisplayCommands
     {
+        private const double ExhibitTextHeight = 0.14;
+
         [CommandMethod("UFLS-PIPE-TOP-EXHIBIT")]
         public static void SetPipeTopCheckExhibitDisplay()
         {
@@ -82,6 +84,8 @@ namespace CLV_CivilTools.Ufls
                         }
 
                         label.Contents = snapshot.ExhibitId;
+                        label.TextHeight = ExhibitTextHeight;
+                        label.Annotative = AnnotativeStates.True;
                     }
                     else
                     {
