@@ -90,18 +90,22 @@ namespace CLV_CivilTools
             };
 
             var checkPage = new TabPage("CHECK");
+            var topCheckPage = new TabPage("TOP CHECK");
             var adjustPage = new TabPage("ADJUST");
             var layerPage = new TabPage("LABELS");
 
             checkPage.Padding = new Padding(3);
+            topCheckPage.Padding = new Padding(3);
             adjustPage.Padding = new Padding(3);
             layerPage.Padding = new Padding(3);
 
             checkPage.Controls.Add(BuildCheckPanel());
+            topCheckPage.Controls.Add(BuildTopCheckPanel());
             adjustPage.Controls.Add(BuildAdjustPanel());
             layerPage.Controls.Add(BuildLabelPanel());
 
             tabs.TabPages.Add(checkPage);
+            tabs.TabPages.Add(topCheckPage);
             tabs.TabPages.Add(adjustPage);
             tabs.TabPages.Add(layerPage);
 
@@ -153,6 +157,32 @@ namespace CLV_CivilTools
         }
 
         // ------------------------------------------------------------
+        // TOP CHECK TAB
+        // ------------------------------------------------------------
+        private Control BuildTopCheckPanel()
+        {
+            var layout = CreateMainFlowPanel();
+
+            layout.Controls.Add(CreateSectionLabel("LABEL"));
+            layout.Controls.Add(CreateCommandButton("ELEVATION COMPARISON", "UFLS-PIPE-TOP-CHECK"));
+
+            layout.Controls.Add(CreateSectionLabel("TOLERANCE CHECK"));
+            layout.Controls.Add(CreateCommandButton("EXCEEDS TOLERANCE", "UFLS-PIPE-TOP-EXCEEDS-TOLERANCE"));
+
+            layout.Controls.Add(CreateSectionLabel("TABLE"));
+            layout.Controls.Add(CreateCommandButton("ADD TABLE", "UFLS-PIPE-TOP-TABLE"));
+            layout.Controls.Add(CreateCommandButton("ADD POINTS", "UFLS-PIPE-TOP-TABLE-ADD"));
+            layout.Controls.Add(CreateCommandButton("REMOVE POINTS", "UFLS-PIPE-TOP-TABLE-REMOVE"));
+            layout.Controls.Add(CreateCommandButton("SCALE TABLE", "UFLS-PIPE-TOP-TABLE-UPDATE"));
+
+            layout.Controls.Add(CreateSectionLabel("DISPLAY"));
+            layout.Controls.Add(CreateCommandButton("DETAILS", "UFLS-PIPE-TOP-DETAILED"));
+            layout.Controls.Add(CreateCommandButton("NUMBERS", "UFLS-PIPE-TOP-EXHIBIT"));
+
+            return layout;
+        }
+
+        // ------------------------------------------------------------
         // ADJUST TAB (placeholder for now)
         // ------------------------------------------------------------
         private Control BuildAdjustPanel()
@@ -193,7 +223,6 @@ namespace CLV_CivilTools
 
             return layout;
         }
-
 
         // ------------------------------------------------------------
         // LABEL TAB

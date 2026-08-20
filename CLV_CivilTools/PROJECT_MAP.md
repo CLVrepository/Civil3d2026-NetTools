@@ -1,3 +1,8 @@
+## 2026-08-20 - Q1 Pipe Top Check
+- `Ufls/UflsPipeInfo.cs`: added `UFLS-PIPE-TOP-CHECK`, a COGO-point-driven pipe top verification command. It reuses the existing `UFLS-PIPE-INFO` pipe geometry/interpolation/top-of-pipe calculation by passing the selected COGO point X/Y into the shared calculation path, while using the selected COGO point Elevation only as `SURV - TOP`.
+- `Ufls/UflsPalette.cs`: added `PIPE TOP CHECK` under Q1 UFLS > CHECK > INFO.
+- `Shared/LayerStandards.cs`: added managed layer standard `V-SURV-CHCK` (ACI 6 magenta, Continuous, plot style `M`, description `Survey: Check shots or linework`) for the new check label. Labels require `CLV-Non Anno`, use text height `0.1`, are one MText object, and restore the original current layer after completion/failure.
+
 ## 2026-07-22 - Legal Description Builder Phases 1-2
 - Added `LegalDescription/` with separated geometry, text-generation, drawing-storage, palette, and command modules.
 - `LEGALDESC` selects connected LINE/ARC geometry, orders the traverse, calculates line/curve calls, reports forward closure and reverse-direction build results, and opens an editable WinForms PaletteSet.

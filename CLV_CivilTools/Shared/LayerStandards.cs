@@ -42,6 +42,7 @@ namespace CLV_CivilTools.Shared
 
         internal const string UflsObjectHighlightRedLayerName = "V-SURV-HGLT-R";
         internal const string UflsObjectHighlightGreenLayerName = "V-SURV-HGLT-G";
+        internal const string UflsPipeTopCheckLayerName = "V-SURV-CHCK";
 
         private const int UflsHighlightLayerTransparencyPercent = 70;
 
@@ -50,6 +51,9 @@ namespace CLV_CivilTools.Shared
 
         private static readonly LayerSpec UflsObjectHighlightGreenSpec =
             new(UflsObjectHighlightGreenLayerName, 3, "Continuous", "M", "UFLS: Highlight overlay: green", UflsHighlightLayerTransparencyPercent);
+
+        private static readonly LayerSpec UflsPipeTopCheckSpec =
+            new(UflsPipeTopCheckLayerName, 6, "Continuous", "M", "Survey: Check shots or linework", 0);
 
         internal const string SurveyLineCurveLabelLayerName = "V-LABL";
         internal const string SurveyAreaLabelLayerName = "V-ANNO-DIMS";
@@ -413,7 +417,7 @@ namespace CLV_CivilTools.Shared
             if (!map.ContainsKey(surveyRoadKey))
                 map.Add(surveyRoadKey, SurveyRoadLabelSpec);
 
-            foreach (var spec in new[] { SurveyLineCurveLabelSpec, SurveyTieLineSpec, SurveyMapOriginalSpec, SurveyMapAdjustedSpec, SurveyMapReviewSpec, SurveyLineworkReviewSpec, UflsObjectHighlightRedSpec, UflsObjectHighlightGreenSpec })
+            foreach (var spec in new[] { SurveyLineCurveLabelSpec, SurveyTieLineSpec, SurveyMapOriginalSpec, SurveyMapAdjustedSpec, SurveyMapReviewSpec, SurveyLineworkReviewSpec, UflsObjectHighlightRedSpec, UflsObjectHighlightGreenSpec, UflsPipeTopCheckSpec })
             {
                 string key = Normalize(spec.Name);
                 if (!map.ContainsKey(key))

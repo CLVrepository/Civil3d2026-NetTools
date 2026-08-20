@@ -1,0 +1,491 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
+using Autodesk.AutoCAD.Runtime;
+using CLV_CivilTools.Shared;
+
+namespace CLV_CivilTools.Ufls
+{
+    /// <summary>
+    /// Creates and maintains AutoCAD tables backed by Pipe Top Check metadata.
+    /// Tables are scaled from the current annotation scale because AutoCAD 2026
+    /// does not support attaching annotation contexts directly to Table objects.
+    /// </summary>
+    public static class PipeTopCheckTableCommands
+    {
+        private static readonly double[] ColumnWidths = { 0.55, 1.20, 1.20, 0.95 };
+
+        [CommandMethod("UFLS-PIPE-TOP-TABLE")]
+        public static void CreatePipeTopCheckTable()
+        {
+            Autodesk.AutoCAD.ApplicationServices.Document? doc =
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+                return;
+
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+            List<PipeTopCheckData.Snapshot> checks = SelectChecks(
+                ed, db, "\nSelect Pipe Top Check labels for table: ");
+            if (checks.Count == 0)
+                return;
+
+            checks = SortChecks(checks);
+
+            PromptPointResult pointResult = ed.GetPoint("\nSpecify table insertion point: ");
+            if (pointResult.Status != PromptStatus.OK)
+                return;
+
+            double scaleFactor = GetCurrentModelScaleFactor(db);
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                ObjectId tableStyleId = PipeTopCheckTableStyle.Ensure(db, tr, ed);
+                if (tableStyleId.IsNull)
+                    return;
+
+                if (!LayerStandards.TryEnsureManagedLayer(
+                        db, tr, ed, LayerStandards.UflsPipeTopCheckLayerName))
+                {
+                    ed.WriteMessage(
+                        $"\nPipe Top Check table: managed layer '{LayerStandards.UflsPipeTopCheckLayerName}' is not available in layer standards.");
+                    return;
+                }
+
+                LayerTable layerTable =
+                    (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead, false);
+
+                Table table = new Table
+                {
+                    TableStyle = tableStyleId,
+                    LayerId = layerTable[LayerStandards.UflsPipeTopCheckLayerName],
+                    Position = pointResult.Value
+                };
+
+                ConfigureTable(table, checks);
+                ApplyScale(table, scaleFactor);
+
+                BlockTableRecord currentSpace =
+                    (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite, false);
+                currentSpace.AppendEntity(table);
+                tr.AddNewlyCreatedDBObject(table, true);
+
+                PipeTopCheckTableData.Write(table, tr, checks.Select(c => c.Id), scaleFactor);
+                tr.Commit();
+            }
+
+            ed.WriteMessage(
+                $"\nCreated Pipe Top Check table with {checks.Count} point(s) on {LayerStandards.UflsPipeTopCheckLayerName} at annotation scale factor {scaleFactor:0.###}.");
+        }
+
+        [CommandMethod("UFLS-PIPE-TOP-TABLE-UPDATE")]
+        public static void UpdatePipeTopCheckTable()
+        {
+            UpdateAllPipeTopCheckTables();
+        }
+
+        [CommandMethod("UFLS-PIPE-TOP-TABLE-ADD")]
+        public static void AddPipeTopCheckTablePoints()
+        {
+            if (!TrySelectTable(out ObjectId tableId))
+                return;
+
+            Autodesk.AutoCAD.ApplicationServices.Document? doc =
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+                return;
+
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+            List<PipeTopCheckData.Snapshot> additions = SelectChecks(
+                ed, db, "\nSelect Pipe Top Check labels to add to table: ");
+            if (additions.Count == 0)
+                return;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                if (tr.GetObject(tableId, OpenMode.ForWrite, false) is not Table table)
+                {
+                    ed.WriteMessage("\nSelected object is not an AutoCAD table.");
+                    return;
+                }
+
+                List<Guid> ids = PipeTopCheckTableData.TryRead(
+                    table, tr, out List<Guid> existing, out double scaleFactor)
+                    ? existing
+                    : new List<Guid>();
+
+                foreach (PipeTopCheckData.Snapshot check in additions)
+                {
+                    if (!ids.Contains(check.Id))
+                        ids.Add(check.Id);
+                }
+
+                PipeTopCheckTableData.Write(table, tr, ids, scaleFactor);
+                tr.Commit();
+            }
+
+            UpdateTable(tableId);
+        }
+
+        [CommandMethod("UFLS-PIPE-TOP-TABLE-REMOVE")]
+        public static void RemovePipeTopCheckTablePoints()
+        {
+            if (!TrySelectTable(out ObjectId tableId))
+                return;
+
+            Autodesk.AutoCAD.ApplicationServices.Document? doc =
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+                return;
+
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+            List<PipeTopCheckData.Snapshot> removals = SelectChecks(
+                ed, db, "\nSelect Pipe Top Check labels to remove from table: ");
+            if (removals.Count == 0)
+                return;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                if (tr.GetObject(tableId, OpenMode.ForWrite, false) is not Table table ||
+                    !PipeTopCheckTableData.TryRead(
+                        table, tr, out List<Guid> ids, out double scaleFactor))
+                {
+                    ed.WriteMessage("\nSelected table is not a Pipe Top Check table.");
+                    return;
+                }
+
+                foreach (PipeTopCheckData.Snapshot check in removals)
+                    ids.Remove(check.Id);
+
+                PipeTopCheckTableData.Write(table, tr, ids, scaleFactor);
+                tr.Commit();
+            }
+
+            UpdateTable(tableId);
+        }
+
+        private static bool TrySelectTable(out ObjectId tableId)
+        {
+            tableId = ObjectId.Null;
+            Autodesk.AutoCAD.ApplicationServices.Document? doc =
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+                return false;
+
+            PromptEntityOptions options = new PromptEntityOptions("\nSelect Pipe Top Check table: ");
+            options.SetRejectMessage("\nPlease select an AutoCAD table.");
+            options.AddAllowedClass(typeof(Table), true);
+
+            PromptEntityResult result = doc.Editor.GetEntity(options);
+            if (result.Status != PromptStatus.OK)
+                return false;
+
+            tableId = result.ObjectId;
+            return true;
+        }
+
+        private static void UpdateAllPipeTopCheckTables()
+        {
+            Autodesk.AutoCAD.ApplicationServices.Document? doc =
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+                return;
+
+            Database db = doc.Database;
+            Editor ed = doc.Editor;
+            List<ObjectId> tableIds;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                tableIds = FindPipeTopCheckTables(db, tr);
+                tr.Commit();
+            }
+
+            if (tableIds.Count == 0)
+            {
+                ed.WriteMessage("\nNo Pipe Top Check tables were found in the drawing.");
+                return;
+            }
+
+            int updated = 0;
+            foreach (ObjectId tableId in tableIds)
+            {
+                if (UpdateTable(tableId))
+                    updated++;
+            }
+
+            ed.WriteMessage($"\nUpdated {updated} Pipe Top Check table(s) to the current annotation scale.");
+        }
+
+        private static List<ObjectId> FindPipeTopCheckTables(Database db, Transaction tr)
+        {
+            List<ObjectId> tableIds = new List<ObjectId>();
+            DBDictionary layoutDictionary =
+                (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
+
+            foreach (DBDictionaryEntry layoutEntry in layoutDictionary)
+            {
+                Layout layout = (Layout)tr.GetObject(layoutEntry.Value, OpenMode.ForRead, false);
+                BlockTableRecord blockRecord = (BlockTableRecord)tr.GetObject(
+                    layout.BlockTableRecordId,
+                    OpenMode.ForRead,
+                    false);
+
+                foreach (ObjectId objectId in blockRecord)
+                {
+                    if (tr.GetObject(objectId, OpenMode.ForRead, false) is Table table &&
+                        PipeTopCheckTableData.TryRead(
+                            table,
+                            tr,
+                            out _,
+                            out _))
+                    {
+                        tableIds.Add(objectId);
+                    }
+                }
+            }
+
+            return tableIds;
+        }
+
+        private static bool UpdateTable(ObjectId tableId)
+        {
+            Autodesk.AutoCAD.ApplicationServices.Document? doc =
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+                return false;
+
+            Database db = doc.Database;
+            Editor ed = doc.Editor;
+            bool updated = false;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                if (tr.GetObject(tableId, OpenMode.ForWrite, false) is not Table table ||
+                    !PipeTopCheckTableData.TryRead(
+                        table, tr, out List<Guid> ids, out double oldScaleFactor))
+                {
+                    ed.WriteMessage("\nSelected table is not a Pipe Top Check table.");
+                    return false;
+                }
+
+                ObjectId tableStyleId = PipeTopCheckTableStyle.Ensure(db, tr, ed);
+                if (tableStyleId.IsNull)
+                    return false;
+
+                if (!LayerStandards.TryEnsureManagedLayer(
+                        db, tr, ed, LayerStandards.UflsPipeTopCheckLayerName))
+                {
+                    ed.WriteMessage(
+                        $"\nPipe Top Check table: managed layer '{LayerStandards.UflsPipeTopCheckLayerName}' is not available in layer standards.");
+                    return false;
+                }
+
+                LayerTable layerTable =
+                    (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead, false);
+                table.TableStyle = tableStyleId;
+                table.LayerId = layerTable[LayerStandards.UflsPipeTopCheckLayerName];
+
+                Dictionary<Guid, PipeTopCheckData.Snapshot> checks = FindChecksById(db, tr, ids);
+                List<PipeTopCheckData.Snapshot> ordered = ids
+                    .Where(checks.ContainsKey)
+                    .Select(id => checks[id])
+                    .OrderBy(c => ParseExhibitId(c.ExhibitId))
+                    .ThenBy(c => c.ExhibitId, StringComparer.Ordinal)
+                    .ThenByDescending(c => c.CheckPointLocation.Y)
+                    .ThenBy(c => c.CheckPointLocation.X)
+                    .ToList();
+
+                if (oldScaleFactor != 1.0)
+                    ApplyScale(table, 1.0 / oldScaleFactor);
+
+                ConfigureTable(table, ordered);
+
+                double newScaleFactor = GetCurrentModelScaleFactor(db);
+                ApplyScale(table, newScaleFactor);
+                PipeTopCheckTableData.Write(
+                    table, tr, ordered.Select(c => c.Id), newScaleFactor);
+                tr.Commit();
+                updated = true;
+            }
+
+            return updated;
+        }
+
+        private static double GetCurrentModelScaleFactor(Database db)
+        {
+            AnnotationScale scale = db.Cannoscale;
+            if (scale == null || scale.PaperUnits <= 0.0 || scale.DrawingUnits <= 0.0)
+                return 1.0;
+
+            double factor = scale.DrawingUnits / scale.PaperUnits;
+            return double.IsNaN(factor) || double.IsInfinity(factor) || factor <= 0.0
+                ? 1.0
+                : factor;
+        }
+
+        private static void ApplyScale(Table table, double scaleFactor)
+        {
+            if (Math.Abs(scaleFactor - 1.0) < 0.0000001)
+                return;
+
+            table.TransformBy(Matrix3d.Scaling(scaleFactor, table.Position));
+        }
+
+        private static void ConfigureTable(
+            Table table, IReadOnlyList<PipeTopCheckData.Snapshot> checks)
+        {
+            table.SetSize(checks.Count + 1, 4);
+
+            for (int column = 0; column < ColumnWidths.Length; column++)
+                table.Columns[column].Width = ColumnWidths[column];
+
+            if (table.Rows[0].IsMerged == true)
+                table.UnmergeCells(table.Rows[0]);
+
+            table.Cells[0, -1].Style = "_HEADER";
+            for (int row = 1; row < checks.Count + 1; row++)
+                table.Cells[row, -1].Style = "_DATA";
+
+            table.Rows[0].Height = PipeTopCheckTableStyle.HeaderRowHeight;
+            for (int row = 1; row < checks.Count + 1; row++)
+                table.Rows[row].Height = PipeTopCheckTableStyle.DataRowHeight;
+
+            SetHeader(table);
+            for (int row = 0; row < checks.Count; row++)
+                SetDataRow(table, row + 1, checks[row]);
+
+            ApplyCellFormatting(table);
+            table.GenerateLayout();
+        }
+
+        private static void ApplyCellFormatting(Table table)
+        {
+            for (int row = 0; row < table.Rows.Count; row++)
+            {
+                for (int column = 0; column < table.Columns.Count; column++)
+                {
+                    Cell cell = table.Cells[row, column];
+                    cell.TextHeight = row == 0
+                        ? PipeTopCheckTableStyle.HeaderTextHeight
+                        : PipeTopCheckTableStyle.DataTextHeight;
+                    cell.Alignment = CellAlignment.MiddleCenter;
+                }
+            }
+        }
+
+        private static List<PipeTopCheckData.Snapshot> SelectChecks(
+            Editor ed, Database db, string prompt)
+        {
+            PromptSelectionOptions options = new PromptSelectionOptions
+            {
+                MessageForAdding = prompt,
+                AllowDuplicates = false,
+                RejectObjectsOnLockedLayers = true
+            };
+
+            SelectionFilter filter = new SelectionFilter(new[]
+            {
+                new TypedValue((int)DxfCode.Start, "MTEXT")
+            });
+
+            PromptSelectionResult selection = ed.GetSelection(options, filter);
+            if (selection.Status != PromptStatus.OK)
+                return new List<PipeTopCheckData.Snapshot>();
+
+            List<PipeTopCheckData.Snapshot> checks = new List<PipeTopCheckData.Snapshot>();
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                foreach (SelectedObject? selected in selection.Value)
+                {
+                    if (selected == null)
+                        continue;
+
+                    if (tr.GetObject(selected.ObjectId, OpenMode.ForRead, false) is MText label &&
+                        PipeTopCheckData.TryRead(label, tr, out PipeTopCheckData.Snapshot snapshot))
+                    {
+                        checks.Add(snapshot);
+                    }
+                }
+
+                tr.Commit();
+            }
+
+            return checks;
+        }
+
+        private static Dictionary<Guid, PipeTopCheckData.Snapshot> FindChecksById(
+            Database db, Transaction tr, IEnumerable<Guid> ids)
+        {
+            HashSet<Guid> wanted = new HashSet<Guid>(ids);
+            Dictionary<Guid, PipeTopCheckData.Snapshot> found =
+                new Dictionary<Guid, PipeTopCheckData.Snapshot>();
+
+            BlockTable blockTable =
+                (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+            foreach (ObjectId blockId in blockTable)
+            {
+                BlockTableRecord block =
+                    (BlockTableRecord)tr.GetObject(blockId, OpenMode.ForRead);
+                foreach (ObjectId objectId in block)
+                {
+                    if (tr.GetObject(objectId, OpenMode.ForRead, false) is MText label &&
+                        PipeTopCheckData.TryRead(label, tr, out PipeTopCheckData.Snapshot snapshot) &&
+                        wanted.Contains(snapshot.Id))
+                    {
+                        found[snapshot.Id] = snapshot;
+                    }
+                }
+            }
+
+            return found;
+        }
+
+        private static List<PipeTopCheckData.Snapshot> SortChecks(
+            List<PipeTopCheckData.Snapshot> checks)
+            => checks
+                .OrderBy(c => ParseExhibitId(c.ExhibitId))
+                .ThenBy(c => c.ExhibitId, StringComparer.Ordinal)
+                .ThenByDescending(c => c.CheckPointLocation.Y)
+                .ThenBy(c => c.CheckPointLocation.X)
+                .ToList();
+
+        private static int ParseExhibitId(string value)
+            => int.TryParse(
+                value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)
+                ? number
+                : int.MaxValue;
+
+        private static void SetHeader(Table table)
+        {
+            string[] headers = { "POINT", "PLAN - TOP", "SURV - TOP", "DIFF" };
+            for (int column = 0; column < headers.Length; column++)
+                table.Cells[0, column].TextString = headers[column];
+        }
+
+        private static void SetDataRow(
+            Table table, int row, PipeTopCheckData.Snapshot check)
+        {
+            table.Cells[row, 0].TextString = check.ExhibitId;
+            table.Cells[row, 1].TextString = FormatElevation(check.PlanTopElevation);
+            table.Cells[row, 2].TextString = FormatElevation(check.SurveyTopElevation);
+            table.Cells[row, 3].TextString = FormatDifference(check.Difference);
+        }
+
+        private static string FormatElevation(double value)
+            => double.IsNaN(value)
+                ? "-"
+                : value.ToString("0.000", CultureInfo.InvariantCulture);
+
+        private static string FormatDifference(double value)
+            => double.IsNaN(value)
+                ? "-"
+                : value.ToString("+0.000;-0.000;0.000", CultureInfo.InvariantCulture);
+    }
+}

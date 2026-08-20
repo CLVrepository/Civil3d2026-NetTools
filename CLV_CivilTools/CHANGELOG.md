@@ -1,3 +1,7 @@
+## 2026-08-20 - Q1 Pipe Top Check
+- Added `UFLS-PIPE-TOP-CHECK` / Q1 UFLS > CHECK > INFO > `PIPE TOP CHECK`. The command selects a Civil 3D COGO point first, uses that point's X/Y for the existing PIPE INFO top-of-pipe calculation, uses the COGO point Elevation as `SURV - TOP`, calculates `DIFF = SURV - TOP - PLAN - TOP`, and places one three-line MText label on `V-SURV-CHCK`.
+- `PIPE TOP CHECK` requires drawing text style `CLV-Non Anno`, uses text height `0.1`, and does not create a label if the required style is missing. The command restores the original current layer after label creation or failure.
+
 ## 2026-08-06 - Map Transform edit-mode original-position reset R3
 - Updated `SURVEY-BESTFIT-MAP` / Q4 `MAP TRANSFORM` history editing so selecting a map with saved history temporarily restores the target block/xref to its original pre-transform position before the review/edit cycle. This makes `Add Pair` use the same coordinate basis as the initial point-selection workflow and prevents a prior translation from appearing as a large residual on newly added pairs.
 - Canceling a recalled edit restores the map to the placement it had when the command was started. `Apply Updated Transform` continues to rebuild the final placement from the saved original state.
