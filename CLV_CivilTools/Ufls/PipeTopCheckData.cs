@@ -58,12 +58,12 @@ namespace CLV_CivilTools.Ufls
             record.Data = new ResultBuffer(
                 new TypedValue((int)DxfCode.Text, Marker),
                 new TypedValue((int)DxfCode.Int32, SchemaVersion),
-                new TypedValue((int)DxfCode.Text, snapshot.Id.ToString("D")),
-                new TypedValue((int)DxfCode.Text, snapshot.PointNumber ?? string.Empty),
+                new TypedValue((int)DxfCode.Text + 1, snapshot.Id.ToString("D")),
+                new TypedValue((int)DxfCode.Text + 2, snapshot.PointNumber ?? string.Empty),
                 new TypedValue((int)DxfCode.SoftPointerId, snapshot.CogoPointId),
                 new TypedValue((int)DxfCode.SoftPointerId + 1, snapshot.PipeId),
-                new TypedValue((int)DxfCode.Text, snapshot.PipeHandle ?? string.Empty),
-                new TypedValue((int)DxfCode.Text, snapshot.PipeName ?? string.Empty),
+                new TypedValue((int)DxfCode.Text + 5, snapshot.PipeHandle ?? string.Empty),
+                new TypedValue((int)DxfCode.Text + 6, snapshot.PipeName ?? string.Empty),
                 new TypedValue((int)DxfCode.XCoordinate, snapshot.CheckPointLocation),
                 new TypedValue((int)DxfCode.XCoordinate + 1, snapshot.LabelLocation),
                 new TypedValue((int)DxfCode.Real, snapshot.PlanTopElevation),
@@ -72,8 +72,8 @@ namespace CLV_CivilTools.Ufls
                 new TypedValue((int)DxfCode.Real + 3, snapshot.Station),
                 new TypedValue((int)DxfCode.Real + 4, snapshot.Offset),
                 new TypedValue((int)DxfCode.Int16, (short)snapshot.Mode),
-                new TypedValue((int)DxfCode.Text, snapshot.ExhibitId ?? string.Empty),
-                new TypedValue((int)DxfCode.Text, snapshot.CreatedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)));
+                new TypedValue((int)DxfCode.Text + 7, snapshot.ExhibitId ?? string.Empty),
+                new TypedValue((int)DxfCode.Text + 8, snapshot.CreatedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)));
 
             if (record.ObjectId.IsNull)
             {
@@ -124,72 +124,62 @@ namespace CLV_CivilTools.Ufls
                 switch (value.TypeCode)
                 {
                     case (int)DxfCode.Text:
-                        if (string.IsNullOrEmpty(marker))
-                            marker = value.Value?.ToString() ?? string.Empty;
-                        else if (id == Guid.Empty)
-                        {
-                            _ = Guid.TryParse(value.Value?.ToString(), out id);
-                        }
-                        else if (string.IsNullOrEmpty(pointNumber))
-                            pointNumber = value.Value?.ToString() ?? string.Empty;
-                        else if (string.IsNullOrEmpty(pipeHandle))
-                            pipeHandle = value.Value?.ToString() ?? string.Empty;
-                        else if (string.IsNullOrEmpty(pipeName))
-                            pipeName = value.Value?.ToString() ?? string.Empty;
-                        else if (string.IsNullOrEmpty(exhibitId))
-                            exhibitId = value.Value?.ToString() ?? string.Empty;
-                        else
-                        {
-                            _ = DateTime.TryParse(
-                                value.Value?.ToString(),
-                                CultureInfo.InvariantCulture,
-                                DateTimeStyles.RoundtripKind,
-                                out createdUtc);
-                        }
+                        marker = value.Value?.ToString() ?? string.Empty;
                         break;
-
+                    case (int)DxfCode.Text + 1:
+                        _ = Guid.TryParse(value.Value?.ToString(), out id);
+                        break;
+                    case (int)DxfCode.Text + 2:
+                        pointNumber = value.Value?.ToString() ?? string.Empty;
+                        break;
+                    case (int)DxfCode.Text + 5:
+                        pipeHandle = value.Value?.ToString() ?? string.Empty;
+                        break;
+                    case (int)DxfCode.Text + 6:
+                        pipeName = value.Value?.ToString() ?? string.Empty;
+                        break;
+                    case (int)DxfCode.Text + 7:
+                        exhibitId = value.Value?.ToString() ?? string.Empty;
+                        break;
+                    case (int)DxfCode.Text + 8:
+                        _ = DateTime.TryParse(
+                            value.Value?.ToString(),
+                            CultureInfo.InvariantCulture,
+                            DateTimeStyles.RoundtripKind,
+                            out createdUtc);
+                        break;
                     case (int)DxfCode.Int32:
                         schema = Convert.ToInt32(value.Value, CultureInfo.InvariantCulture);
                         break;
-
                     case (int)DxfCode.SoftPointerId:
                         cogoPointId = value.Value is ObjectId cogoId ? cogoId : ObjectId.Null;
                         break;
-
                     case (int)DxfCode.SoftPointerId + 1:
                         pipeId = value.Value is ObjectId pipeObjectId ? pipeObjectId : ObjectId.Null;
                         break;
-
                     case (int)DxfCode.XCoordinate:
                         if (value.Value is Point3d checkPoint)
                             checkPointLocation = checkPoint;
                         break;
-
                     case (int)DxfCode.XCoordinate + 1:
                         if (value.Value is Point3d labelPoint)
                             labelLocation = labelPoint;
                         break;
-
                     case (int)DxfCode.Real:
                         planTopElevation = Convert.ToDouble(value.Value, CultureInfo.InvariantCulture);
                         break;
-
                     case (int)DxfCode.Real + 1:
                         surveyTopElevation = Convert.ToDouble(value.Value, CultureInfo.InvariantCulture);
                         break;
-
                     case (int)DxfCode.Real + 2:
                         difference = Convert.ToDouble(value.Value, CultureInfo.InvariantCulture);
                         break;
-
                     case (int)DxfCode.Real + 3:
                         station = Convert.ToDouble(value.Value, CultureInfo.InvariantCulture);
                         break;
-
                     case (int)DxfCode.Real + 4:
                         offset = Convert.ToDouble(value.Value, CultureInfo.InvariantCulture);
                         break;
-
                     case (int)DxfCode.Int16:
                         mode = (DisplayMode)Convert.ToInt16(value.Value, CultureInfo.InvariantCulture);
                         break;
