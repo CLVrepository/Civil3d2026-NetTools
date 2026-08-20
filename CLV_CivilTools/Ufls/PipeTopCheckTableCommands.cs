@@ -70,8 +70,6 @@ namespace CLV_CivilTools.Ufls
                 currentSpace.AppendEntity(table);
                 tr.AddNewlyCreatedDBObject(table, true);
 
-                ApplyAnnotativeScales(table, db);
-
                 PipeTopCheckTableData.Write(table, tr, checks.Select(c => c.Id));
                 tr.Commit();
             }
@@ -243,7 +241,6 @@ namespace CLV_CivilTools.Ufls
                     .ToList();
 
                 ConfigureTable(table, ordered);
-                ApplyAnnotativeScales(table, db);
                 PipeTopCheckTableData.Write(table, tr, ordered.Select(c => c.Id));
                 tr.Commit();
 
@@ -291,26 +288,6 @@ namespace CLV_CivilTools.Ufls
                         : PipeTopCheckTableStyle.DataTextHeight;
                     cell.Alignment = CellAlignment.MiddleCenter;
                 }
-            }
-        }
-
-        private static void ApplyAnnotativeScales(Table table, Database db)
-        {
-            table.Annotative = AnnotativeStates.True;
-
-            ObjectContextManager? contextManager = db.ObjectContextManager;
-            if (contextManager == null)
-                return;
-
-            ObjectContextCollection? contexts =
-                contextManager.GetContextCollection("ACDB_ANNOTATIONSCALES");
-            if (contexts == null)
-                return;
-
-            foreach (ObjectContext context in contexts)
-            {
-                if (!table.HasContext(context))
-                    table.AddContext(context);
             }
         }
 
