@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
@@ -20,7 +19,8 @@ namespace CLV_CivilTools.Ufls
         [CommandMethod("UFLS-PIPE-TOP-TABLE")]
         public static void CreatePipeTopCheckTable()
         {
-            Document? doc = Application.DocumentManager.MdiActiveDocument;
+            Autodesk.AutoCAD.ApplicationServices.Document? doc =
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (doc == null)
                 return;
 
@@ -73,7 +73,8 @@ namespace CLV_CivilTools.Ufls
             if (!TrySelectTable(out ObjectId tableId))
                 return;
 
-            Document? doc = Application.DocumentManager.MdiActiveDocument;
+            Autodesk.AutoCAD.ApplicationServices.Document? doc =
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (doc == null)
                 return;
 
@@ -118,7 +119,8 @@ namespace CLV_CivilTools.Ufls
             if (!TrySelectTable(out ObjectId tableId))
                 return;
 
-            Document? doc = Application.DocumentManager.MdiActiveDocument;
+            Autodesk.AutoCAD.ApplicationServices.Document? doc =
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (doc == null)
                 return;
 
@@ -154,7 +156,8 @@ namespace CLV_CivilTools.Ufls
         private static bool TrySelectTable(out ObjectId tableId)
         {
             tableId = ObjectId.Null;
-            Document? doc = Application.DocumentManager.MdiActiveDocument;
+            Autodesk.AutoCAD.ApplicationServices.Document? doc =
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (doc == null)
                 return false;
 
@@ -172,7 +175,8 @@ namespace CLV_CivilTools.Ufls
 
         private static void UpdateTable(ObjectId tableId)
         {
-            Document? doc = Application.DocumentManager.MdiActiveDocument;
+            Autodesk.AutoCAD.ApplicationServices.Document? doc =
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (doc == null)
                 return;
 
@@ -212,7 +216,7 @@ namespace CLV_CivilTools.Ufls
             table.SetRowHeight(RowHeight);
 
             for (int column = 0; column < ColumnWidths.Length; column++)
-                table.SetColumnWidth(column, ColumnWidths[column]);
+                table.Columns[column].Width = ColumnWidths[column];
 
             SetHeader(table);
             for (int row = 0; row < checks.Count; row++)
@@ -303,17 +307,17 @@ namespace CLV_CivilTools.Ufls
         {
             string[] headers = { "POINT", "PLAN - TOP", "SURV - TOP", "DIFF", "PIPE STA.", "OFFSET" };
             for (int column = 0; column < headers.Length; column++)
-                table.SetTextString(0, column, headers[column]);
+                table.Cells[0, column].TextString = headers[column];
         }
 
         private static void SetDataRow(Table table, int row, PipeTopCheckData.Snapshot check)
         {
-            table.SetTextString(row, 0, check.ExhibitId);
-            table.SetTextString(row, 1, FormatElevation(check.PlanTopElevation));
-            table.SetTextString(row, 2, FormatElevation(check.SurveyTopElevation));
-            table.SetTextString(row, 3, FormatDifference(check.Difference));
-            table.SetTextString(row, 4, FormatNumber(check.Station));
-            table.SetTextString(row, 5, FormatNumber(check.Offset));
+            table.Cells[row, 0].TextString = check.ExhibitId;
+            table.Cells[row, 1].TextString = FormatElevation(check.PlanTopElevation);
+            table.Cells[row, 2].TextString = FormatElevation(check.SurveyTopElevation);
+            table.Cells[row, 3].TextString = FormatDifference(check.Difference);
+            table.Cells[row, 4].TextString = FormatNumber(check.Station);
+            table.Cells[row, 5].TextString = FormatNumber(check.Offset);
         }
 
         private static string FormatElevation(double value)
