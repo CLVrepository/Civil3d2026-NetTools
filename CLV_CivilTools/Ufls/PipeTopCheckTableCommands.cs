@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
-using Autodesk.AutoCAD.Geometry;
 
 namespace CLV_CivilTools.Ufls
 {
@@ -15,18 +15,18 @@ namespace CLV_CivilTools.Ufls
     public static class PipeTopCheckTableCommands
     {
         private const double RowHeight = 0.20;
-        private const double[] ColumnWidths = { 0.45, 1.10, 1.10, 0.85, 0.90, 0.75 };
+        private static readonly double[] ColumnWidths = { 0.45, 1.10, 1.10, 0.85, 0.90, 0.75 };
 
         [CommandMethod("UFLS-PIPE-TOP-TABLE")]
         public static void CreatePipeTopCheckTable()
         {
-            Document? doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            Document? doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null)
                 return;
 
             Editor ed = doc.Editor;
             Database db = doc.Database;
-            List<PipeTopCheckData.Snapshot> checks = SelectChecks(ed, db, "Select Pipe Top Check labels for table: ");
+            List<PipeTopCheckData.Snapshot> checks = SelectChecks(ed, db, "\nSelect Pipe Top Check labels for table: ");
             if (checks.Count == 0)
                 return;
 
@@ -40,22 +40,17 @@ namespace CLV_CivilTools.Ufls
             {
                 Table table = new Table
                 {
-                    Layer = db.Clayer
+                    Layer = db.Clayer,
+                    Position = pointResult.Value
                 };
 
-                table.SetSize(checks.Count + 1, 6);
-                table.Position = pointResult.Value;
-                table.SetRowHeight(RowHeight);
+                ConfigureTable(table, checks);
 
-                for (int column = 0; column < ColumnWidths.Length; column++)
-                    table.SetColumnWidth(column, ColumnWidths[column]);
+                BlockTableRecord currentSpace =
+                    (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite, false);
+                currentSpace.AppendEntity(table);
+                tr.AddNewlyCreatedDBObject(table, true);
 
-                SetHeader(table);
-                for (int row = 0; row < checks.Count; row++)
-                    SetDataRow(table, row + 1, checks[row]);
-
-                table.GenerateLayout();
-                db.AddDBObject(table);
                 PipeTopCheckTableData.Write(table, tr, checks.Select(c => c.Id));
                 tr.Commit();
             }
@@ -66,30 +61,40 @@ namespace CLV_CivilTools.Ufls
         [CommandMethod("UFLS-PIPE-TOP-TABLE-UPDATE")]
         public static void UpdatePipeTopCheckTable()
         {
-            if (!TrySelectTable(out Table? table))
+            if (!TrySelectTable(out ObjectId tableId))
                 return;
 
-            UpdateTable(table, false);
+            UpdateTable(tableId);
         }
 
         [CommandMethod("UFLS-PIPE-TOP-TABLE-ADD")]
         public static void AddPipeTopCheckTablePoints()
         {
-            if (!TrySelectTable(out Table? table))
+            if (!TrySelectTable(out ObjectId tableId))
                 return;
 
-            Document? doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            Document? doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null)
                 return;
 
             Editor ed = doc.Editor;
             Database db = doc.Database;
-            List<PipeTopCheckData.Snapshot> additions = SelectChecks(ed, db, "Select Pipe Top Check labels to add to table: ");
+            List<PipeTopCheckData.Snapshot> additions = SelectChecks(
+                ed,
+                db,
+                "\nSelect Pipe Top Check labels to add to table: ");
+
             if (additions.Count == 0)
                 return;
 
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
+                if (tr.GetObject(tableId, OpenMode.ForWrite, false) is not Table table)
+                {
+                    ed.WriteMessage("\nSelected object is not an AutoCAD table.");
+                    return;
+                }
+
                 List<Guid> ids = PipeTopCheckTableData.TryRead(table, tr, out List<Guid> existing)
                     ? existing
                     : new List<Guid>();
@@ -104,28 +109,33 @@ namespace CLV_CivilTools.Ufls
                 tr.Commit();
             }
 
-            UpdateTable(table, false);
+            UpdateTable(tableId);
         }
 
         [CommandMethod("UFLS-PIPE-TOP-TABLE-REMOVE")]
         public static void RemovePipeTopCheckTablePoints()
         {
-            if (!TrySelectTable(out Table? table))
+            if (!TrySelectTable(out ObjectId tableId))
                 return;
 
-            Document? doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            Document? doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null)
                 return;
 
             Editor ed = doc.Editor;
             Database db = doc.Database;
-            List<PipeTopCheckData.Snapshot> removals = SelectChecks(ed, db, "Select Pipe Top Check labels to remove from table: ");
+            List<PipeTopCheckData.Snapshot> removals = SelectChecks(
+                ed,
+                db,
+                "\nSelect Pipe Top Check labels to remove from table: ");
+
             if (removals.Count == 0)
                 return;
 
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
-                if (!PipeTopCheckTableData.TryRead(table, tr, out List<Guid> ids))
+                if (tr.GetObject(tableId, OpenMode.ForWrite, false) is not Table table ||
+                    !PipeTopCheckTableData.TryRead(table, tr, out List<Guid> ids))
                 {
                     ed.WriteMessage("\nSelected table is not a Pipe Top Check table.");
                     return;
@@ -138,13 +148,13 @@ namespace CLV_CivilTools.Ufls
                 tr.Commit();
             }
 
-            UpdateTable(table, false);
+            UpdateTable(tableId);
         }
 
-        private static bool TrySelectTable(out Table? table)
+        private static bool TrySelectTable(out ObjectId tableId)
         {
-            table = null;
-            Document? doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            tableId = ObjectId.Null;
+            Document? doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null)
                 return false;
 
@@ -156,21 +166,13 @@ namespace CLV_CivilTools.Ufls
             if (result.Status != PromptStatus.OK)
                 return false;
 
-            using (Transaction tr = doc.Database.TransactionManager.StartTransaction())
-            {
-                table = tr.GetObject(result.ObjectId, OpenMode.ForWrite, false) as Table;
-                if (table == null)
-                    return false;
-
-                tr.Commit();
-            }
-
+            tableId = result.ObjectId;
             return true;
         }
 
-        private static void UpdateTable(Table table, bool preserveTransaction)
+        private static void UpdateTable(ObjectId tableId)
         {
-            Document? doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            Document? doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null)
                 return;
 
@@ -179,7 +181,8 @@ namespace CLV_CivilTools.Ufls
 
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
-                if (!PipeTopCheckTableData.TryRead(table, tr, out List<Guid> ids))
+                if (tr.GetObject(tableId, OpenMode.ForWrite, false) is not Table table ||
+                    !PipeTopCheckTableData.TryRead(table, tr, out List<Guid> ids))
                 {
                     ed.WriteMessage("\nSelected table is not a Pipe Top Check table.");
                     return;
@@ -195,21 +198,27 @@ namespace CLV_CivilTools.Ufls
                     .ThenBy(c => c.CheckPointLocation.X)
                     .ToList();
 
-                table.SetSize(ordered.Count + 1, 6);
-                table.SetRowHeight(RowHeight);
-                for (int column = 0; column < ColumnWidths.Length; column++)
-                    table.SetColumnWidth(column, ColumnWidths[column]);
-
-                SetHeader(table);
-                for (int row = 0; row < ordered.Count; row++)
-                    SetDataRow(table, row + 1, ordered[row]);
-
-                table.GenerateLayout();
+                ConfigureTable(table, ordered);
                 PipeTopCheckTableData.Write(table, tr, ordered.Select(c => c.Id));
                 tr.Commit();
 
                 ed.WriteMessage($"\nUpdated Pipe Top Check table: {ordered.Count} point(s).");
             }
+        }
+
+        private static void ConfigureTable(Table table, IReadOnlyList<PipeTopCheckData.Snapshot> checks)
+        {
+            table.SetSize(checks.Count + 1, 6);
+            table.SetRowHeight(RowHeight);
+
+            for (int column = 0; column < ColumnWidths.Length; column++)
+                table.SetColumnWidth(column, ColumnWidths[column]);
+
+            SetHeader(table);
+            for (int row = 0; row < checks.Count; row++)
+                SetDataRow(table, row + 1, checks[row]);
+
+            table.GenerateLayout();
         }
 
         private static List<PipeTopCheckData.Snapshot> SelectChecks(Editor ed, Database db, string prompt)
