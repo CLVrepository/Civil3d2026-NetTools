@@ -51,7 +51,10 @@ namespace CLV_CivilTools.Ufls
 
             try
             {
-                using (doc.LockDocument())
+                // This is a normal command operating on the active document, so no
+                // explicit DocumentLock is required. Keeping the transaction directly
+                // on the active database also avoids eNoDatabase when changing the
+                // annotative state of an existing MText label.
                 using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
                     EnsureGoodLayer(tr, db, baseLayer, goodLayer);
@@ -90,7 +93,7 @@ namespace CLV_CivilTools.Ufls
 
                     int exceedsCount = 0;
                     int goodCount = 0;
-                    int idsAssigned = 0;
+                    int idsAssigned = missingIds.Count;
 
                     foreach (CheckItem item in checks)
                     {
@@ -115,9 +118,6 @@ namespace CLV_CivilTools.Ufls
                                 item.Snapshot with { Mode = PipeTopCheckData.DisplayMode.Exhibit });
 
                             exceedsCount++;
-                            if (!string.IsNullOrWhiteSpace(item.OriginalExhibitId) &&
-                                string.IsNullOrWhiteSpace(item.Snapshot.ExhibitId))
-                                idsAssigned++;
                         }
                         else
                         {
@@ -143,7 +143,8 @@ namespace CLV_CivilTools.Ufls
                     ed.WriteMessage(
                         $"\nPipe Top Check tolerance review complete: {exceedsCount} over tolerance, {goodCount} within tolerance." +
                         $" Tolerance = {tolerance:0.000}." +
-                        $" Good checks moved to {goodLayer}.");
+                        $" Good checks moved to {goodLayer}." +
+                        (idsAssigned > 0 ? $" {idsAssigned} exhibit ID(s) assigned." : string.Empty));
                 }
             }
             catch (System.Exception ex)
