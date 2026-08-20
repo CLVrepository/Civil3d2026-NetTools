@@ -17,7 +17,7 @@ namespace CLV_CivilTools.Ufls
     /// </summary>
     public static class PipeTopCheckTableCommands
     {
-        private static readonly double[] ColumnWidths = { 0.55, 1.20, 1.20, 0.95, 1.05, 0.85 };
+        private static readonly double[] ColumnWidths = { 0.55, 1.20, 1.20, 0.95 };
 
         [CommandMethod("UFLS-PIPE-TOP-TABLE")]
         public static void CreatePipeTopCheckTable()
@@ -29,7 +29,8 @@ namespace CLV_CivilTools.Ufls
 
             Editor ed = doc.Editor;
             Database db = doc.Database;
-            List<PipeTopCheckData.Snapshot> checks = SelectChecks(ed, db, "\nSelect Pipe Top Check labels for table: ");
+            List<PipeTopCheckData.Snapshot> checks = SelectChecks(
+                ed, db, "\nSelect Pipe Top Check labels for table: ");
             if (checks.Count == 0)
                 return;
 
@@ -48,23 +49,20 @@ namespace CLV_CivilTools.Ufls
                     return;
 
                 if (!LayerStandards.TryEnsureManagedLayer(
-                        db,
-                        tr,
-                        ed,
-                        LayerStandards.UflsPipeTopCheckLayerName))
+                        db, tr, ed, LayerStandards.UflsPipeTopCheckLayerName))
                 {
-                    ed.WriteMessage($"\nPipe Top Check table: managed layer '{LayerStandards.UflsPipeTopCheckLayerName}' is not available in layer standards.");
+                    ed.WriteMessage(
+                        $"\nPipe Top Check table: managed layer '{LayerStandards.UflsPipeTopCheckLayerName}' is not available in layer standards.");
                     return;
                 }
 
                 LayerTable layerTable =
                     (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead, false);
-                ObjectId layerId = layerTable[LayerStandards.UflsPipeTopCheckLayerName];
 
                 Table table = new Table
                 {
                     TableStyle = tableStyleId,
-                    LayerId = layerId,
+                    LayerId = layerTable[LayerStandards.UflsPipeTopCheckLayerName],
                     Position = pointResult.Value
                 };
 
@@ -80,16 +78,15 @@ namespace CLV_CivilTools.Ufls
                 tr.Commit();
             }
 
-            ed.WriteMessage($"\nCreated Pipe Top Check table with {checks.Count} point(s) on {LayerStandards.UflsPipeTopCheckLayerName} at annotation scale factor {scaleFactor:0.###}.");
+            ed.WriteMessage(
+                $"\nCreated Pipe Top Check table with {checks.Count} point(s) on {LayerStandards.UflsPipeTopCheckLayerName} at annotation scale factor {scaleFactor:0.###}.");
         }
 
         [CommandMethod("UFLS-PIPE-TOP-TABLE-UPDATE")]
         public static void UpdatePipeTopCheckTable()
         {
-            if (!TrySelectTable(out ObjectId tableId))
-                return;
-
-            UpdateTable(tableId);
+            if (TrySelectTable(out ObjectId tableId))
+                UpdateTable(tableId);
         }
 
         [CommandMethod("UFLS-PIPE-TOP-TABLE-ADD")]
@@ -106,10 +103,7 @@ namespace CLV_CivilTools.Ufls
             Editor ed = doc.Editor;
             Database db = doc.Database;
             List<PipeTopCheckData.Snapshot> additions = SelectChecks(
-                ed,
-                db,
-                "\nSelect Pipe Top Check labels to add to table: ");
-
+                ed, db, "\nSelect Pipe Top Check labels to add to table: ");
             if (additions.Count == 0)
                 return;
 
@@ -122,10 +116,7 @@ namespace CLV_CivilTools.Ufls
                 }
 
                 List<Guid> ids = PipeTopCheckTableData.TryRead(
-                    table,
-                    tr,
-                    out List<Guid> existing,
-                    out double scaleFactor)
+                    table, tr, out List<Guid> existing, out double scaleFactor)
                     ? existing
                     : new List<Guid>();
 
@@ -156,17 +147,15 @@ namespace CLV_CivilTools.Ufls
             Editor ed = doc.Editor;
             Database db = doc.Database;
             List<PipeTopCheckData.Snapshot> removals = SelectChecks(
-                ed,
-                db,
-                "\nSelect Pipe Top Check labels to remove from table: ");
-
+                ed, db, "\nSelect Pipe Top Check labels to remove from table: ");
             if (removals.Count == 0)
                 return;
 
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
                 if (tr.GetObject(tableId, OpenMode.ForWrite, false) is not Table table ||
-                    !PipeTopCheckTableData.TryRead(table, tr, out List<Guid> ids, out double scaleFactor))
+                    !PipeTopCheckTableData.TryRead(
+                        table, tr, out List<Guid> ids, out double scaleFactor))
                 {
                     ed.WriteMessage("\nSelected table is not a Pipe Top Check table.");
                     return;
@@ -215,7 +204,8 @@ namespace CLV_CivilTools.Ufls
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
                 if (tr.GetObject(tableId, OpenMode.ForWrite, false) is not Table table ||
-                    !PipeTopCheckTableData.TryRead(table, tr, out List<Guid> ids, out double oldScaleFactor))
+                    !PipeTopCheckTableData.TryRead(
+                        table, tr, out List<Guid> ids, out double oldScaleFactor))
                 {
                     ed.WriteMessage("\nSelected table is not a Pipe Top Check table.");
                     return;
@@ -226,12 +216,10 @@ namespace CLV_CivilTools.Ufls
                     return;
 
                 if (!LayerStandards.TryEnsureManagedLayer(
-                        db,
-                        tr,
-                        ed,
-                        LayerStandards.UflsPipeTopCheckLayerName))
+                        db, tr, ed, LayerStandards.UflsPipeTopCheckLayerName))
                 {
-                    ed.WriteMessage($"\nPipe Top Check table: managed layer '{LayerStandards.UflsPipeTopCheckLayerName}' is not available in layer standards.");
+                    ed.WriteMessage(
+                        $"\nPipe Top Check table: managed layer '{LayerStandards.UflsPipeTopCheckLayerName}' is not available in layer standards.");
                     return;
                 }
 
@@ -250,7 +238,6 @@ namespace CLV_CivilTools.Ufls
                     .ThenBy(c => c.CheckPointLocation.X)
                     .ToList();
 
-                // Normalize the existing table to its unscaled geometry before rebuilding it.
                 if (oldScaleFactor != 1.0)
                     ApplyScale(table, 1.0 / oldScaleFactor);
 
@@ -258,10 +245,12 @@ namespace CLV_CivilTools.Ufls
 
                 double newScaleFactor = GetCurrentModelScaleFactor(db);
                 ApplyScale(table, newScaleFactor);
-                PipeTopCheckTableData.Write(table, tr, ordered.Select(c => c.Id), newScaleFactor);
+                PipeTopCheckTableData.Write(
+                    table, tr, ordered.Select(c => c.Id), newScaleFactor);
                 tr.Commit();
 
-                ed.WriteMessage($"\nUpdated Pipe Top Check table: {ordered.Count} point(s), annotation scale factor {newScaleFactor:0.###}.");
+                ed.WriteMessage(
+                    $"\nUpdated Pipe Top Check table: {ordered.Count} point(s), annotation scale factor {newScaleFactor:0.###}.");
             }
         }
 
@@ -285,15 +274,14 @@ namespace CLV_CivilTools.Ufls
             table.TransformBy(Matrix3d.Scaling(scaleFactor, table.Position));
         }
 
-        private static void ConfigureTable(Table table, IReadOnlyList<PipeTopCheckData.Snapshot> checks)
+        private static void ConfigureTable(
+            Table table, IReadOnlyList<PipeTopCheckData.Snapshot> checks)
         {
-            table.SetSize(checks.Count + 1, 6);
+            table.SetSize(checks.Count + 1, 4);
 
             for (int column = 0; column < ColumnWidths.Length; column++)
                 table.Columns[column].Width = ColumnWidths[column];
 
-            // AutoCAD creates the first row as a merged title row by default.
-            // This table uses that row as its actual header instead.
             if (table.Rows[0].IsMerged == true)
                 table.UnmergeCells(table.Rows[0]);
 
@@ -328,7 +316,8 @@ namespace CLV_CivilTools.Ufls
             }
         }
 
-        private static List<PipeTopCheckData.Snapshot> SelectChecks(Editor ed, Database db, string prompt)
+        private static List<PipeTopCheckData.Snapshot> SelectChecks(
+            Editor ed, Database db, string prompt)
         {
             PromptSelectionOptions options = new PromptSelectionOptions
             {
@@ -368,17 +357,18 @@ namespace CLV_CivilTools.Ufls
         }
 
         private static Dictionary<Guid, PipeTopCheckData.Snapshot> FindChecksById(
-            Database db,
-            Transaction tr,
-            IEnumerable<Guid> ids)
+            Database db, Transaction tr, IEnumerable<Guid> ids)
         {
             HashSet<Guid> wanted = new HashSet<Guid>(ids);
-            Dictionary<Guid, PipeTopCheckData.Snapshot> found = new Dictionary<Guid, PipeTopCheckData.Snapshot>();
+            Dictionary<Guid, PipeTopCheckData.Snapshot> found =
+                new Dictionary<Guid, PipeTopCheckData.Snapshot>();
 
-            BlockTable blockTable = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+            BlockTable blockTable =
+                (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
             foreach (ObjectId blockId in blockTable)
             {
-                BlockTableRecord block = (BlockTableRecord)tr.GetObject(blockId, OpenMode.ForRead);
+                BlockTableRecord block =
+                    (BlockTableRecord)tr.GetObject(blockId, OpenMode.ForRead);
                 foreach (ObjectId objectId in block)
                 {
                     if (tr.GetObject(objectId, OpenMode.ForRead, false) is MText label &&
@@ -393,7 +383,8 @@ namespace CLV_CivilTools.Ufls
             return found;
         }
 
-        private static List<PipeTopCheckData.Snapshot> SortChecks(List<PipeTopCheckData.Snapshot> checks)
+        private static List<PipeTopCheckData.Snapshot> SortChecks(
+            List<PipeTopCheckData.Snapshot> checks)
             => checks
                 .OrderBy(c => ParseExhibitId(c.ExhibitId))
                 .ThenBy(c => c.ExhibitId, StringComparer.Ordinal)
@@ -402,34 +393,35 @@ namespace CLV_CivilTools.Ufls
                 .ToList();
 
         private static int ParseExhibitId(string value)
-            => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)
+            => int.TryParse(
+                value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)
                 ? number
                 : int.MaxValue;
 
         private static void SetHeader(Table table)
         {
-            string[] headers = { "POINT", "PLAN - TOP", "SURV - TOP", "DIFF", "PIPE STA.", "OFFSET" };
+            string[] headers = { "POINT", "PLAN - TOP", "SURV - TOP", "DIFF" };
             for (int column = 0; column < headers.Length; column++)
                 table.Cells[0, column].TextString = headers[column];
         }
 
-        private static void SetDataRow(Table table, int row, PipeTopCheckData.Snapshot check)
+        private static void SetDataRow(
+            Table table, int row, PipeTopCheckData.Snapshot check)
         {
             table.Cells[row, 0].TextString = check.ExhibitId;
             table.Cells[row, 1].TextString = FormatElevation(check.PlanTopElevation);
             table.Cells[row, 2].TextString = FormatElevation(check.SurveyTopElevation);
             table.Cells[row, 3].TextString = FormatDifference(check.Difference);
-            table.Cells[row, 4].TextString = FormatNumber(check.Station);
-            table.Cells[row, 5].TextString = FormatNumber(check.Offset);
         }
 
         private static string FormatElevation(double value)
-            => double.IsNaN(value) ? "-" : value.ToString("0.000", CultureInfo.InvariantCulture);
+            => double.IsNaN(value)
+                ? "-"
+                : value.ToString("0.000", CultureInfo.InvariantCulture);
 
         private static string FormatDifference(double value)
-            => double.IsNaN(value) ? "-" : value.ToString("+0.000;-0.000;0.000", CultureInfo.InvariantCulture);
-
-        private static string FormatNumber(double value)
-            => double.IsNaN(value) ? "-" : value.ToString("0.00", CultureInfo.InvariantCulture);
+            => double.IsNaN(value)
+                ? "-"
+                : value.ToString("+0.000;-0.000;0.000", CultureInfo.InvariantCulture);
     }
 }
