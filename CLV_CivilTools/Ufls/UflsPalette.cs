@@ -10,7 +10,7 @@ using Autodesk.AutoCAD.Windows;
 // Alias
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
-using CLV_CivilTools.Ufls;   // <-- for UflsDropInlet.RunDropInlet()
+using CLV_CivilTools.Ufls;
 using CLV_CivilTools.Shared;
 
 namespace CLV_CivilTools
@@ -38,8 +38,6 @@ namespace CLV_CivilTools
 
                 _paletteSet = new PaletteSet("UFLS")
                 {
-                    // Q1 is the primary in-CAD working palette, so keep it compact
-                    // for 1920 x 1200 users and let each tab scroll vertically.
                     DockEnabled =
                         DockSides.Left |
                         DockSides.Right |
@@ -47,13 +45,11 @@ namespace CLV_CivilTools
                         DockSides.Bottom
                 };
 
-
                 _paletteSet.Add("UFLS – TOOLS", _paletteControl);
                 PalettePositionHelper.ConfigureSize(
                     _paletteSet,
                     new Size(360, 760),
                     new Size(320, 560));
-
             }
 
             PalettePositionHelper.ShowNearAutoCadWindow(
@@ -66,7 +62,7 @@ namespace CLV_CivilTools
     }
 
     // ============================================================
-    // MAIN PALETTE CONTROL (CHECK / ADJUST TABS)
+    // MAIN PALETTE CONTROL
     // ============================================================
     public class UflsPaletteControl : UserControl
     {
@@ -90,18 +86,22 @@ namespace CLV_CivilTools
             };
 
             var checkPage = new TabPage("CHECK");
+            var topCheckPage = new TabPage("TOP CHECK");
             var adjustPage = new TabPage("ADJUST");
             var layerPage = new TabPage("LABELS");
 
             checkPage.Padding = new Padding(3);
+            topCheckPage.Padding = new Padding(3);
             adjustPage.Padding = new Padding(3);
             layerPage.Padding = new Padding(3);
 
             checkPage.Controls.Add(BuildCheckPanel());
+            topCheckPage.Controls.Add(BuildTopCheckPanel());
             adjustPage.Controls.Add(BuildAdjustPanel());
             layerPage.Controls.Add(BuildLabelPanel());
 
             tabs.TabPages.Add(checkPage);
+            tabs.TabPages.Add(topCheckPage);
             tabs.TabPages.Add(adjustPage);
             tabs.TabPages.Add(layerPage);
 
@@ -135,7 +135,6 @@ namespace CLV_CivilTools
             layout.Controls.Add(CreateCommandButton("1P MANHOLE - SINGLE", "UFLS61P"));
             layout.Controls.Add(CreateCommandButtonRow("STRC-INNER WALL", "UFLS7", "STRC-OUTER WALL", "UFLS8"));
             layout.Controls.Add(CreateCommandButton("STUB MARKER", "UFLS-STUB"));
-            // Now live: calls UflsDropInlet.RunDropInlet()
             layout.Controls.Add(CreateCommandButton("DROP INLET", "UFLS-DROP-INLET"));
             layout.Controls.Add(CreateCommandButton("3P CIRCLE", "UFLS-3PCIRCLE"));
             layout.Controls.Add(CreateCommandButton("3P RECTANGLE", "UFLS-3PRECT"));
@@ -148,13 +147,39 @@ namespace CLV_CivilTools
 
             layout.Controls.Add(CreateSectionLabel("INFO"));
             layout.Controls.Add(CreateCommandButton("PIPE INFO @ POINT", "UFLS-PIPE-INFO"));
-            layout.Controls.Add(CreateCommandButton("PIPE TOP CHECK", "UFLS-PIPE-TOP-CHECK"));
 
             return layout;
         }
 
         // ------------------------------------------------------------
-        // ADJUST TAB (placeholder for now)
+        // TOP CHECK TAB
+        // ------------------------------------------------------------
+        private Control BuildTopCheckPanel()
+        {
+            var layout = CreateMainFlowPanel();
+
+            layout.Controls.Add(CreateSectionLabel("LABEL"));
+            layout.Controls.Add(CreateCommandButton("ELEVATION COMPARISON", "UFLS-PIPE-TOP-CHECK"));
+            layout.Controls.Add(CreateCommandButton("LABEL POINTS", "UFLS-PIPE-TOP-ID"));
+
+            layout.Controls.Add(CreateSectionLabel("TOLERANCE CHECK"));
+            layout.Controls.Add(CreateCommandButton("EXCEEDS TOLERANCE", "UFLS-PIPE-TOP-EXCEEDS-TOLERANCE"));
+
+            layout.Controls.Add(CreateSectionLabel("TABLE"));
+            layout.Controls.Add(CreateCommandButton("ADD TABLE", "UFLS-PIPE-TOP-TABLE"));
+            layout.Controls.Add(CreateCommandButton("ADD POINTS", "UFLS-PIPE-TOP-TABLE-ADD"));
+            layout.Controls.Add(CreateCommandButton("REMOVE POINTS", "UFLS-PIPE-TOP-TABLE-REMOVE"));
+            layout.Controls.Add(CreateCommandButton("SCALE TABLE", "UFLS-PIPE-TOP-TABLE-UPDATE"));
+
+            layout.Controls.Add(CreateSectionLabel("DISPLAY"));
+            layout.Controls.Add(CreateCommandButton("DETAILS", "UFLS-PIPE-TOP-DETAILED"));
+            layout.Controls.Add(CreateCommandButton("NUMBERS", "UFLS-PIPE-TOP-EXHIBIT"));
+
+            return layout;
+        }
+
+        // ------------------------------------------------------------
+        // ADJUST TAB
         // ------------------------------------------------------------
         private Control BuildAdjustPanel()
         {
@@ -195,7 +220,6 @@ namespace CLV_CivilTools
             return layout;
         }
 
-
         // ------------------------------------------------------------
         // LABEL TAB
         // ------------------------------------------------------------
@@ -218,15 +242,14 @@ namespace CLV_CivilTools
         }
 
         // ------------------------------------------------------------
-        // UI HELPERS  (matched to PctPalette style)
+        // UI HELPERS
         // ------------------------------------------------------------
-
         private static FlowLayoutPanel CreateMainFlowPanel()
         {
             return new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                FlowDirection = System.Windows.Forms.FlowDirection.TopDown, // avoid ambiguity
+                FlowDirection = System.Windows.Forms.FlowDirection.TopDown,
                 WrapContents = false,
                 AutoScroll = true,
                 Padding = new Padding(8, 6, 8, 8)
@@ -243,7 +266,6 @@ namespace CLV_CivilTools
                 Padding = new Padding(0, 8, 0, 2),
             };
         }
-
 
         private Control CreateCommandButtonRow(
             string leftLabel, string leftCmd,
@@ -321,7 +343,6 @@ namespace CLV_CivilTools
             if (btn.Tag is not string tag || string.IsNullOrWhiteSpace(tag))
                 return;
 
-            // Special case: Drop Inlet -> call .NET Type A tool directly
             if (string.Equals(tag, "UFLS-DROP-INLET", StringComparison.OrdinalIgnoreCase))
             {
                 try
@@ -336,7 +357,6 @@ namespace CLV_CivilTools
                 return;
             }
 
-            // Special case: open UFLS manhole dialogs
             if (tag == "UFLS-MH-DIALOG")
             {
                 ShowManholeDialog(useSinglePointCenters: false);
@@ -349,7 +369,6 @@ namespace CLV_CivilTools
                 return;
             }
 
-            // Default: queue CAD command (like PCT palette does)
             try
             {
                 var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -443,31 +462,27 @@ namespace CLV_CivilTools
             _txtCodes = new TextBox
             {
                 Location = new Point(30, 110),
-                Width = 360,
+                Width = 300,
                 Enabled = false
             };
 
             _rbInHouse.CheckedChanged += OnSourceChanged;
-            _rbOthers.CheckedChanged += OnSourceChanged;
 
             _btnOk = new Button
             {
                 Text = "OK",
                 DialogResult = DialogResult.OK,
-                Location = new Point(190, 140),
-                Width = 80
+                Location = new Point(188, 142),
+                Width = 75
             };
 
             _btnCancel = new Button
             {
-                Text = "CANCEL",
+                Text = "Cancel",
                 DialogResult = DialogResult.Cancel,
-                Location = new Point(280, 140),
-                Width = 80
+                Location = new Point(269, 142),
+                Width = 75
             };
-
-            AcceptButton = _btnOk;
-            CancelButton = _btnCancel;
 
             Controls.Add(lblSource);
             Controls.Add(_rbInHouse);
@@ -476,60 +491,14 @@ namespace CLV_CivilTools
             Controls.Add(_txtCodes);
             Controls.Add(_btnOk);
             Controls.Add(_btnCancel);
+
+            AcceptButton = _btnOk;
+            CancelButton = _btnCancel;
         }
 
         private void OnSourceChanged(object? sender, EventArgs e)
         {
             _txtCodes.Enabled = _rbOthers.Checked;
         }
-    }
-
-    // ============================================================
-    // WRAPPER COMMANDS (REV CLOUD, FUTURE TOOLS)
-    // ============================================================
-    public static class UflsWrapperCommands
-    {
-        /// <summary>
-        /// Revision Cloud wrapper.
-        /// Asks for size: Large / Medium / Small, then calls
-        /// REVCLOUDLARGE / REVCLOUDMEDIUM / REVCLOUDSMALL (LISP).
-        /// </summary>
-        [CommandMethod("UFLS-REVCLOUD")]
-        public static void UflsRevcloud()
-        {
-            var doc = AcadApp.DocumentManager.MdiActiveDocument;
-            if (doc == null) return;
-            var ed = doc.Editor;
-
-            var pko = new PromptKeywordOptions(
-                "\nRevision cloud size [Large/Medium/Small] <Medium>: ")
-            {
-                AllowNone = true
-            };
-
-            pko.Keywords.Add("Large");
-            pko.Keywords.Add("Medium");
-            pko.Keywords.Add("Small");
-            pko.Keywords.Default = "Medium";
-
-            var res = ed.GetKeywords(pko);
-            if (res.Status == PromptStatus.Cancel) return;
-
-            string choice = res.StringResult;
-            if (string.IsNullOrEmpty(choice))
-                choice = "Medium";
-
-            string cmd = choice switch
-            {
-                "Large" => "REVCLOUDLARGE",
-                "Small" => "REVCLOUDSMALL",
-                _ => "REVCLOUDMEDIUM"
-            };
-
-            doc.SendStringToExecute(cmd + " ", true, false, false);
-        }
-
-        // Additional UFLS wrapper commands live in other source files
-        // (for example UflsLaterals.cs for lateral workflow commands).
     }
 }
