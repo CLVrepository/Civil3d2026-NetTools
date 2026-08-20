@@ -151,7 +151,6 @@ namespace CLV_CivilTools.Ufls
         private static List<CheckItem> FindPipeTopChecks(Database db, Transaction tr)
         {
             List<CheckItem> checks = new List<CheckItem>();
-            BlockTable blockTable = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
             DBDictionary layoutDictionary = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
 
             foreach (DBDictionaryEntry layoutEntry in layoutDictionary)
@@ -195,35 +194,56 @@ namespace CLV_CivilTools.Ufls
             if (layerTable.Has(goodLayerName))
                 return;
 
-            if (!layerTable.Has(sourceLayerName))
-            {
-                layerTable.UpgradeOpen();
-                LayerTableRecord newLayer = new LayerTableRecord { Name = goodLayerName };
-                layerTable.Add(newLayer);
-                tr.AddNewlyCreatedDBObject(newLayer, true);
-                return;
-            }
-
-            LayerTableRecord source = (LayerTableRecord)tr.GetObject(
-                layerTable[sourceLayerName],
-                OpenMode.ForRead);
-
             layerTable.UpgradeOpen();
-            LayerTableRecord good = new LayerTableRecord
+
+            LayerTableRecord goodLayer = new LayerTableRecord
             {
-                Name = goodLayerName,
-                Color = source.Color,
-                LinetypeObjectId = source.LinetypeObjectId,
-                LineWeight = source.LineWeight,
-                PlotStyleName = source.PlotStyleName,
-                Transparency = source.Transparency,
-                IsPlottable = source.IsPlottable,
-                IsFrozen = false,
-                IsOff = false
+                Name = goodLayerName
             };
 
-            layerTable.Add(good);
-            tr.AddNewlyCreatedDBObject(good, true);
+            if (layerTable.Has(sourceLayerName))
+            {
+                LayerTableRecord source = (LayerTableRecord)tr.GetObject(
+                    layerTable[sourceLayerName],
+                    OpenMode.ForRead);
+
+                goodLayer.Color = source.Color;
+                goodLayer.LinetypeObjectId = source.LinetypeObjectId;
+                goodLayer.LineWeight = source.LineWeight;
+                goodLayer.IsPlottable = source.IsPlottable;
+                goodLayer.IsFrozen = false;
+                goodLayer.IsOff = false;
+            }
+            else
+            {
+                goodLayer.IsPlottable = true;
+                goodLayer.IsFrozen = false;
+                goodLayer.IsOff = false;
+            }
+
+            layerTable.Add(goodLayer);
+            tr.AddNewlyCreatedDBObject(goodLayer, true);
+
+            // Transparency and plot style are assigned only after the new layer
+            // has been added to the database. Setting these on an unattached
+            // LayerTableRecord can raise eNoDatabase in AutoCAD.
+            if (layerTable.Has(sourceLayerName))
+            {
+                LayerTableRecord source = (LayerTableRecord)tr.GetObject(
+                    layerTable[sourceLayerName],
+                    OpenMode.ForRead);
+
+                goodLayer.Transparency = source.Transparency;
+
+                if (!db.PlotStyleMode)
+                {
+                    string plotStyleName = source.PlotStyleName;
+                    DBDictionary plotStyleDictionary =
+                        (DBDictionary)tr.GetObject(db.PlotStyleNameDictionaryId, OpenMode.ForRead);
+                    if (plotStyleDictionary.Contains(plotStyleName))
+                        goodLayer.PlotStyleName = plotStyleName;
+                }
+            }
         }
 
         private static string BuildDetailedLabel(double planTopElevation, double surveyTopElevation, double difference)
