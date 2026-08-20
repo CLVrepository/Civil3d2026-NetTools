@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 
 using Autodesk.AutoCAD.DatabaseServices;
@@ -13,6 +14,8 @@ namespace CLV_CivilTools.Ufls
     /// </summary>
     public static class PipeTopCheckDisplayCommands
     {
+        private const string BaseLayer = "V-SURV-CHCK";
+        private const string GoodLayer = BaseLayer + "-GOOD";
         private const double DetailedTextHeight = 0.10;
         private const double ExhibitTextHeight = 0.28;
 
@@ -38,33 +41,16 @@ namespace CLV_CivilTools.Ufls
             Editor ed = doc.Editor;
             Database db = doc.Database;
 
-            PromptSelectionOptions options = new PromptSelectionOptions
-            {
-                MessageForAdding = targetMode == PipeTopCheckData.DisplayMode.Exhibit
-                    ? "\nSelect Pipe Top Check labels for exhibit display: "
-                    : "\nSelect Pipe Top Check labels to restore detailed display: "
-            };
-
-            SelectionFilter filter = new SelectionFilter(new[]
-            {
-                new TypedValue((int)DxfCode.Start, "MTEXT")
-            });
-
-            PromptSelectionResult selection = ed.GetSelection(options, filter);
-            if (selection.Status != PromptStatus.OK)
-                return;
-
             int changed = 0;
             int skipped = 0;
 
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
-                foreach (SelectedObject? selected in selection.Value)
-                {
-                    if (selected == null)
-                        continue;
+                List<ObjectId> labelIds = FindPipeTopCheckLabels(db, tr);
 
-                    if (tr.GetObject(selected.ObjectId, OpenMode.ForWrite, false) is not MText label)
+                foreach (ObjectId labelId in labelIds)
+                {
+                    if (tr.GetObject(labelId, OpenMode.ForWrite, false) is not MText label)
                     {
                         skipped++;
                         continue;
@@ -84,6 +70,7 @@ namespace CLV_CivilTools.Ufls
                             continue;
                         }
 
+                        label.Layer = BaseLayer;
                         label.Contents = snapshot.ExhibitId;
                         label.TextHeight = ExhibitTextHeight;
                         label.Annotative = AnnotativeStates.True;
@@ -106,6 +93,7 @@ namespace CLV_CivilTools.Ufls
                     changed++;
                 }
 
+                SetGoodLayerState(tr, db, targetMode == PipeTopCheckData.DisplayMode.Detailed);
                 tr.Commit();
             }
 
@@ -116,6 +104,46 @@ namespace CLV_CivilTools.Ufls
             ed.WriteMessage(
                 $"\nPipe Top Check: {changed} label(s) set to {modeText} display" +
                 (skipped > 0 ? $"; {skipped} skipped." : "."));
+        }
+
+        private static List<ObjectId> FindPipeTopCheckLabels(Database db, Transaction tr)
+        {
+            List<ObjectId> labels = new List<ObjectId>();
+            DBDictionary layoutDictionary =
+                (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
+
+            foreach (DBDictionaryEntry layoutEntry in layoutDictionary)
+            {
+                Layout layout = (Layout)tr.GetObject(layoutEntry.Value, OpenMode.ForRead, false);
+                BlockTableRecord blockRecord = (BlockTableRecord)tr.GetObject(
+                    layout.BlockTableRecordId,
+                    OpenMode.ForRead,
+                    false);
+
+                foreach (ObjectId entityId in blockRecord)
+                {
+                    if (tr.GetObject(entityId, OpenMode.ForRead, false) is not MText label)
+                        continue;
+
+                    if (PipeTopCheckData.TryRead(label, tr, out _))
+                        labels.Add(entityId);
+                }
+            }
+
+            return labels;
+        }
+
+        private static void SetGoodLayerState(Transaction tr, Database db, bool turnOn)
+        {
+            LayerTable layerTable = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+            if (!layerTable.Has(GoodLayer))
+                return;
+
+            LayerTableRecord goodLayer = (LayerTableRecord)tr.GetObject(
+                layerTable[GoodLayer],
+                OpenMode.ForWrite,
+                false);
+            goodLayer.IsOff = !turnOn;
         }
 
         private static string BuildDetailedLabel(
