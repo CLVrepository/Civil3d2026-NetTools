@@ -158,6 +158,28 @@ namespace CLV_CivilTools.Ufls
 
                         ms.AppendEntity(label);
                         tr.AddNewlyCreatedDBObject(label, true);
+
+                        PipeTopCheckData.Write(
+                            label,
+                            tr,
+                            new PipeTopCheckData.Snapshot(
+                                Guid.NewGuid(),
+                                checkPoint.Value.PointNumber,
+                                checkPoint.Value.CogoPointId,
+                                per.ObjectId,
+                                per.ObjectId.Handle.ToString(),
+                                info.Name,
+                                checkPoint.Value.Location,
+                                labelPoint.Value,
+                                planTopElevation,
+                                surveyTopElevation,
+                                difference,
+                                info.StationFromStart,
+                                info.PickedOffset,
+                                PipeTopCheckData.DisplayMode.Detailed,
+                                string.Empty,
+                                DateTime.UtcNow));
+
                         tr.Commit();
                     }
                 }
@@ -193,8 +215,13 @@ namespace CLV_CivilTools.Ufls
                 {
                     Point3d location = cp.Location;
                     double elevation = cp.Elevation;
+                    string pointNumber = cp.PointNumber.ToString(CultureInfo.InvariantCulture);
                     tr.Commit();
-                    return new PipeTopCheckPoint(new Point3d(location.X, location.Y, 0.0), elevation);
+                    return new PipeTopCheckPoint(
+                        per.ObjectId,
+                        pointNumber,
+                        new Point3d(location.X, location.Y, elevation),
+                        elevation);
                 }
 
                 tr.Commit();
@@ -239,7 +266,11 @@ namespace CLV_CivilTools.Ufls
         ? "<not available>"
         : value.ToString("+0.000;-0.000;0.000", CultureInfo.InvariantCulture);
 
-        private readonly record struct PipeTopCheckPoint(Point3d Location, double Elevation);
+        private readonly record struct PipeTopCheckPoint(
+            ObjectId CogoPointId,
+            string PointNumber,
+            Point3d Location,
+            double Elevation);
 
         internal static PipeInfoResult BuildPipeInfo(DBObject pipeObj, Point3d pickedPoint)
         {
