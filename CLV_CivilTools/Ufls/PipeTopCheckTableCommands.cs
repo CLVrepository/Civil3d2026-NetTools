@@ -38,9 +38,12 @@ namespace CLV_CivilTools.Ufls
 
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
+                LayerTableRecord currentLayer =
+                    (LayerTableRecord)tr.GetObject(db.Clayer, OpenMode.ForRead, false);
+
                 Table table = new Table
                 {
-                    Layer = db.Clayer,
+                    Layer = currentLayer.Name,
                     Position = pointResult.Value
                 };
 
