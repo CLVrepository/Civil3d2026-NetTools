@@ -53,6 +53,10 @@ namespace CLV_CivilTools.Ufls
             style.SetTextStyle(textStyleId, allRows);
             style.SetTextHeight(HeaderTextHeight, (int)RowType.HeaderRow);
             style.SetTextHeight(DataTextHeight, (int)RowType.DataRow);
+            style.SetTextHeight(HeaderTextHeight, (int)RowType.TitleRow);
+            style.SetAlignment(CellAlignment.MiddleCenter, allRows);
+            style.HorizontalCellMargin = 0.05;
+            style.VerticalCellMargin = 0.03;
             style.SetColor(
                 Autodesk.AutoCAD.Colors.Color.FromColorIndex(
                     Autodesk.AutoCAD.Colors.ColorMethod.ByAci,
