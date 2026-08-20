@@ -10,6 +10,9 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
+using Autodesk.Civil.DatabaseServices;
+
+using CLV_CivilTools.Shared;
 
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
@@ -68,7 +71,172 @@ namespace CLV_CivilTools.Ufls
             }
         }
 
-        private static PipeInfoResult BuildPipeInfo(DBObject pipeObj, Point3d pickedPoint)
+
+
+        [CommandMethod("UFLS-PIPE-TOP-CHECK")]
+        public static void RunPipeTopCheck()
+        {
+            Document? doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+                return;
+
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            try
+            {
+                PipeTopCheckPoint? checkPoint = PromptForCogoCheckPoint(ed, db);
+                if (checkPoint == null)
+                    return;
+
+                PromptEntityOptions peo = new PromptEntityOptions("\nSelect Civil 3D pipe: ");
+                peo.AllowNone = false;
+                PromptEntityResult per = ed.GetEntity(peo);
+                if (per.Status != PromptStatus.OK)
+                    return;
+
+                PipeInfoResult info;
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    DBObject dbo = tr.GetObject(per.ObjectId, OpenMode.ForRead, false);
+                    if (!IsCivilPipe(dbo))
+                    {
+                        ed.WriteMessage("\nSelected object is not a Civil 3D pipe.");
+                        return;
+                    }
+
+                    info = BuildPipeInfo(dbo, checkPoint.Value.Location);
+                    tr.Commit();
+                }
+
+                if (double.IsNaN(info.TopOfPipeElevation))
+                {
+                    ed.WriteMessage("\nPipe top elevation could not be calculated for the selected pipe.");
+                    return;
+                }
+
+                ObjectId textStyleId = GetRequiredTextStyleId(db, PipeTopCheckTextStyleName);
+                if (textStyleId.IsNull)
+                {
+                    ed.WriteMessage("\nCLV-Non Anno text style is not present in this drawing. Please load it from the CLV template.");
+                    return;
+                }
+
+                double planTopElevation = info.TopOfPipeElevation;
+                double surveyTopElevation = checkPoint.Value.Elevation;
+                double difference = surveyTopElevation - planTopElevation;
+
+                PromptPointResult labelPoint = ed.GetPoint("\nSpecify label location: ");
+                if (labelPoint.Status != PromptStatus.OK)
+                    return;
+
+                ObjectId originalLayerId = db.Clayer;
+                try
+                {
+                    using (Transaction tr = db.TransactionManager.StartTransaction())
+                    {
+                        LayerStandards.TryEnsureManagedLayer(db, tr, ed, LayerStandards.UflsPipeTopCheckLayerName);
+                        LayerTable lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+                        if (!lt.Has(LayerStandards.UflsPipeTopCheckLayerName))
+                            throw new InvalidOperationException($"Layer {LayerStandards.UflsPipeTopCheckLayerName} could not be created.");
+
+                        db.Clayer = lt[LayerStandards.UflsPipeTopCheckLayerName];
+
+                        BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                        BlockTableRecord ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+
+                        MText label = new MText
+                        {
+                            Location = labelPoint.Value,
+                            Attachment = AttachmentPoint.TopLeft,
+                            TextHeight = PipeTopCheckTextHeight,
+                            TextStyleId = textStyleId,
+                            Layer = LayerStandards.UflsPipeTopCheckLayerName,
+                            Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByLayer, 256),
+                            Contents = BuildPipeTopCheckLabel(planTopElevation, surveyTopElevation, difference)
+                        };
+
+                        ms.AppendEntity(label);
+                        tr.AddNewlyCreatedDBObject(label, true);
+                        tr.Commit();
+                    }
+                }
+                finally
+                {
+                    RestoreCurrentLayer(db, originalLayerId, ed);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\nUFLS-PIPE-TOP-CHECK error: {ex.Message}");
+            }
+        }
+
+        private const string PipeTopCheckTextStyleName = "CLV-Non Anno";
+        private const double PipeTopCheckTextHeight = 0.1;
+
+        private static PipeTopCheckPoint? PromptForCogoCheckPoint(Editor ed, Database db)
+        {
+            while (true)
+            {
+                PromptEntityOptions peo = new PromptEntityOptions("\nSelect AEC point for pipe top check: ");
+                peo.AllowNone = false;
+                peo.SetRejectMessage("\nSelected object is not a Civil 3D COGO point.");
+                peo.AddAllowedClass(typeof(CogoPoint), exactMatch: false);
+
+                PromptEntityResult per = ed.GetEntity(peo);
+                if (per.Status != PromptStatus.OK)
+                    return null;
+
+                using Transaction tr = db.TransactionManager.StartTransaction();
+                if (tr.GetObject(per.ObjectId, OpenMode.ForRead, false) is CogoPoint cp)
+                {
+                    Point3d location = cp.Location;
+                    double elevation = cp.Elevation;
+                    tr.Commit();
+                    return new PipeTopCheckPoint(new Point3d(location.X, location.Y, 0.0), elevation);
+                }
+
+                tr.Commit();
+                ed.WriteMessage("\nSelected object is not a Civil 3D COGO point.");
+            }
+        }
+
+        private static ObjectId GetRequiredTextStyleId(Database db, string styleName)
+        {
+            using Transaction tr = db.TransactionManager.StartTransaction();
+            TextStyleTable tst = (TextStyleTable)tr.GetObject(db.TextStyleTableId, OpenMode.ForRead);
+            ObjectId id = tst.Has(styleName) ? tst[styleName] : ObjectId.Null;
+            tr.Commit();
+            return id;
+        }
+
+        private static void RestoreCurrentLayer(Database db, ObjectId layerId, Editor ed)
+        {
+            if (layerId.IsNull)
+                return;
+
+            try
+            {
+                using Transaction tr = db.TransactionManager.StartTransaction();
+                if (!layerId.IsErased && tr.GetObject(layerId, OpenMode.ForRead, false) is LayerTableRecord)
+                    db.Clayer = layerId;
+                tr.Commit();
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\nUnable to restore the original current layer: {ex.Message}");
+            }
+        }
+
+        private static string BuildPipeTopCheckLabel(double planTopElevation, double surveyTopElevation, double difference)
+            => $"PLAN - TOP = {FormatElevation(planTopElevation)}\\P" +
+               $"SURV - TOP = {FormatElevation(surveyTopElevation)}\\P" +
+               $"DIFF = {FormatElevation(difference)}";
+
+        private readonly record struct PipeTopCheckPoint(Point3d Location, double Elevation);
+
+        internal static PipeInfoResult BuildPipeInfo(DBObject pipeObj, Point3d pickedPoint)
         {
             Point3d start = GetPointProperty(pipeObj, "StartPoint");
             Point3d end = GetPointProperty(pipeObj, "EndPoint");
@@ -334,7 +502,7 @@ namespace CLV_CivilTools.Ufls
             (9.562, 0.843), (11.374, 1.031), (13.124, 1.25), (15.0, 1.5)
         };
 
-        private static bool IsCivilPipe(object? obj)
+        internal static bool IsCivilPipe(object? obj)
             => HasTypeName(obj, "Autodesk.Civil.DatabaseServices.Pipe") || HasTypeName(obj, "AeccPipe");
 
         private static bool HasTypeName(object? obj, string fullOrShortName)
@@ -458,7 +626,7 @@ namespace CLV_CivilTools.Ufls
             return $"{ToPipeInches(value):0.000}\"";
         }
 
-        private static string FormatElevation(double value)
+        internal static string FormatElevation(double value)
             => double.IsNaN(value) ? "<not available>" : value.ToString("0.000", CultureInfo.InvariantCulture);
 
         private static string FormatSlope(double value)
@@ -469,7 +637,7 @@ namespace CLV_CivilTools.Ufls
             return $"{value * 100.0:0.000}% ({value:0.000000} ft/ft)";
         }
 
-        private sealed record PipeInfoResult(
+        internal sealed record PipeInfoResult(
             string Name,
             string Size,
             string Material,

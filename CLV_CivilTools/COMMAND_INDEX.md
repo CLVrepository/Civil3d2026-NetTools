@@ -1,3 +1,6 @@
+## 2026-08-20 - Q1 Pipe Top Check
+- `UFLS-PIPE-TOP-CHECK` - Q1 UFLS > CHECK tab > INFO > `PIPE TOP CHECK`; selects a Civil 3D COGO point, then a Civil 3D pipe, calculates `PLAN - TOP` using the existing `UFLS-PIPE-INFO` top-of-pipe logic at the COGO point X/Y, uses the COGO point Elevation as `SURV - TOP`, calculates `DIFF = SURV - TOP - PLAN - TOP`, and places one left-aligned three-line MText label (`PLAN - TOP`, `SURV - TOP`, `DIFF`) on `V-SURV-CHCK` with `CLV-Non Anno` text style and `0.1` text height.
+
 ## 2026-07-22 - Legal Description Builder Phases 1-2
 - `LEGALDESC` / `CLV-LEGAL-DESCRIPTION` - Builds an ordered legal traverse from selected LINE and ARC entities, prompts for POB and optional POC, calculates line/curve calls, forward closure, reverse build, length, and area, then opens the editable legal-description palette.
 - `LEGALDESC-OPEN` - Reopens the legal-description session saved in the current drawing.
@@ -117,6 +120,7 @@ CLVHELP | Help/ClvHelpCommands.cs | Command Line | Opens the shared CLV Civil To
 Q2 | Gis/GisPalette.cs | Command Line | Opens the GIS / aerial palette. GIS tab now labels the reference area as `SECTION/COORDINATE SYSTEM` and separates coordinate-zone display from section display.
 PCT.Q3 | PoinCloud/PctPalette.cs | Command Line | Opens the point-cloud tools palette.
 UFLS.Q1 / UFLS.Q11 | Ufls/UflsPalette.cs | Command Line | Opens the UFLS palette. Q1 is the primary command; Q11 is retained as a legacy alias.
+UFLS-PIPE-TOP-CHECK | Ufls/UflsPipeInfo.cs | Q1 UFLS > CHECK > INFO > `PIPE TOP CHECK` | Selects a Civil 3D COGO point and pipe, compares COGO Elevation (`SURV - TOP`) against calculated top-of-pipe at the COGO X/Y (`PLAN - TOP`), then places a three-line MText check label on `V-SURV-CHCK` using `CLV-Non Anno` at 0.1 height.
 Q4 / SURVEY.Q4 | Survey/SurveyPalette.cs | Command Line | Opens the survey mapping palette.
 CLV-GIS-DISPLAY-COORDINATE-ZONES / CLV-GIS-LOAD-REFERENCE-LAYERS | Gis/GisReferenceLayers.cs | Command Line / Q2 GIS (`SECTION/COORDINATE SYSTEM` > `DISPLAY COORDINATE ZONES`) | Displays only the NV83.NCRS-LVF and NV83.NCRS-LVHEF coordinate-zone reference layer files. The legacy load command is retained but no longer loads `CLV_Sections`.
 CLV-GIS-UNLOAD-COORDINATE-ZONES / CLV-GIS-UNLOAD-REFERENCE-LAYERS | Gis/GisReferenceLayers.cs | Command Line / Q2 GIS (`SECTION/COORDINATE SYSTEM` > `UNLOAD COORDINATE ZONES`) | Removes only the coordinate-zone reference layers and their map-session connections.

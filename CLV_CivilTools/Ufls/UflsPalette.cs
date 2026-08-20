@@ -148,6 +148,7 @@ namespace CLV_CivilTools
 
             layout.Controls.Add(CreateSectionLabel("INFO"));
             layout.Controls.Add(CreateCommandButton("PIPE INFO @ POINT", "UFLS-PIPE-INFO"));
+            layout.Controls.Add(CreateCommandButton("PIPE TOP CHECK", "UFLS-PIPE-TOP-CHECK"));
 
             return layout;
         }
