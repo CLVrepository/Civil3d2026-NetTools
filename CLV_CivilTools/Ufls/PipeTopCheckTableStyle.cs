@@ -1,5 +1,4 @@
 using System;
-using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using CLV_CivilTools.Shared;
@@ -55,14 +54,16 @@ namespace CLV_CivilTools.Ufls
             style.SetTextHeight(HeaderTextHeight, (int)RowType.HeaderRow);
             style.SetTextHeight(DataTextHeight, (int)RowType.DataRow);
             style.SetColor(
-                Color.FromColorIndex(ColorMethod.ByAci, 6),
+                Autodesk.AutoCAD.Colors.Color.FromColorIndex(
+                    Autodesk.AutoCAD.Colors.ColorMethod.ByAci,
+                    6),
                 allRows);
             style.SetGridColor(
-                Color.FromColorIndex(ColorMethod.ByAci, 6),
+                Autodesk.AutoCAD.Colors.Color.FromColorIndex(
+                    Autodesk.AutoCAD.Colors.ColorMethod.ByAci,
+                    6),
                 (int)GridLineType.AllGridLines,
                 allRows);
-            style.TitleSuppressed = true;
-            style.HeaderSuppressed = false;
 
             return styleId;
         }
