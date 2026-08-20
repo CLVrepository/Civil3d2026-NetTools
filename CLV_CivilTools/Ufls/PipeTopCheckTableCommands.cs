@@ -5,6 +5,7 @@ using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
+using CLV_CivilTools.Shared;
 
 namespace CLV_CivilTools.Ufls
 {
@@ -13,8 +14,7 @@ namespace CLV_CivilTools.Ufls
     /// </summary>
     public static class PipeTopCheckTableCommands
     {
-        private const double RowHeight = 0.20;
-        private static readonly double[] ColumnWidths = { 0.45, 1.10, 1.10, 0.85, 0.90, 0.75 };
+        private static readonly double[] ColumnWidths = { 0.55, 1.20, 1.20, 0.95, 1.05, 0.85 };
 
         [CommandMethod("UFLS-PIPE-TOP-TABLE")]
         public static void CreatePipeTopCheckTable()
@@ -38,12 +38,28 @@ namespace CLV_CivilTools.Ufls
 
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
-                LayerTableRecord currentLayer =
-                    (LayerTableRecord)tr.GetObject(db.Clayer, OpenMode.ForRead, false);
+                ObjectId tableStyleId = PipeTopCheckTableStyle.Ensure(db, tr, ed);
+                if (tableStyleId.IsNull)
+                    return;
+
+                if (!LayerStandards.TryEnsureManagedLayer(
+                        db,
+                        tr,
+                        ed,
+                        LayerStandards.UflsPipeTopCheckLayerName))
+                {
+                    ed.WriteMessage($"\nPipe Top Check table: managed layer '{LayerStandards.UflsPipeTopCheckLayerName}' is not available in layer standards.");
+                    return;
+                }
+
+                LayerTable layerTable =
+                    (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead, false);
+                ObjectId layerId = layerTable[LayerStandards.UflsPipeTopCheckLayerName];
 
                 Table table = new Table
                 {
-                    Layer = currentLayer.Name,
+                    TableStyle = tableStyleId,
+                    LayerId = layerId,
                     Position = pointResult.Value
                 };
 
@@ -58,7 +74,7 @@ namespace CLV_CivilTools.Ufls
                 tr.Commit();
             }
 
-            ed.WriteMessage($"\nCreated Pipe Top Check table with {checks.Count} point(s).");
+            ed.WriteMessage($"\nCreated Pipe Top Check table with {checks.Count} point(s) on {LayerStandards.UflsPipeTopCheckLayerName}.");
         }
 
         [CommandMethod("UFLS-PIPE-TOP-TABLE-UPDATE")]
@@ -195,6 +211,25 @@ namespace CLV_CivilTools.Ufls
                     return;
                 }
 
+                ObjectId tableStyleId = PipeTopCheckTableStyle.Ensure(db, tr, ed);
+                if (tableStyleId.IsNull)
+                    return;
+
+                if (!LayerStandards.TryEnsureManagedLayer(
+                        db,
+                        tr,
+                        ed,
+                        LayerStandards.UflsPipeTopCheckLayerName))
+                {
+                    ed.WriteMessage($"\nPipe Top Check table: managed layer '{LayerStandards.UflsPipeTopCheckLayerName}' is not available in layer standards.");
+                    return;
+                }
+
+                LayerTable layerTable =
+                    (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead, false);
+                table.TableStyle = tableStyleId;
+                table.LayerId = layerTable[LayerStandards.UflsPipeTopCheckLayerName];
+
                 Dictionary<Guid, PipeTopCheckData.Snapshot> checks = FindChecksById(db, tr, ids);
                 List<PipeTopCheckData.Snapshot> ordered = ids
                     .Where(checks.ContainsKey)
@@ -216,16 +251,42 @@ namespace CLV_CivilTools.Ufls
         private static void ConfigureTable(Table table, IReadOnlyList<PipeTopCheckData.Snapshot> checks)
         {
             table.SetSize(checks.Count + 1, 6);
-            table.SetRowHeight(RowHeight);
 
             for (int column = 0; column < ColumnWidths.Length; column++)
                 table.Columns[column].Width = ColumnWidths[column];
+
+            table.Rows[0].Height = PipeTopCheckTableStyle.HeaderRowHeight;
+            for (int row = 1; row < checks.Count + 1; row++)
+                table.Rows[row].Height = PipeTopCheckTableStyle.DataRowHeight;
 
             SetHeader(table);
             for (int row = 0; row < checks.Count; row++)
                 SetDataRow(table, row + 1, checks[row]);
 
+            ApplyCellFormatting(table);
             table.GenerateLayout();
+        }
+
+        private static void ApplyCellFormatting(Table table)
+        {
+            for (int column = 0; column < table.Columns.Count; column++)
+            {
+                Cell header = table.Cells[0, column];
+                header.TextHeight = PipeTopCheckTableStyle.HeaderTextHeight;
+                header.Alignment = CellAlignment.MiddleCenter;
+            }
+
+            for (int row = 1; row < table.Rows.Count; row++)
+            {
+                for (int column = 0; column < table.Columns.Count; column++)
+                {
+                    Cell cell = table.Cells[row, column];
+                    cell.TextHeight = PipeTopCheckTableStyle.DataTextHeight;
+                    cell.Alignment = column == 0
+                        ? CellAlignment.MiddleCenter
+                        : CellAlignment.MiddleRight;
+                }
+            }
         }
 
         private static List<PipeTopCheckData.Snapshot> SelectChecks(Editor ed, Database db, string prompt)
