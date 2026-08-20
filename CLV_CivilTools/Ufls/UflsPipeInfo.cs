@@ -10,7 +10,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
-using Autodesk.Civil.DatabaseServices;
+
 
 using CLV_CivilTools.Shared;
 
@@ -182,14 +182,14 @@ namespace CLV_CivilTools.Ufls
                 PromptEntityOptions peo = new PromptEntityOptions("\nSelect AEC point for pipe top check: ");
                 peo.AllowNone = false;
                 peo.SetRejectMessage("\nSelected object is not a Civil 3D COGO point.");
-                peo.AddAllowedClass(typeof(CogoPoint), exactMatch: false);
+                peo.AddAllowedClass(typeof(Autodesk.Civil.DatabaseServices.CogoPoint), exactMatch: false);
 
                 PromptEntityResult per = ed.GetEntity(peo);
                 if (per.Status != PromptStatus.OK)
                     return null;
 
                 using Transaction tr = db.TransactionManager.StartTransaction();
-                if (tr.GetObject(per.ObjectId, OpenMode.ForRead, false) is CogoPoint cp)
+                if (tr.GetObject(per.ObjectId, OpenMode.ForRead, false) is Autodesk.Civil.DatabaseServices.CogoPoint cp)
                 {
                     Point3d location = cp.Location;
                     double elevation = cp.Elevation;
@@ -232,7 +232,12 @@ namespace CLV_CivilTools.Ufls
         private static string BuildPipeTopCheckLabel(double planTopElevation, double surveyTopElevation, double difference)
             => $"PLAN - TOP = {FormatElevation(planTopElevation)}\\P" +
                $"SURV - TOP = {FormatElevation(surveyTopElevation)}\\P" +
-               $"DIFF = {FormatElevation(difference)}";
+               $"\\C1;DIFF = {FormatSignedDifference(difference)}";
+
+        private static string FormatSignedDifference(double value)
+    => double.IsNaN(value)
+        ? "<not available>"
+        : value.ToString("+0.000;-0.000;0.000", CultureInfo.InvariantCulture);
 
         private readonly record struct PipeTopCheckPoint(Point3d Location, double Elevation);
 
