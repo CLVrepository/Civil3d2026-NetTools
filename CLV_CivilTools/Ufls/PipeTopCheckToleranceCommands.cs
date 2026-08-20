@@ -133,12 +133,27 @@ namespace CLV_CivilTools.Ufls
                         }
                     }
 
+                    // Keep the within-tolerance review labels available for review,
+                    // but turn their layer off when the tolerance command finishes so
+                    // only the exhibit-worthy points remain visible by default.
+                    LayerTable layerTable =
+                        (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead, false);
+                    if (layerTable.Has(goodLayer))
+                    {
+                        LayerTableRecord goodLayerRecord =
+                            (LayerTableRecord)tr.GetObject(
+                                layerTable[goodLayer],
+                                OpenMode.ForWrite,
+                                false);
+                        goodLayerRecord.IsOff = true;
+                    }
+
                     tr.Commit();
 
                     ed.WriteMessage(
                         $"\nPipe Top Check tolerance review complete: {exceedsCount} over tolerance, {goodCount} within tolerance." +
                         $" Tolerance = {tolerance:0.000}." +
-                        $" Good checks moved to {goodLayer}." +
+                        $" Good checks moved to {goodLayer} and layer turned off." +
                         (idsAssigned > 0 ? $" {idsAssigned} exhibit ID(s) assigned." : string.Empty));
                 }
             }
