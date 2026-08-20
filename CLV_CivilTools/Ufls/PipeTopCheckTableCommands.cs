@@ -85,8 +85,7 @@ namespace CLV_CivilTools.Ufls
         [CommandMethod("UFLS-PIPE-TOP-TABLE-UPDATE")]
         public static void UpdatePipeTopCheckTable()
         {
-            if (TrySelectTable(out ObjectId tableId))
-                UpdateTable(tableId);
+            UpdateAllPipeTopCheckTables();
         }
 
         [CommandMethod("UFLS-PIPE-TOP-TABLE-ADD")]
@@ -191,7 +190,7 @@ namespace CLV_CivilTools.Ufls
             return true;
         }
 
-        private static void UpdateTable(ObjectId tableId)
+        private static void UpdateAllPipeTopCheckTables()
         {
             Autodesk.AutoCAD.ApplicationServices.Document? doc =
                 Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
@@ -200,6 +199,71 @@ namespace CLV_CivilTools.Ufls
 
             Database db = doc.Database;
             Editor ed = doc.Editor;
+            List<ObjectId> tableIds;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                tableIds = FindPipeTopCheckTables(db, tr);
+                tr.Commit();
+            }
+
+            if (tableIds.Count == 0)
+            {
+                ed.WriteMessage("\nNo Pipe Top Check tables were found in the drawing.");
+                return;
+            }
+
+            int updated = 0;
+            foreach (ObjectId tableId in tableIds)
+            {
+                if (UpdateTable(tableId))
+                    updated++;
+            }
+
+            ed.WriteMessage($"\nUpdated {updated} Pipe Top Check table(s) to the current annotation scale.");
+        }
+
+        private static List<ObjectId> FindPipeTopCheckTables(Database db, Transaction tr)
+        {
+            List<ObjectId> tableIds = new List<ObjectId>();
+            DBDictionary layoutDictionary =
+                (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
+
+            foreach (DBDictionaryEntry layoutEntry in layoutDictionary)
+            {
+                Layout layout = (Layout)tr.GetObject(layoutEntry.Value, OpenMode.ForRead, false);
+                BlockTableRecord blockRecord = (BlockTableRecord)tr.GetObject(
+                    layout.BlockTableRecordId,
+                    OpenMode.ForRead,
+                    false);
+
+                foreach (ObjectId objectId in blockRecord)
+                {
+                    if (tr.GetObject(objectId, OpenMode.ForRead, false) is Table table &&
+                        PipeTopCheckTableData.TryRead(
+                            table,
+                            tr,
+                            out _,
+                            out _))
+                    {
+                        tableIds.Add(objectId);
+                    }
+                }
+            }
+
+            return tableIds;
+        }
+
+        private static bool UpdateTable(ObjectId tableId)
+        {
+            Autodesk.AutoCAD.ApplicationServices.Document? doc =
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+                return false;
+
+            Database db = doc.Database;
+            Editor ed = doc.Editor;
+            bool updated = false;
 
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
@@ -208,19 +272,19 @@ namespace CLV_CivilTools.Ufls
                         table, tr, out List<Guid> ids, out double oldScaleFactor))
                 {
                     ed.WriteMessage("\nSelected table is not a Pipe Top Check table.");
-                    return;
+                    return false;
                 }
 
                 ObjectId tableStyleId = PipeTopCheckTableStyle.Ensure(db, tr, ed);
                 if (tableStyleId.IsNull)
-                    return;
+                    return false;
 
                 if (!LayerStandards.TryEnsureManagedLayer(
                         db, tr, ed, LayerStandards.UflsPipeTopCheckLayerName))
                 {
                     ed.WriteMessage(
                         $"\nPipe Top Check table: managed layer '{LayerStandards.UflsPipeTopCheckLayerName}' is not available in layer standards.");
-                    return;
+                    return false;
                 }
 
                 LayerTable layerTable =
@@ -248,10 +312,10 @@ namespace CLV_CivilTools.Ufls
                 PipeTopCheckTableData.Write(
                     table, tr, ordered.Select(c => c.Id), newScaleFactor);
                 tr.Commit();
-
-                ed.WriteMessage(
-                    $"\nUpdated Pipe Top Check table: {ordered.Count} point(s), annotation scale factor {newScaleFactor:0.###}.");
+                updated = true;
             }
+
+            return updated;
         }
 
         private static double GetCurrentModelScaleFactor(Database db)
