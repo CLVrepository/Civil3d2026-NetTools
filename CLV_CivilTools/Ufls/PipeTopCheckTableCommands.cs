@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using CLV_CivilTools.Shared;
 
@@ -11,6 +12,8 @@ namespace CLV_CivilTools.Ufls
 {
     /// <summary>
     /// Creates and maintains AutoCAD tables backed by Pipe Top Check metadata.
+    /// Tables are scaled from the current annotation scale because AutoCAD 2026
+    /// does not support attaching annotation contexts directly to Table objects.
     /// </summary>
     public static class PipeTopCheckTableCommands
     {
@@ -35,6 +38,8 @@ namespace CLV_CivilTools.Ufls
             PromptPointResult pointResult = ed.GetPoint("\nSpecify table insertion point: ");
             if (pointResult.Status != PromptStatus.OK)
                 return;
+
+            double scaleFactor = GetCurrentModelScaleFactor(db);
 
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
@@ -64,17 +69,18 @@ namespace CLV_CivilTools.Ufls
                 };
 
                 ConfigureTable(table, checks);
+                ApplyScale(table, scaleFactor);
 
                 BlockTableRecord currentSpace =
                     (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite, false);
                 currentSpace.AppendEntity(table);
                 tr.AddNewlyCreatedDBObject(table, true);
 
-                PipeTopCheckTableData.Write(table, tr, checks.Select(c => c.Id));
+                PipeTopCheckTableData.Write(table, tr, checks.Select(c => c.Id), scaleFactor);
                 tr.Commit();
             }
 
-            ed.WriteMessage($"\nCreated Pipe Top Check table with {checks.Count} point(s) on {LayerStandards.UflsPipeTopCheckLayerName}.");
+            ed.WriteMessage($"\nCreated Pipe Top Check table with {checks.Count} point(s) on {LayerStandards.UflsPipeTopCheckLayerName} at annotation scale factor {scaleFactor:0.###}.");
         }
 
         [CommandMethod("UFLS-PIPE-TOP-TABLE-UPDATE")]
@@ -115,7 +121,11 @@ namespace CLV_CivilTools.Ufls
                     return;
                 }
 
-                List<Guid> ids = PipeTopCheckTableData.TryRead(table, tr, out List<Guid> existing)
+                List<Guid> ids = PipeTopCheckTableData.TryRead(
+                    table,
+                    tr,
+                    out List<Guid> existing,
+                    out double scaleFactor)
                     ? existing
                     : new List<Guid>();
 
@@ -125,7 +135,7 @@ namespace CLV_CivilTools.Ufls
                         ids.Add(check.Id);
                 }
 
-                PipeTopCheckTableData.Write(table, tr, ids);
+                PipeTopCheckTableData.Write(table, tr, ids, scaleFactor);
                 tr.Commit();
             }
 
@@ -156,7 +166,7 @@ namespace CLV_CivilTools.Ufls
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
                 if (tr.GetObject(tableId, OpenMode.ForWrite, false) is not Table table ||
-                    !PipeTopCheckTableData.TryRead(table, tr, out List<Guid> ids))
+                    !PipeTopCheckTableData.TryRead(table, tr, out List<Guid> ids, out double scaleFactor))
                 {
                     ed.WriteMessage("\nSelected table is not a Pipe Top Check table.");
                     return;
@@ -165,7 +175,7 @@ namespace CLV_CivilTools.Ufls
                 foreach (PipeTopCheckData.Snapshot check in removals)
                     ids.Remove(check.Id);
 
-                PipeTopCheckTableData.Write(table, tr, ids);
+                PipeTopCheckTableData.Write(table, tr, ids, scaleFactor);
                 tr.Commit();
             }
 
@@ -205,7 +215,7 @@ namespace CLV_CivilTools.Ufls
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
                 if (tr.GetObject(tableId, OpenMode.ForWrite, false) is not Table table ||
-                    !PipeTopCheckTableData.TryRead(table, tr, out List<Guid> ids))
+                    !PipeTopCheckTableData.TryRead(table, tr, out List<Guid> ids, out double oldScaleFactor))
                 {
                     ed.WriteMessage("\nSelected table is not a Pipe Top Check table.");
                     return;
@@ -240,12 +250,39 @@ namespace CLV_CivilTools.Ufls
                     .ThenBy(c => c.CheckPointLocation.X)
                     .ToList();
 
+                // Normalize the existing table to its unscaled geometry before rebuilding it.
+                if (oldScaleFactor != 1.0)
+                    ApplyScale(table, 1.0 / oldScaleFactor);
+
                 ConfigureTable(table, ordered);
-                PipeTopCheckTableData.Write(table, tr, ordered.Select(c => c.Id));
+
+                double newScaleFactor = GetCurrentModelScaleFactor(db);
+                ApplyScale(table, newScaleFactor);
+                PipeTopCheckTableData.Write(table, tr, ordered.Select(c => c.Id), newScaleFactor);
                 tr.Commit();
 
-                ed.WriteMessage($"\nUpdated Pipe Top Check table: {ordered.Count} point(s).");
+                ed.WriteMessage($"\nUpdated Pipe Top Check table: {ordered.Count} point(s), annotation scale factor {newScaleFactor:0.###}.");
             }
+        }
+
+        private static double GetCurrentModelScaleFactor(Database db)
+        {
+            AnnotationScale scale = db.Cannoscale;
+            if (scale == null || scale.PaperUnits <= 0.0 || scale.DrawingUnits <= 0.0)
+                return 1.0;
+
+            double factor = scale.DrawingUnits / scale.PaperUnits;
+            return double.IsNaN(factor) || double.IsInfinity(factor) || factor <= 0.0
+                ? 1.0
+                : factor;
+        }
+
+        private static void ApplyScale(Table table, double scaleFactor)
+        {
+            if (Math.Abs(scaleFactor - 1.0) < 0.0000001)
+                return;
+
+            table.TransformBy(Matrix3d.Scaling(scaleFactor, table.Position));
         }
 
         private static void ConfigureTable(Table table, IReadOnlyList<PipeTopCheckData.Snapshot> checks)
