@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
-using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
@@ -51,10 +50,6 @@ namespace CLV_CivilTools.Ufls
 
             try
             {
-                // This is a normal command operating on the active document, so no
-                // explicit DocumentLock is required. Keeping the transaction directly
-                // on the active database also avoids eNoDatabase when changing the
-                // annotative state of an existing MText label.
                 using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
                     EnsureGoodLayer(tr, db, baseLayer, goodLayer);
@@ -157,11 +152,15 @@ namespace CLV_CivilTools.Ufls
         {
             List<CheckItem> checks = new List<CheckItem>();
             BlockTable blockTable = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+            DBDictionary layoutDictionary = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
 
-            foreach (ObjectId blockRecordId in blockTable)
+            foreach (DBDictionaryEntry layoutEntry in layoutDictionary)
             {
-                if (tr.GetObject(blockRecordId, OpenMode.ForRead, false) is not BlockTableRecord blockRecord)
-                    continue;
+                Layout layout = (Layout)tr.GetObject(layoutEntry.Value, OpenMode.ForRead, false);
+                BlockTableRecord blockRecord = (BlockTableRecord)tr.GetObject(
+                    layout.BlockTableRecordId,
+                    OpenMode.ForRead,
+                    false);
 
                 foreach (ObjectId entityId in blockRecord)
                 {
