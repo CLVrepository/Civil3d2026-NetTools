@@ -25,6 +25,7 @@
       <nav>
         <a class="" href="index.html">LABEL</a>
         <a class="active" href="mapping.html">MAPPING</a>
+        <a class="" href="gis.html">GIS</a>
       </nav>
       <div class="clv-help-card">
         <div>Need help?</div>
@@ -36,43 +37,59 @@
       <a class="clv-back-button" href="../../index.html" aria-label="Back to Home">‹ Back to Home</a>
       <div class="clv-kicker">Q4 MENU</div>
       <h1>MAPPING</h1>
-      <p class="clv-lead">Survey map, township/range reference, boundary closure, constraint, and review tools.</p>
+      <p class="clv-lead">Transform, boundary review, mapping support, legal description, PDF, XREF, linework review, and subdivision drafting tools.</p>
 
-      <section class="clv-card" id="survey-map">
-        <h2>SURVEY MAP</h2>
-        <p>Survey map preparation tools.</p>
-        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="SURVEY MAP tools">
-          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
-          <div class="clv-tool-row" role="row"><div role="cell"><strong>BEST FIT MAP</strong></div><div role="cell">Transforms selected map linework to surveyed control. Select the map linework first, then build each control pair by selecting the survey destination point followed by the matching map starting point. The review dialog allows control pairs to be checked or unchecked with live error updates before finalizing.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/survey/best-fit-map.html">HOW TO</a></div></div>
-        </div>
-      </section>
-      <section class="clv-card" id="township-range">
-        <h2>TOWNSHIP/RANGE</h2>
-        <p>Township, range, and section corner reference tools used during survey mapping review.</p>
-        <div class="clv-tool-table" role="table" aria-label="TOWNSHIP/RANGE tools">
+      <section class="clv-card" id="transform">
+        <h2>TRANSFORM</h2>
+        <div class="clv-tool-table" role="table" aria-label="TRANSFORM tools">
           <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div></div>
-          <div class="clv-tool-row" role="row"><div role="cell"><strong>SECTION CORNER MARKER</strong></div><div role="cell">Places the approved section corner marker for PLSS section corner review.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>MAP TRANSFORM</strong></div><div role="cell">Transforms selected map linework to surveyed control using paired control points and a review step before finalizing the transformation.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>BOUNDARY TRANSFORM</strong></div><div role="cell">Transforms boundary linework to control using the current boundary/control workflow.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>C3D TRANSFORM</strong></div><div role="cell">Runs the Civil 3D transformation workflow used for supported drawing coordinate transformations.</div></div>
+        </div>
+        <p><strong>Terminology:</strong> MAP TRANSFORM is the current name for the older BEST FIT MAP workflow. BOUNDARY TRANSFORM is the current name for the older TRANSFORM TO CONTROL workflow.</p>
+      </section>
+
+      <section class="clv-card" id="tools">
+        <h2>TOOLS</h2>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="MAPPING tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>DRAW TIE LINE</strong></div><div role="cell">Starts the AutoCAD LINE workflow on the approved survey control-tie layer and restores the previous current layer when the command ends or is cancelled.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>PDF VIEWER</strong></div><div role="cell">Opens the CLV PDF viewer workflow for working with supported PDF references from within Civil 3D.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>PDF CLIP</strong></div><div role="cell">Runs the PDF clipping workflow for supported PDF underlays/references.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>LEGAL DESCRIPTION</strong></div><div role="cell">Builds and reviews a legal description from a connected LINE/ARC traverse and supports saved sessions, linked MText, TXT export, and DOCX export.</div><div role="cell"><a class="clv-action-link" href="legal-description.html">HELP</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>XREF COLOR</strong></div><div role="cell">Applies the survey XREF color workflow to help standardize referenced survey drawing display.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>OFFSET TO TEMP LAYER</strong></div><div role="cell">Creates offset geometry on the temporary mapping workflow layer for review/drafting operations.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>LINEWORK REVIEW</strong></div><div role="cell">Starts the survey linework review workflow for identifying and reviewing mapping linework conditions.</div><div role="cell"></div></div>
         </div>
       </section>
+
       <section class="clv-card" id="boundary">
         <h2>BOUNDARY</h2>
-        <p>Boundary closure and adjustment tools.</p>
-        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="BOUNDARY tools">
-          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
-          <div class="clv-tool-row" role="row"><div role="cell"><strong>AUTO CLOSURE</strong></div><div role="cell">Reviews selected boundary linework and creates an adjusted closure using the available closure settings and constraints.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/survey/auto-closure.html">HOW TO</a></div></div>
-          <div class="clv-tool-row" role="row"><div role="cell"><strong>CONSTRAINTS (BETA)</strong></div><div role="cell">Development / beta tool for defining closure constraints so selected boundary segments, bearings, distances, curves, or control points can be held during closure adjustment.</div><div role="cell"></div></div>
+        <p>Boundary closure and review tools. The current palette combines closure adjustment and review operations under BOUNDARY.</p>
+        <div class="clv-tool-table" role="table" aria-label="BOUNDARY tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>AUTO CLOSURE</strong></div><div role="cell">Runs the boundary closure workflow against selected boundary linework.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>CONSTRAINTS</strong></div><div role="cell">Defines and manages closure constraints used by the boundary adjustment workflow.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>CLOSURE REPORT</strong></div><div role="cell">Creates or opens the boundary closure report for review.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>CLOSURE MARKERS</strong></div><div role="cell">Places review markers at closure report segment locations.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>GOTO SEGMENT</strong></div><div role="cell">Navigates to a selected closure report segment for drawing review.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>CLEAR REVIEW MARKERS</strong></div><div role="cell">Removes temporary boundary review markers.</div></div>
         </div>
       </section>
-      <section class="clv-card" id="review">
-        <h2>REVIEW</h2>
-        <p>Closure report and review navigation tools.</p>
-        <div class="clv-tool-table" role="table" aria-label="REVIEW tools">
-          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div></div>
-          <div class="clv-tool-row" role="row"><div role="cell"><strong>CLOSURE REPORT</strong></div><div role="cell">Creates or opens the closure report for the current boundary review.</div></div>
-          <div class="clv-tool-row" role="row"><div role="cell"><strong>CLOSURE MARKERS</strong></div><div role="cell">Places review markers at closure report segment locations.</div></div>
-          <div class="clv-tool-row" role="row"><div role="cell"><strong>GOTO SEGMENT</strong></div><div role="cell">Zooms to a selected closure report segment for review.</div></div>
-          <div class="clv-tool-row" role="row"><div role="cell"><strong>CLEAR REVIEW MARKERS</strong></div><div role="cell">Removes temporary closure review markers from the drawing.</div></div>
+
+      <section class="clv-card" id="subdivision">
+        <h2>SUBDIVISION LINEWORK</h2>
+        <p>First-pass subdivision drafting helpers driven from road centerlines and stored site settings.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="SUBDIVISION LINEWORK tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>SITE SETTINGS</strong></div><div role="cell">Sets typical road width, cul-de-sac radius, tie-in radius, and curb return radius.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>ROADS</strong></div><div role="cell">Offsets selected road centerlines to create road-edge geometry on V-MAPL-ROAD-ROW.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>CUL-DE-SAC</strong></div><div role="cell">Creates and cleans cul-de-sac bulb and tie-in geometry.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>INTERSECTION</strong></div><div role="cell">Creates curb-return geometry and cleans generated road-edge intersections.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>LOT LINES</strong></div><div role="cell">Creates repeated lot-line offsets at a specified spacing until a selected stop location is reached.</div><div role="cell"></div></div>
         </div>
+        <p><a class="clv-action-link" href="subdivision-linework.html">OPEN SUBDIVISION LINEWORK HELP</a></p>
       </section>
 
       <footer class="clv-page-footer">
