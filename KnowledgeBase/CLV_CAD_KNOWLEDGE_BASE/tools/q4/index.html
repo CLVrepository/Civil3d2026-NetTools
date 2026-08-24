@@ -25,6 +25,7 @@
       <nav>
         <a class="active" href="index.html">LABEL</a>
         <a class="" href="mapping.html">MAPPING</a>
+        <a class="" href="gis.html">GIS</a>
       </nav>
       <div class="clv-help-card">
         <div>Need help?</div>
@@ -36,16 +37,17 @@
       <a class="clv-back-button" href="../../index.html" aria-label="Back to Home">‹ Back to Home</a>
       <div class="clv-kicker">Q4 MENU</div>
       <h1>LABEL</h1>
-      <p class="clv-lead">Roadway labeling, dimension tools, survey legend tools, and PLSS section label tools for survey and mapping workflows.</p>
+      <p class="clv-lead">Roadway labeling, dimension tools, line and curve labels, area labels, survey legend tools, and PLSS section label tools for survey and mapping workflows.</p>
 
       <section class="clv-card" id="roadway">
         <h2>ROADWAY</h2>
         <p>Roadway name labeling tools.</p>
         <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="ROADWAY tools">
           <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
-          <div class="clv-tool-row" role="row"><div role="cell"><strong>LABEL ROADS</strong></div><div role="cell">Allows user to create roadway name labels. Project must be geo located and have coordinate system assigned. User will define a boundary area, roadway labels will auto create. In the conversion dialog, target C-ROAD-LABL and set Selection Scope to Labels within the view window to avoid processing the full GIS data set. Since created from GIS data, some cleanup will be needed, such as removing duplicate labels. Will only create labels if GIS has data in the area. If no data exists, no labels will be created.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/survey/label-roads.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>STREET NAMES</strong></div><div role="cell">Creates roadway name labels from available GIS data within a user-defined boundary. The drawing must be geo-located and have a coordinate system assigned. Because the labels are created from GIS data, some cleanup such as duplicate-label removal may be required.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/survey/label-roads.html">HOW TO</a></div></div>
         </div>
       </section>
+
       <section class="clv-card" id="dimensions">
         <h2>DIMENSIONS</h2>
         <p>Dimension creation tools.</p>
@@ -57,23 +59,46 @@
           <div class="clv-tool-row" role="row"><div role="cell"><strong>ANGLE - SECONDS</strong></div><div role="cell">Creates angular dimensions displayed in degrees, minutes, and seconds.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/survey/angle-seconds.html">HOW TO</a></div></div>
           <div class="clv-tool-row" role="row"><div role="cell"><strong>RADIUS</strong></div><div role="cell">Creates radius dimensions for arcs and curves.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/survey/radius.html">HOW TO</a></div></div>
         </div>
-      </section>      <section class="clv-card" id="legend">
+      </section>
+
+      <section class="clv-card" id="lines-curves">
+        <h2>LINES AND CURVES</h2>
+        <p>Civil 3D line and curve labeling tools used for survey linework annotation.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="LINES AND CURVES tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>2-POINT || BEARING AND DIST</strong></div><div role="cell">Runs the Civil 3D line-between-two-points label workflow using the approved CLV bearing-and-distance label settings.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>2-POINT || DIST</strong></div><div role="cell">Runs the Civil 3D line-between-two-points distance-label workflow using the approved CLV label settings.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>BEARING AND DIST</strong></div><div role="cell">Creates a single-segment bearing-and-distance label using the approved CLV survey label style.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>DISTANCE</strong></div><div role="cell">Creates a single-segment distance label using the approved CLV survey label settings.</div><div role="cell"></div></div>
+        </div>
+        <p>These tools manage the CLV <code>V-LABL</code> layer around the native Civil 3D labeling commands and restore the user's previous current layer after the workflow.</p>
+      </section>
+
+      <section class="clv-card" id="area">
+        <h2>AREA</h2>
+        <p>Area labeling tools.</p>
+        <div class="clv-tool-table" role="table" aria-label="AREA tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>AREA SF LABEL</strong></div><div role="cell">Prompts for a point inside a closed boundary, traces the boundary, calculates its area, and places a centered square-foot MText label on the approved survey area label layer.</div></div>
+        </div>
+      </section>
+
+      <section class="clv-card" id="legend">
         <h2>LEGEND</h2>
         <p>Survey legend creation and update tools.</p>
         <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="LEGEND tools">
           <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
-          <div class="clv-tool-row" role="row"><div role="cell"><strong>CREATE LEGEND</strong></div><div role="cell">Creates a survey legend in the drawing from the approved survey legend block list. Insert the legend header first, then place legend blocks in the configured sort order with the correct single and double spacing.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/survey/create-legend.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>CREATE LEGEND</strong></div><div role="cell">Creates a survey legend in the drawing from the approved survey legend block list.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/survey/create-legend.html">HOW TO</a></div></div>
           <div class="clv-tool-row" role="row"><div role="cell"><strong>UPDATE LEGEND</strong></div><div role="cell">Updates an existing survey legend to match the current approved legend block list, order, and spacing standards.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/survey/update-legend.html">HOW TO</a></div></div>
         </div>
       </section>
-
 
       <section class="clv-card" id="plss-sections">
         <h2>PLSS SECTIONS</h2>
         <p>Imports PLSS section labels into the current drawing using the approved section label blocks and current drawing scale.</p>
         <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="PLSS SECTIONS tools">
           <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
-          <div class="clv-tool-row" role="row"><div role="cell"><strong>IMPORT LABELS</strong></div><div role="cell">Imports section labels for a selected area or selected closed object. Labels are inserted from the approved PLSS section label blocks, use the current drawing scale, and display section numbers with the S prefix.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/survey/import-plss-section-labels.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>IMPORT LABELS</strong></div><div role="cell">Imports section labels for a selected area or selected closed object using the approved PLSS section label blocks.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/survey/import-plss-section-labels.html">HOW TO</a></div></div>
         </div>
       </section>
 
