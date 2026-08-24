@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Q1 UFLS Tools - TOP CHECK | CLV Civil Tools Knowledge Base</title>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+</head>
+<body class="clv-page">
+  <header class="clv-topbar">
+    <a class="clv-brand" href="../../index.html" aria-label="CLV Civil Tools Knowledge Base home">
+      <img src="../../assets/logos/clv-seal-cropped.svg" alt="City of Las Vegas seal">
+      <span class="clv-brand-text"><span>CITY OF</span><strong>LAS VEGAS</strong></span>
+    </a>
+    <div class="clv-service-title">Q1 UFLS Tools</div>
+    <div class="clv-top-search" role="search" aria-label="Search this site">
+      <input aria-label="Search this site" placeholder="Search this site..." type="search">
+      <span aria-hidden="true">⌕</span>
+    </div>
+  </header>
+
+  <div class="clv-app-shell">
+    <aside class="clv-sidebar" aria-label="Q1 UFLS Tools sections">
+      <div class="clv-sidebar-title">Q1 MENU</div>
+      <nav>
+        <a class="" href="index.html">CHECK</a>
+        <a class="active" href="top-check.html">TOP CHECK</a>
+        <a class="" href="adjust.html">ADJUST</a>
+        <a class="" href="labels.html">LABELS</a>
+      </nav>
+      <div class="clv-help-card">
+        <div>Need help?</div>
+        <a href="mailto:mdwillis@lasvegasnevada.gov">Contact Web / CAD Services</a>
+      </div>
+    </aside>
+
+    <main class="clv-main">
+      <a class="clv-back-button" href="../../index.html" aria-label="Back to Home">‹ Back to Home</a>
+      <div class="clv-kicker">Q1 MENU</div>
+      <h1>TOP CHECK</h1>
+      <p class="clv-lead">Compare the surveyed top-of-pipe elevation at a COGO point with the calculated Civil 3D pipe top, then prepare the checks for tolerance review and exhibit/table output.</p>
+
+      <section class="clv-card" id="elevation-comparison">
+        <h2>LABEL</h2>
+        <p><strong>ELEVATION COMPARISON</strong> creates a structured Pipe Top Check label. The label stores the point, pipe, elevations, difference, station, offset, and display information as drawing metadata so later TOP CHECK tools can work from the stored check rather than parsing label text.</p>
+        <div class="clv-callout">
+          <strong>Label format</strong><br>
+          PLAN - TOP = elevation<br>
+          SURV - TOP = elevation<br>
+          DIFF = +/- difference
+        </div>
+        <h3>Basic workflow</h3>
+        <ol>
+          <li>Select the Civil 3D COGO point used for the surveyed elevation.</li>
+          <li>Select the Civil 3D pipe being checked.</li>
+          <li>Specify the label location.</li>
+          <li>Review the resulting PLAN - TOP, SURV - TOP, and DIFF values.</li>
+        </ol>
+        <p>The surveyed elevation is the selected COGO point elevation. The plan top is calculated from the selected pipe at the picked location. <strong>DIFF = SURV - PLAN</strong>, so a positive value means the surveyed top is higher than the calculated plan top.</p>
+        <p><strong>Command:</strong> <code>UFLS-PIPE-TOP-CHECK</code></p>
+      </section>
+
+      <section class="clv-card" id="tolerance">
+        <h2>TOLERANCE CHECK</h2>
+        <p><strong>EXCEEDS TOLERANCE</strong> reviews every stored Pipe Top Check in the drawing against a user-specified tolerance. The default tolerance is <strong>0.30</strong>.</p>
+        <h3>What the command does</h3>
+        <ul>
+          <li>Prompts for the tolerance.</li>
+          <li>Identifies checks where the absolute difference exceeds the tolerance.</li>
+          <li>Assigns exhibit IDs to over-tolerance checks that do not already have one.</li>
+          <li>Changes over-tolerance checks to compact exhibit-number display.</li>
+          <li>Moves within-tolerance checks to <code>V-SURV-CHCK-GOOD</code> and turns that layer off.</li>
+        </ul>
+        <p>This makes the drawing ready for an exhibit-style review where only the checks requiring attention remain visible by default.</p>
+        <p><strong>Command:</strong> <code>UFLS-PIPE-TOP-EXCEEDS-TOLERANCE</code></p>
+      </section>
+
+      <section class="clv-card" id="table">
+        <h2>TABLE</h2>
+        <p>TOP CHECK tables are linked to the structured Pipe Top Check data. They can be rebuilt from the stored checks and scaled to the current annotation scale.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="TOP CHECK table tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>ADD TABLE</strong></div><div role="cell">Select Pipe Top Check labels, then specify the table insertion point. Creates a table containing the selected checks.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>ADD POINTS</strong></div><div role="cell">Select an existing Pipe Top Check table, then select additional Pipe Top Check labels to add.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>REMOVE POINTS</strong></div><div role="cell">Select an existing Pipe Top Check table, then select Pipe Top Check labels to remove from the table.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>SCALE TABLE</strong></div><div role="cell">Updates Pipe Top Check tables to the current model annotation scale and refreshes their stored table data.</div><div role="cell"></div></div>
+        </div>
+        <p><strong>Commands:</strong> <code>UFLS-PIPE-TOP-TABLE</code>, <code>UFLS-PIPE-TOP-TABLE-ADD</code>, <code>UFLS-PIPE-TOP-TABLE-REMOVE</code>, <code>UFLS-PIPE-TOP-TABLE-UPDATE</code></p>
+      </section>
+
+      <section class="clv-card" id="display">
+        <h2>DISPLAY</h2>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="TOP CHECK display tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>DETAILS</strong></div><div role="cell">Restores all stored Pipe Top Check labels to detailed PLAN - TOP / SURV - TOP / DIFF display.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>NUMBERS</strong></div><div role="cell">Switches stored Pipe Top Check labels to compact exhibit-number display using their assigned exhibit IDs.</div><div role="cell"></div></div>
+        </div>
+        <p><strong>Commands:</strong> <code>UFLS-PIPE-TOP-DETAILED</code> and <code>UFLS-PIPE-TOP-EXHIBIT</code></p>
+      </section>
+
+      <section class="clv-card" id="requirements">
+        <h2>REQUIREMENTS AND NOTES</h2>
+        <ul>
+          <li>The surveyed check point must be a Civil 3D COGO point.</li>
+          <li>The pipe must be a Civil 3D pipe that can provide the required top-of-pipe calculation.</li>
+          <li>ELEVATION COMPARISON uses the <code>CLV-Non Anno</code> text style. If that style is missing, the command stops and the drawing should be loaded from the CLV template.</li>
+          <li>TOP CHECK labels are created on the managed UFLS Pipe Top Check layer and the command restores the user's original current layer afterward.</li>
+          <li>The check data is stored in the drawing on the MText object. Do not manually recreate the label as plain text if the check needs to participate in tolerance, table, or exhibit workflows.</li>
+        </ul>
+      </section>
+
+      <footer class="clv-page-footer">
+        <div>For support or suggestions, contact <a href="mailto:mdwillis@lasvegasnevada.gov">mdwillis@lasvegasnevada.gov</a></div>
+        <a href="../../index.html">Knowledge Base Home</a>
+      </footer>
+    </main>
+  </div>
+
+<a class="clv-chat-support" href="https://teams.microsoft.com/l/chat/0/0?users=mdwillis@lasvegasnevada.gov&amp;topicName=CAD%20Knowledge%20Base%20Support&amp;message=Hi%20Mark%2C%20I%20need%20help%20with%20the%20CAD%20Knowledge%20Base." target="_blank" rel="noopener" aria-label="Live Chat in Microsoft Teams">
+  <span aria-hidden="true">💬</span><span>Live Chat</span>
+</a>
+</body>
+</html>
