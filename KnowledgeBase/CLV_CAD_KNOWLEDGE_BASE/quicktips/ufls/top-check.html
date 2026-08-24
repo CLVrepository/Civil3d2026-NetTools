@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How To: TOP CHECK | CLV Civil Tools Knowledge Base</title>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+</head>
+<body class="subpage">
+  <header class="hero">
+    <div class="brand-row">
+      <a class="seal-wrap" href="../../index.html" aria-label="CLV Civil Tools Knowledge Base home"><img src="../../assets/logos/clv-seal-cropped.svg" alt="City of Las Vegas seal"></a>
+      <div class="brand-copy"><h1>How To: TOP CHECK</h1><p>Q1 UFLS / Pipe Top Check workflow.</p></div>
+    </div>
+  </header>
+  <main class="content-wrap">
+    <div class="list-panel">
+      <h2>TOP CHECK</h2>
+      <p style="color:var(--muted)">Use TOP CHECK to compare the surveyed top-of-pipe elevation at a COGO point with the calculated Civil 3D pipe top.</p>
+      <div class="howto-note"><strong>Label result:</strong><br>PLAN - TOP = elevation<br>SURV - TOP = elevation<br>DIFF = +/- difference</div>
+      <h3>Basic Use</h3>
+      <ol class="howto-checklist">
+        <li>Open Q1 UFLS Tools and select <strong>TOP CHECK → ELEVATION COMPARISON</strong>.</li>
+        <li>Select the Civil 3D COGO point representing the surveyed elevation.</li>
+        <li>Select the Civil 3D pipe being checked.</li>
+        <li>Specify the label location.</li>
+        <li>Review the PLAN, SURV, and DIFF values.</li>
+      </ol>
+      <h3>Tolerance Review</h3>
+      <ol class="howto-checklist">
+        <li>Select <strong>EXCEEDS TOLERANCE</strong>.</li>
+        <li>Enter the tolerance when prompted; the default is <strong>0.30</strong>.</li>
+        <li>Over-tolerance checks receive exhibit IDs and can be displayed as compact numbers.</li>
+        <li>Use <strong>DETAILS</strong> to restore the full label or <strong>NUMBERS</strong> for exhibit-number display.</li>
+      </ol>
+      <h3>Tables</h3>
+      <ul class="howto-checklist">
+        <li><strong>ADD TABLE</strong> creates a table from selected TOP CHECK labels.</li>
+        <li><strong>ADD POINTS</strong> adds additional checks to an existing table.</li>
+        <li><strong>REMOVE POINTS</strong> removes checks from an existing table.</li>
+        <li><strong>SCALE TABLE</strong> updates the table to the current annotation scale.</li>
+      </ul>
+      <div class="howto-critical"><strong>Important:</strong> Do not recreate TOP CHECK labels as plain MText. The command stores structured check data on the label so tolerance, table, and exhibit workflows can use it later.</div>
+      <p><a class="back-link" href="../../tools/q1/top-check.html">← Back to Q1 TOP CHECK</a></p>
+    </div>
+  </main>
+  <footer class="footer"><div>For support or suggestions, contact <a href="mailto:mdwillis@lasvegasnevada.gov">mdwillis@lasvegasnevada.gov</a></div></footer>
+<a class="clv-chat-support" href="https://teams.microsoft.com/l/chat/0/0?users=mdwillis@lasvegasnevada.gov&amp;topicName=CAD%20Knowledge%20Base%20Support&amp;message=Hi%20Mark%2C%20I%20need%20help%20with%20the%20CAD%20Knowledge%20Base." target="_blank" rel="noopener" aria-label="Live Chat in Microsoft Teams"><span aria-hidden="true">💬</span><span>Live Chat</span></a>
+</body>
+</html>
