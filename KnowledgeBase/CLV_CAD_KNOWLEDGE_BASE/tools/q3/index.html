@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Q3 Point Cloud Tools - ROADWAY | CLV Civil Tools Knowledge Base</title>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+</head>
+<body class="clv-page">
+  <header class="clv-topbar">
+    <a class="clv-brand" href="../../index.html" aria-label="CLV Civil Tools Knowledge Base home">
+      <img src="../../assets/logos/clv-seal-cropped.svg" alt="City of Las Vegas seal">
+      <span class="clv-brand-text"><span>CITY OF</span><strong>LAS VEGAS</strong></span>
+    </a>
+    <div class="clv-service-title">Q3 Point Cloud Tools</div>
+    <div class="clv-top-search" role="search" aria-label="Search this site">
+      <input aria-label="Search this site" placeholder="Search this site..." type="search">
+      <span aria-hidden="true">⌕</span>
+    </div>
+  </header>
+
+  <div class="clv-app-shell">
+    <aside class="clv-sidebar" aria-label="Q3 Point Cloud Tools sections">
+      <div class="clv-sidebar-title">Q3 MENU</div>
+      <nav>
+        <a class="active" href="index.html">ROADWAY</a>
+<a class="" href="ufls.html">UFLS</a>
+      </nav>
+      <div class="clv-help-card">
+        <div>Need help?</div>
+        <a href="mailto:mdwillis@lasvegasnevada.gov">Contact Web / CAD Services</a>
+      </div>
+    </aside>
+
+    <main class="clv-main">
+      <a class="clv-back-button" href="../../index.html" aria-label="Back to Home">‹ Back to Home</a>
+      <div class="clv-kicker">Q3 MENU</div>
+      <h1>ROADWAY</h1>
+      <p class="clv-lead">Point cloud roadway review, sample line, crop, cross section, view control, point movement, and polyline tools.</p>
+
+      <section class="clv-card" id="point-cloud-display">
+        <h2>POINT CLOUD DISPLAY</h2>
+        <p>Point cloud attachment and visibility controls.</p>
+        <div class="clv-tool-table" role="table" aria-label="POINT CLOUD DISPLAY tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>ATTACH</strong></div><div role="cell">Attaches point cloud data to the drawing.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>INTENSITY</strong></div><div role="cell">Displays point cloud data using intensity display settings.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>TRANSPARENCY</strong></div><div role="cell">Adjusts point cloud transparency for better linework visibility.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>ON</strong></div><div role="cell">Turns point cloud display on.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>OFF</strong></div><div role="cell">Turns point cloud display off.</div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="sample-lines">
+        <h2>SAMPLE LINES</h2>
+        <p>Creates sample lines for roadway review.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="SAMPLE LINES tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>CREATE SAMPLE LINES</strong></div><div role="cell">Creates sample lines used for roadway point cloud review and cross section workflows.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/create-sample-lines.html">HOW TO</a></div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="crop-sample-lines">
+        <h2>CROP SAMPLE LINES</h2>
+        <p>Crops or uncrops point cloud areas using sample lines.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="CROP SAMPLE LINES tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>CROP SL</strong></div><div role="cell">Crops the point cloud to the selected sample line area.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/crop-sl.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>UNCROP SL</strong></div><div role="cell">Removes the sample line crop and restores the point cloud display.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/uncrop-sl.html">HOW TO</a></div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="quick-sample-line">
+        <h2>QUICK SAMPLE LINE</h2>
+        <p>Creates and uses a temporary sample line.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="QUICK SAMPLE LINE tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>QUICK SL</strong></div><div role="cell">Allows user to select two points and creates a temporary sample line based on the points picked. Will prompt user and crop point cloud accordingly.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/quick-sl.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>UNCROP SL</strong></div><div role="cell">Removes the sample line crop and restores the point cloud display.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/uncrop-sl.html">HOW TO</a></div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="general-crop">
+        <h2>GENERAL CROP</h2>
+        <p>General point cloud crop controls.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="GENERAL CROP tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>CROP</strong></div><div role="cell">Crops the point cloud to the selected area.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/crop.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>UNCROP</strong></div><div role="cell">Removes the active crop and restores the point cloud display.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/uncrop.html">HOW TO</a></div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="cross-section">
+        <h2>CROSS SECTION</h2>
+        <p>Crops and rotates the view for cross section review.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="CROSS SECTION tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>CROSS SECTION</strong></div><div role="cell">Crops point cloud to the sample line area selected, and rotates the view to allow user to select points as needed.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/cross-section.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>RESET CS</strong></div><div role="cell">Resets view when done with the CROSS SECTION review.</div><div role="cell"></div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="view-control">
+        <h2>VIEW CONTROL</h2>
+        <p>View rotation and reset controls.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="VIEW CONTROL tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>3D ROTATE</strong></div><div role="cell">3D rotate command which saves the before state. This allows the user to reset back to this location when running RESET VIEW.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/3d-rotate.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>RESET VIEW</strong></div><div role="cell">Resets the view after running the 3D ROTATE command.</div><div role="cell"></div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="move-points">
+        <h2>MOVE POINTS</h2>
+        <p>Moves AEC points to selected linework or vertices.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="MOVE POINTS tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>TO SAMPLE LINE</strong></div><div role="cell">Moves AEC points to selected cross section line. Typically used when creating points via the CROSS SECTION tool.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/to-sample-line.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>MOVE POINTS TO VERTEX</strong></div><div role="cell">Moves AEC points to the closest vertex in a polyline.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/move-points-to-vertex.html">HOW TO</a></div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="move-points-add-vertices">
+        <h2>MOVE POINTS &amp; ADD VERTICES</h2>
+        <p>Moves points and adds vertices to polyline geometry.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="MOVE POINTS &amp; ADD VERTICES tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>SINGLE/MULTIPLE</strong></div><div role="cell">Moves selected AEC points to the closest polyline, adds vertex locations as needed.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/single-multiple.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>ADJACENT</strong></div><div role="cell">Moves selected AEC points to the closest vertex of the selected polyline, and then adds the same vertex points to the selected adjacent polylines.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/adjacent.html">HOW TO</a></div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="polyline-tools">
+        <h2>POLYLINE TOOLS</h2>
+        <p>Polyline cleanup and vertex marking tools.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="POLYLINE TOOLS tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>COPY VERTEX FROM PL TO PL</strong></div><div role="cell">Allows user to select a polyline, and copy vertex location to other selected polyline.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/copy-vertex-from-pl-to-pl.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>ADD VERTEX @ CROSSING</strong></div><div role="cell">Allows user to automatically add vertex point locations to polyline at all selected crossing line intersection points.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/add-vertex-at-crossing.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>IDENTIFY VERTICES</strong></div><div role="cell">Places temporary marker at all polyline vertex locations. Can be removed globally by typing DX.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/identify-vertices.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>GENERAL MARKER</strong></div><div role="cell">Places a general marker point, helpful for identifying grade breaks or elevation information such as pipe inverts.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/general-marker.html">HOW TO</a></div></div>
+        </div>
+      </section>
+
+      <footer class="clv-page-footer">
+        <div>For support or suggestions, contact <a href="mailto:mdwillis@lasvegasnevada.gov">mdwillis@lasvegasnevada.gov</a></div>
+        <a href="../../index.html">Knowledge Base Home</a>
+      </footer>
+    </main>
+  </div>
+
+<a class="clv-chat-support" href="https://teams.microsoft.com/l/chat/0/0?users=mdwillis@lasvegasnevada.gov&amp;topicName=CAD%20Knowledge%20Base%20Support&amp;message=Hi%20Mark%2C%20I%20need%20help%20with%20the%20CAD%20Knowledge%20Base." target="_blank" rel="noopener" aria-label="Live Chat in Microsoft Teams">
+  <span aria-hidden="true">💬</span><span>Live Chat</span>
+</a>
+</body>
+</html>

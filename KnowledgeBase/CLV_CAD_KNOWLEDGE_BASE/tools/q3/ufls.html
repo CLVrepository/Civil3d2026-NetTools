@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Q3 Point Cloud Tools - UFLS | CLV Civil Tools Knowledge Base</title>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+</head>
+<body class="clv-page">
+  <header class="clv-topbar">
+    <a class="clv-brand" href="../../index.html" aria-label="CLV Civil Tools Knowledge Base home">
+      <img src="../../assets/logos/clv-seal-cropped.svg" alt="City of Las Vegas seal">
+      <span class="clv-brand-text"><span>CITY OF</span><strong>LAS VEGAS</strong></span>
+    </a>
+    <div class="clv-service-title">Q3 Point Cloud Tools</div>
+    <div class="clv-top-search" role="search" aria-label="Search this site">
+      <input aria-label="Search this site" placeholder="Search this site..." type="search">
+      <span aria-hidden="true">⌕</span>
+    </div>
+  </header>
+
+  <div class="clv-app-shell">
+    <aside class="clv-sidebar" aria-label="Q3 Point Cloud Tools sections">
+      <div class="clv-sidebar-title">Q3 MENU</div>
+      <nav>
+        <a class="" href="index.html">ROADWAY</a>
+<a class="active" href="ufls.html">UFLS</a>
+      </nav>
+      <div class="clv-help-card">
+        <div>Need help?</div>
+        <a href="mailto:mdwillis@lasvegasnevada.gov">Contact Web / CAD Services</a>
+      </div>
+    </aside>
+
+    <main class="clv-main">
+      <a class="clv-back-button" href="../../index.html" aria-label="Back to Home">‹ Back to Home</a>
+      <div class="clv-kicker">Q3 MENU</div>
+      <h1>UFLS</h1>
+      <p class="clv-lead">Point cloud UFLS pipe locator, structure linework, view control, and crop tools.</p>
+
+      <section class="clv-card" id="point-cloud-display">
+        <h2>POINT CLOUD DISPLAY</h2>
+        <p>Point cloud attachment and visibility controls.</p>
+        <div class="clv-tool-table" role="table" aria-label="POINT CLOUD DISPLAY tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>ATTACH</strong></div><div role="cell">Attaches point cloud data to the drawing.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>INTENSITY</strong></div><div role="cell">Displays point cloud data using intensity display settings.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>TRANSPARENCY</strong></div><div role="cell">Adjusts point cloud transparency for better linework visibility.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>ON</strong></div><div role="cell">Turns point cloud display on.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>OFF</strong></div><div role="cell">Turns point cloud display off.</div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="pipe-locator">
+        <h2>PIPE LOCATOR</h2>
+        <p>Step-based pipe tracing workflow from point cloud data.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="PIPE LOCATOR tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>STEP 1 - CROP POINT CLOUD</strong></div><div role="cell">Crops point cloud to the user selected area.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/step-1-crop-point-cloud.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>STEP 2 - ROTATE VIEW</strong></div><div role="cell">Rotates cropped point cloud via user controls to cross section the pipe.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/step-2-rotate-view.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>STEP 3 - SET UCS</strong></div><div role="cell">Sets the UCS view to the current rotation.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/step-3-set-ucs.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>STEP 4 - TRACE PIPE</strong></div><div role="cell">Allows the user to select the inner wall of the pipe, and places a pipe block at that location. Block reads pipe size and correctly places the correctly sized block. Then places an AEC point to identify the top of pipe.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/step-4-trace-pipe.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>STEP 5 - RESET VIEW</strong></div><div role="cell">Resets the UCS and visual style to plan view.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/step-5-reset-view.html">HOW TO</a></div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="2d-linework">
+        <h2>2D LINEWORK</h2>
+        <p>Creates UFLS structure geometry from point cloud data.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="2D LINEWORK tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>STRC-INNER WALL</strong></div><div role="cell">Creates structure inner wall linework from picked locations. Allows user to select structure type to generate the outer wall.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/strc-inner-wall.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>LOCATE MANHOLE</strong></div><div role="cell">Identifies the center of structure and places a correctly sized block based on point cloud data selected by the user.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/locate-manhole.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>3P CIRCLE</strong></div><div role="cell">Creates circular linework from three picked points.</div><div role="cell"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>3P RECTANGLE</strong></div><div role="cell">Creates rectangular linework from picked points.</div><div role="cell"></div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="view-control">
+        <h2>VIEW CONTROL</h2>
+        <p>View rotation and reset controls.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="VIEW CONTROL tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>3D ROTATE</strong></div><div role="cell">3D rotate command which saves the before state. This allows the user to reset back to this location when running RESET VIEW.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/3d-rotate.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>RESET VIEW</strong></div><div role="cell">Resets the view after running the 3D ROTATE command.</div><div role="cell"></div></div>
+        </div>
+      </section>
+      <section class="clv-card" id="quick-crop">
+        <h2>QUICK CROP</h2>
+        <p>Quick point cloud crop controls for UFLS review.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="QUICK CROP tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>CROP</strong></div><div role="cell">Crops the point cloud to the selected UFLS review area.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/pointcloud/crop-ufls.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>UNCROP</strong></div><div role="cell">Removes the active crop and restores the point cloud display.</div><div role="cell"></div></div>
+        </div>
+      </section>
+
+      <footer class="clv-page-footer">
+        <div>For support or suggestions, contact <a href="mailto:mdwillis@lasvegasnevada.gov">mdwillis@lasvegasnevada.gov</a></div>
+        <a href="../../index.html">Knowledge Base Home</a>
+      </footer>
+    </main>
+  </div>
+
+<a class="clv-chat-support" href="https://teams.microsoft.com/l/chat/0/0?users=mdwillis@lasvegasnevada.gov&amp;topicName=CAD%20Knowledge%20Base%20Support&amp;message=Hi%20Mark%2C%20I%20need%20help%20with%20the%20CAD%20Knowledge%20Base." target="_blank" rel="noopener" aria-label="Live Chat in Microsoft Teams">
+  <span aria-hidden="true">💬</span><span>Live Chat</span>
+</a>
+</body>
+</html>

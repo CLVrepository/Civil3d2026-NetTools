@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How To: IMPORT GIS | CLV Civil Tools Knowledge Base</title>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+</head>
+<body class="subpage">
+  <header class="hero">
+    <div class="brand-row">
+      <a class="seal-wrap" href="../../index.html" aria-label="CLV Civil Tools Knowledge Base home"><img src="../../assets/logos/clv-seal-cropped.svg" alt="City of Las Vegas seal"></a>
+      <div class="brand-copy"><h1>How To: IMPORT GIS</h1><p>Q2 GIS + Aerials data import workflow.</p></div>
+    </div>
+  </header>
+  <main class="content-wrap">
+    <div class="list-panel">
+      <h2>IMPORT GIS</h2>
+      <p style="color:var(--muted)">Imports selected GIS or Surveyed utility data inside a defined project area. Use this tool when you need parcel, street centerline, storm drain, or sewer reference data in the active drawing.</p>
+
+      <div class="howto-note"><strong>Result:</strong> The selected data layers are imported within the chosen boundary area and placed into the drawing for review or use as reference linework.</div>
+
+      <h3>Basic Use</h3>
+      <ol class="howto-checklist">
+        <li>Open the <strong>GIS</strong> tab and review the area where data needs to be imported.</li>
+        <li>Select <strong>IMPORT GIS</strong> under the <strong>DATA</strong> section.</li>
+        <li>Select the needed <strong>GIS datasets</strong>. These are general reference datasets, such as parcels, street centerlines, sewer, and storm drain data.</li>
+        <li>Select <strong>SURVEYED datasets</strong> only when UFLS-reviewed storm drain or sewer data is needed for the area.</li>
+        <li>Choose the boundary method, leave duplicate cleanup checked unless a manual review is needed, then click <strong>OK</strong>.</li>
+        <li>Review the imported Surveyed utility information. Surveyed datasets provide survey-accurate utility linework and structure information, not only the generalized single lines and points typically found in county GIS data.</li>
+        <li>Select imported Surveyed linework as needed and review the attached Object Data. The linework contains survey-accurate Object Data such as pipe size, length, slope, invert data, and connected structures where available.</li>
+      </ol>
+
+      <figure class="howto-figure import-gis-figure import-gis-wide">
+        <img src="../../assets/screenshots/import-gis/import-gis-step-01-start.png" alt="Civil 3D drawing with the GIS palette open and the project area visible over aerial imagery">
+        <figcaption><strong>Step 1:</strong> Open the <strong>GIS</strong> tab and confirm the area where the import will be used. A tight project boundary helps limit clutter and keeps the import focused on the needed area.</figcaption>
+      </figure>
+
+      <figure class="howto-figure import-gis-figure import-gis-menu">
+        <img src="../../assets/screenshots/import-gis/import-gis-step-02-button.png" alt="GIS palette with the IMPORT GIS button highlighted under the Data section">
+        <figcaption><strong>Step 2:</strong> Under <strong>DATA</strong>, select <strong>IMPORT GIS</strong>.</figcaption>
+      </figure>
+
+      <figure class="howto-figure import-gis-figure import-gis-dialog">
+        <img src="../../assets/screenshots/import-gis/import-gis-step-03-gis-datasets.png" alt="CLV GIS Import dialog with the GIS dataset section highlighted">
+        <figcaption><strong>Step 3:</strong> Select the <strong>GIS datasets</strong> needed for the task. GIS datasets are useful for general reference and context, but they should not be treated as surveyed-level accuracy.</figcaption>
+      </figure>
+
+      <figure class="howto-figure import-gis-figure import-gis-dialog">
+        <img src="../../assets/screenshots/import-gis/import-gis-step-04-surveyed-datasets.png" alt="CLV GIS Import dialog with the Surveyed dataset section highlighted">
+        <figcaption><strong>Step 4:</strong> Select <strong>SURVEYED datasets</strong> when UFLS-reviewed storm drain or sewer information is needed. Surveyed datasets are currently limited to <strong>storm drain</strong> and <strong>sewer</strong>, and coverage is limited to areas that have been reviewed and added to the cache.</figcaption>
+      </figure>
+
+      <figure class="howto-figure import-gis-figure import-gis-wide">
+        <img src="../../assets/screenshots/import-gis/import-gis-step-05-imported.png" alt="Civil 3D drawing showing imported GIS and Surveyed linework inside the selected project area">
+        <figcaption><strong>Step 5:</strong> After selecting the boundary, the selected datasets are imported into the drawing. Review the imported layers and confirm the data covers the expected project area.</figcaption>
+      </figure>
+
+      <figure class="howto-figure import-gis-figure import-gis-wide">
+        <img src="../../assets/screenshots/import-gis/import-gis-step-06-surveyed-linework.png" alt="Civil 3D drawing zoomed in to surveyed sewer and storm utility linework with pipe and structure geometry visible">
+        <figcaption><strong>Step 6:</strong> Review the imported Surveyed utility information. Surveyed datasets provide survey-accurate utility linework and structure information, not only the generalized single lines and points typically found in county GIS data.</figcaption>
+      </figure>
+
+      <figure class="howto-figure import-gis-figure import-gis-wide">
+        <img src="../../assets/screenshots/import-gis/import-gis-step-07-object-data.png" alt="Civil 3D properties palette showing Object Data attached to a selected surveyed storm pipe line">
+        <figcaption><strong>Step 7:</strong> Select imported Surveyed linework as needed and review the attached <strong>Object Data</strong>. The linework contains survey-accurate Object Data such as pipe size, length, slope, invert data, and connected structures where available.</figcaption>
+      </figure>
+
+      <h3>Dataset Guidance</h3>
+      <ul class="howto-checklist">
+        <li><strong>GIS datasets</strong> are general citywide reference data. They are useful for planning, review, and context, but should not be treated as surveyed-level accuracy.</li>
+        <li><strong>Surveyed datasets</strong> are based on UFLS-reviewed information and are expected to be more accurate than the general GIS datasets where available.</li>
+        <li>Surveyed datasets are currently limited to <strong>storm drain</strong> and <strong>sewer</strong> data.</li>
+        <li>Surveyed dataset coverage is limited. Available areas are updated as newer UFLS reviews are completed and added to the cache.</li>
+        <li>If surveyed data is needed for an area that is not currently available, users may request that the area be reviewed and added when workload and source data allow.</li>
+      </ul>
+
+      <h3>Notes</h3>
+      <ul class="howto-checklist">
+        <li>Import only the datasets needed for the task. Selecting unnecessary datasets can clutter the drawing and increase processing time.</li>
+        <li>Use a reasonably tight boundary around the project area whenever possible.</li>
+        <li>After importing, visually compare the data against aerial imagery, surveyed linework, or project records before relying on it for design or review decisions.</li>
+      </ul>
+
+      <p><a class="back-link" href="../../tools/q2/gis.html#data">← Back to Q2 GIS</a></p>
+    </div>
+  </main>
+  <footer class="footer"><div>For support or suggestions, contact <a href="mailto:mdwillis@lasvegasnevada.gov">mdwillis@lasvegasnevada.gov</a></div></footer>
+
+<a class="clv-chat-support" href="https://teams.microsoft.com/l/chat/0/0?users=mdwillis@lasvegasnevada.gov&amp;topicName=CAD%20Knowledge%20Base%20Support&amp;message=Hi%20Mark%2C%20I%20need%20help%20with%20the%20CAD%20Knowledge%20Base." target="_blank" rel="noopener" aria-label="Live Chat in Microsoft Teams">
+  <span aria-hidden="true">💬</span><span>Live Chat</span>
+</a>
+</body>
+</html>

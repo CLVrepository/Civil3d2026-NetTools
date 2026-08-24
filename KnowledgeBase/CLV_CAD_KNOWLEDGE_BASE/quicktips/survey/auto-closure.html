@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How To: AUTO CLOSURE | CLV Civil Tools Knowledge Base</title>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+</head>
+<body class="subpage">
+  <header class="hero">
+    <div class="brand-row">
+      <a class="seal-wrap" href="../../index.html" aria-label="CLV Civil Tools Knowledge Base home"><img src="../../assets/logos/clv-seal-cropped.svg" alt="City of Las Vegas seal"></a>
+      <div class="brand-copy"><h1>How To: AUTO CLOSURE</h1><p>Q4 Survey + Mapping / MAPPING workflow.</p></div>
+    </div>
+  </header>
+  <main class="content-wrap">
+    <div class="list-panel">
+      <h2>AUTO CLOSURE</h2>
+      <p style="color:var(--muted)">Reviews selected boundary linework, creates an adjusted closure, and provides a closure report for checking bearings, distances, curves, error, and area.</p>
+
+      <div class="howto-note"><strong>Use this when:</strong> A boundary is close but needs a closure adjustment and a quick report for review. The command creates adjusted linework on a review layer so the original boundary can be compared before final cleanup.</div>
+
+      <h3>Basic Use</h3>
+      <ol class="howto-checklist">
+        <li>Review the boundary and current closure condition before starting.</li>
+        <li>Open <strong>Q4 Survey + Mapping</strong>, go to the <strong>MAPPING</strong> tab, and select <strong>AUTO CLOSURE</strong> under <strong>BOUNDARY</strong>.</li>
+        <li>Window or select the boundary linework to adjust.</li>
+        <li>Follow the command line prompts. Select the Traverse start point.</li>
+        <li>Select <strong>Yes</strong> to recreate the adjusted overlay layer.</li>
+        <li>Review the adjusted boundary overlay against the original boundary.</li>
+        <li>Select <strong>CLOSURE REPORT</strong> to open the closure report and review segment data.</li>
+        <li>Use the report and the selected segment preview to inspect bearings, distances, curve information, error values, and area before accepting the result.</li>
+      </ol>
+
+      <figure class="howto-figure">
+        <img src="../../assets/screenshots/auto-closure/auto-closure-step-01.png" alt="Civil 3D drawing showing the boundary before running AUTO CLOSURE">
+        <figcaption><strong>Step 1:</strong> Review the boundary before starting. The example shows a small closure difference that needs to be adjusted.</figcaption>
+      </figure>
+
+      <figure class="howto-figure">
+        <img src="../../assets/screenshots/auto-closure/auto-closure-step-02.png" alt="Q4 Survey Mapping palette with AUTO CLOSURE highlighted under Boundary">
+        <figcaption><strong>Step 2:</strong> In <strong>Q4 Survey + Mapping</strong>, open the <strong>MAPPING</strong> tab and select <strong>AUTO CLOSURE</strong> under <strong>BOUNDARY</strong>.</figcaption>
+      </figure>
+
+      <figure class="howto-figure">
+        <img src="../../assets/screenshots/auto-closure/auto-closure-step-03.png" alt="Boundary linework selected for the AUTO CLOSURE command">
+        <figcaption><strong>Step 3:</strong> Select the boundary linework that should be reviewed and adjusted. The selected linework should represent the boundary loop being checked.</figcaption>
+      </figure>
+
+      <figure class="howto-figure">
+        <img src="../../assets/screenshots/auto-closure/auto-closure-step-04.png" alt="Command line prompts during AUTO CLOSURE review">
+        <figcaption><strong>Step 4:</strong> Follow the command line prompts. Select the Traverse start point.</figcaption>
+      </figure>
+
+      <figure class="howto-figure">
+        <img src="../../assets/screenshots/auto-closure/auto-closure-step-05.png" alt="Command line prompt asking whether to remove the adjusted overlay layer">
+        <figcaption><strong>Step 5:</strong> Select <strong>Yes</strong> when prompted to remove the adjusted overlay layer and move the originals to the review layer. This lets the routine rebuild the adjusted closure overlay cleanly.</figcaption>
+      </figure>
+
+      <figure class="howto-figure">
+        <img src="../../assets/screenshots/auto-closure/auto-closure-step-06.png" alt="Adjusted closure overlay shown against original boundary linework">
+        <figcaption><strong>Step 6:</strong> Review the adjusted boundary overlay. Use this comparison to confirm the adjustment is occurring where expected before relying on the report values.</figcaption>
+      </figure>
+
+      <figure class="howto-figure">
+        <img src="../../assets/screenshots/auto-closure/auto-closure-step-07.png" alt="Closure report button and closure report table displayed in Civil 3D">
+        <figcaption><strong>Step 7:</strong> Select <strong>CLOSURE REPORT</strong> to open the report. The report lists the closure summary and segment-by-segment data including type, bearing, distance, curve data, and adjustment values.</figcaption>
+      </figure>
+
+      <figure class="howto-figure">
+        <img src="../../assets/screenshots/auto-closure/auto-closure-step-08.png" alt="Closure report segment selected with the corresponding boundary segment highlighted in CAD">
+        <figcaption><strong>Step 8:</strong> Select report segments to review the matching location in CAD. This helps verify individual lines and curves while checking the final closure and area values.</figcaption>
+      </figure>
+
+      <h3>Notes</h3>
+      <ul class="howto-checklist">
+        <li>The adjusted linework is intended for review before final cleanup.</li>
+        <li>Use the report table and CAD preview together; the report values are easier to verify when the matching segment is visible in the drawing.</li>
+        <li>If the selected geometry does not represent the intended boundary loop, cancel and reselect the correct boundary objects.</li>
+      </ul>
+
+      <p><a class="back-link" href="../../tools/q4/mapping.html#boundary">← Back to Q4 Survey + Mapping</a></p>
+    </div>
+  </main>
+  <footer class="footer"><div>For support or suggestions, contact <a href="mailto:mdwillis@lasvegasnevada.gov">mdwillis@lasvegasnevada.gov</a></div></footer>
+
+<a class="clv-chat-support" href="https://teams.microsoft.com/l/chat/0/0?users=mdwillis@lasvegasnevada.gov&amp;topicName=CAD%20Knowledge%20Base%20Support&amp;message=Hi%20Mark%2C%20I%20need%20help%20with%20the%20CAD%20Knowledge%20Base." target="_blank" rel="noopener" aria-label="Live Chat in Microsoft Teams">
+  <span aria-hidden="true">💬</span><span>Live Chat</span>
+</a>
+</body>
+</html>

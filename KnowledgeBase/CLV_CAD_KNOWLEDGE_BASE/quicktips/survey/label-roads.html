@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How To: LABEL ROADS | CLV Civil Tools Knowledge Base</title>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+</head>
+<body class="subpage">
+  <header class="hero">
+    <div class="brand-row">
+      <a class="seal-wrap" href="../../index.html" aria-label="CLV Civil Tools Knowledge Base home"><img src="../../assets/logos/clv-seal-cropped.svg" alt="City of Las Vegas seal"></a>
+      <div class="brand-copy"><h1>How To: LABEL ROADS</h1><p>Q4 Survey + Mapping roadway label workflow.</p></div>
+    </div>
+  </header>
+  <main class="content-wrap">
+    <div class="list-panel">
+      <h2>LABEL ROADS</h2>
+      <p style="color:var(--muted)">Creates roadway name labels from GIS street centerline data. The project must be geolocated and have the correct coordinate system assigned before running this command.</p>
+
+      <div class="howto-note"><strong>Result:</strong> Roadway labels are created from available GIS data inside the selected boundary area. Some cleanup may still be required, such as removing duplicate labels or adjusting labels that do not land in the preferred location.</div>
+
+      <div class="howto-critical"><strong>Critical setting — Step 5:</strong> In the <strong>Convert Labels to Text</strong> dialog, set <strong>Selection Scope</strong> to <strong>Labels within the view window</strong>. Do not leave it set to the full data set, or Civil 3D may attempt to create labels for the entire GIS data set and lock up the drawing.</div>
+
+      <h3>Before You Start</h3>
+      <ol class="howto-checklist">
+        <li>Confirm the drawing is geolocated.</li>
+        <li>Confirm the correct coordinate system is assigned.</li>
+        <li>Zoom near the project area where labels are needed. The current view window will be used to control which labels are converted.</li>
+        <li>Use a boundary that covers the desired label area only.</li>
+        <li>Be ready to set the label conversion target layer to <strong>C-ROAD-LABL</strong>.</li>
+      </ol>
+
+      <figure class="howto-figure road-labels-figure road-labels-wide">
+        <img src="../../assets/screenshots/road-labels/road-labels-01-label-roads.png" alt="Survey and Mapping LABEL tab with the LABEL ROADS button highlighted and the roadway label boundary visible in the drawing">
+        <figcaption><strong>Step 1:</strong> Open the Survey + Mapping menu, go to the <strong>LABEL</strong> tab, and select <strong>LABEL ROADS</strong>. Keep the project area visible so the boundary and label area are easy to verify.</figcaption>
+      </figure>
+
+      <figure class="howto-figure road-labels-figure road-labels-command">
+        <img src="../../assets/screenshots/road-labels/road-labels-02-option-select.png" alt="Civil 3D command line showing LABEL ROADS boundary mode with the Select option highlighted">
+        <figcaption><strong>Step 2:</strong> At the command line, choose the boundary mode. Use <strong>Select</strong> when an existing closed boundary polyline is already drawn around the label area.</figcaption>
+      </figure>
+
+      <figure class="howto-figure road-labels-figure road-labels-wide">
+        <img src="../../assets/screenshots/road-labels/road-labels-06-final-review.png" alt="Converted roadway labels shown inside the selected boundary area for review">
+        <figcaption><strong>Step 3:</strong> Verify that the generated street labels are limited to the desired project area. If needed, zoom or pan before continuing because the current view window controls which labels are converted.</figcaption>
+      </figure>
+
+      <figure class="howto-figure road-labels-figure road-labels-command">
+        <img src="../../assets/screenshots/road-labels/road-labels-04-continue.png" alt="Civil 3D command line showing LABEL ROADS adjust zoom prompt with Continue highlighted">
+        <figcaption><strong>Step 4:</strong> When the view is correct, choose <strong>Continue</strong>. Do not continue until the view window only contains the labels that should be converted.</figcaption>
+      </figure>
+
+      <figure class="howto-figure road-labels-figure road-labels-dialog">
+        <img src="../../assets/screenshots/road-labels/road-labels-05-convert-dialog.png" alt="Convert Labels to Text dialog with C-ROAD-LABL and Labels within the view window highlighted">
+        <figcaption><strong>Step 5:</strong> In the <strong>Convert Labels to Text</strong> dialog, set <strong>Select the Target</strong> to <strong>C-ROAD-LABL</strong>. Then set <strong>Selection Scope</strong> to <strong>Labels within the view window</strong>. This is the key setting that keeps Civil 3D from converting the entire GIS label data set.</figcaption>
+      </figure>
+
+      <figure class="howto-figure road-labels-figure road-labels-wide">
+        <img src="../../assets/screenshots/road-labels/road-labels-03-street-names.png" alt="GIS roadway name labels displayed inside the selected boundary area for final cleanup review">
+        <figcaption><strong>Step 6:</strong> Review the converted roadway labels. Clean up duplicates, remove unwanted labels, and adjust placement where needed for final plan readability.</figcaption>
+      </figure>
+
+      <h3>Notes</h3>
+      <ul class="howto-checklist">
+        <li>If no GIS road data exists inside the selected area, no roadway labels will be created.</li>
+        <li>The command is intended to speed up roadway labeling, not replace final drafting review.</li>
+        <li>After labels are created, verify the text height, layer, and label locations before plotting or issuing drawings.</li>
+        <li><strong>Selection Scope</strong> should remain <strong>Labels within the view window</strong> for this workflow. Using a larger scope can make the drawing appear locked up while Civil 3D processes too many GIS labels.</li>
+      </ul>
+
+      <p><a class="back-link" href="../../tools/q4/index.html">← Back to Q4 Survey + Mapping</a></p>
+    </div>
+  </main>
+  <footer class="footer"><div>For support or suggestions, contact <a href="mailto:mdwillis@lasvegasnevada.gov">mdwillis@lasvegasnevada.gov</a></div></footer>
+
+<a class="clv-chat-support" href="https://teams.microsoft.com/l/chat/0/0?users=mdwillis@lasvegasnevada.gov&amp;topicName=CAD%20Knowledge%20Base%20Support&amp;message=Hi%20Mark%2C%20I%20need%20help%20with%20the%20CAD%20Knowledge%20Base." target="_blank" rel="noopener" aria-label="Live Chat in Microsoft Teams">
+  <span aria-hidden="true">💬</span><span>Live Chat</span>
+</a>
+</body>
+</html>

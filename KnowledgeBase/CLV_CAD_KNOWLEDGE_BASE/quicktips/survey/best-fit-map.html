@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How To: BEST FIT MAP | CLV Civil Tools Knowledge Base</title>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+</head>
+<body class="subpage">
+  <header class="hero">
+    <div class="brand-row">
+      <a class="seal-wrap" href="../../index.html" aria-label="CLV Civil Tools Knowledge Base home"><img src="../../assets/logos/clv-seal-cropped.svg" alt="City of Las Vegas seal"></a>
+      <div class="brand-copy"><h1>How To: BEST FIT MAP</h1><p>Q4 Survey + Mapping / MAPPING workflow.</p></div>
+    </div>
+  </header>
+  <main class="content-wrap">
+    <div class="list-panel">
+      <h2>BEST FIT MAP</h2>
+      <p style="color:var(--muted)">Transforms selected mapping linework so it fits surveyed control. Use this tool when the mapping data and surveyed data represent the same features, but the mapping needs to be shifted, rotated, or best-fit adjusted to the surveyed location.</p>
+
+      <div class="howto-note"><strong>Result:</strong> The selected map linework is transformed to the surveyed control location, and a <strong>BestFit XML</strong> file is written to the same folder as the active CAD drawing.</div>
+
+      <div class="howto-critical"><strong>Important pick order:</strong> After starting the tool, select the <strong>map linework</strong> first. For each control pair, pick the <strong>survey / destination point</strong> first, then pick the matching <strong>map / starting point</strong>.</div>
+
+      <h3>Basic Use</h3>
+      <ol class="howto-checklist">
+        <li>Open the drawing and confirm the map linework and surveyed control points are visible. In the example, the original map linework is on the left and the surveyed control is on the right.</li>
+        <li>Open <strong>Q4 Survey + Mapping</strong>, go to the <strong>MAPPING</strong> tab, and select <strong>BEST FIT MAP</strong> under <strong>SURVEY MAP</strong>.</li>
+        <li>Select the <strong>map linework</strong> that needs to be transformed.</li>
+        <li>Pick each control pair in the required order: <strong>survey / destination point</strong>, then matching <strong>map / starting point</strong>. Repeat for multiple matching points.</li>
+        <li>Review the Best Fit results and check or uncheck the <strong>Control</strong> boxes as needed. The error values update live so weak control pairs can be tested before finalizing.</li>
+        <li>When the results look acceptable, select <strong>Finalize Move</strong>. The map linework is transformed and a <strong>BestFit XML</strong> file is created in the folder where the CAD file is saved.</li>
+      </ol>
+
+      <figure class="howto-figure best-fit-map-figure best-fit-map-wide">
+        <img src="../../assets/screenshots/best-fit-map/best-fit-map-step-01-start.png" alt="Civil 3D drawing showing mapping linework and surveyed point data before running BEST FIT MAP">
+        <figcaption><strong>Step 1:</strong> Review the drawing before starting. In this example, the original map linework is on the left side of the screen and the surveyed control is on the right side of the screen. Both should be visible so matching locations can be selected accurately.</figcaption>
+      </figure>
+
+      <figure class="howto-figure best-fit-map-figure best-fit-map-menu">
+        <img src="../../assets/screenshots/best-fit-map/best-fit-map-step-02-menu.png" alt="Q4 Survey Mapping palette with the BEST FIT MAP button highlighted under Survey Map">
+        <figcaption><strong>Step 2:</strong> In <strong>Q4 Survey + Mapping</strong>, open the <strong>MAPPING</strong> tab and select <strong>BEST FIT MAP</strong> under <strong>SURVEY MAP</strong>.</figcaption>
+      </figure>
+
+      <figure class="howto-figure best-fit-map-figure best-fit-map-pair">
+        <img src="../../assets/screenshots/best-fit-map/best-fit-map-step-03-points.png" alt="Example matching point number shown in the survey destination area and map starting area">
+        <figcaption><strong>Step 3:</strong> Select the <strong>map linework</strong> first. Then build the control pairs by selecting the <strong>survey / destination point</strong> first and the matching <strong>map / starting point</strong> second. Repeat for multiple matching locations so the tool has enough control to calculate the best fit.</figcaption>
+      </figure>
+
+      <figure class="howto-figure best-fit-map-figure best-fit-map-dialog">
+        <img src="../../assets/screenshots/best-fit-map/best-fit-map-step-05-control.png" alt="Survey Best Fit Review dialog with control pairs, control checkboxes, and updated error values">
+        <figcaption><strong>Step 5:</strong> Review the <strong>Survey Best Fit Review</strong> dialog. The table lists each control pair, whether it is being used as control, and the calculated error values. Check or uncheck the <strong>Control</strong> boxes to include or exclude point pairs; the error values update live, allowing the results to be reviewed before the move is finalized.</figcaption>
+      </figure>
+
+      <figure class="howto-figure best-fit-map-figure best-fit-map-wide">
+        <img src="../../assets/screenshots/best-fit-map/best-fit-map-step-06-final.png" alt="Civil 3D drawing showing map linework transformed to the surveyed control location after Finalize Move">
+        <figcaption><strong>Step 6:</strong> Select <strong>Finalize Move</strong> when the results are acceptable. In the final view, the original map points remain on the left side of the screen, while the survey points and adjusted map linework are shown on the right side of the screen. The tool also creates a <strong>BestFit XML</strong> file in the same folder as the active CAD drawing.</figcaption>
+      </figure>
+
+      <h3>Notes</h3>
+      <ul class="howto-checklist">
+        <li>Use well-distributed matching points when possible. Points spread across the work area usually produce a more reliable fit than points clustered in one small area.</li>
+        <li>If one control pair produces a poor error result, uncheck that pair and review how the remaining control affects the fit before finalizing.</li>
+        <li>The <strong>BestFit XML</strong> output provides a saved record of the best-fit setup/results for the active drawing folder.</li>
+      </ul>
+
+      <p><a class="back-link" href="../../tools/q4/mapping.html#survey-map">← Back to Q4 Survey + Mapping</a></p>
+    </div>
+  </main>
+  <footer class="footer"><div>For support or suggestions, contact <a href="mailto:mdwillis@lasvegasnevada.gov">mdwillis@lasvegasnevada.gov</a></div></footer>
+
+<a class="clv-chat-support" href="https://teams.microsoft.com/l/chat/0/0?users=mdwillis@lasvegasnevada.gov&amp;topicName=CAD%20Knowledge%20Base%20Support&amp;message=Hi%20Mark%2C%20I%20need%20help%20with%20the%20CAD%20Knowledge%20Base." target="_blank" rel="noopener" aria-label="Live Chat in Microsoft Teams">
+  <span aria-hidden="true">💬</span><span>Live Chat</span>
+</a>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How To: LOCATE PARCEL | CLV Civil Tools Knowledge Base</title>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+</head>
+<body class="subpage">
+  <header class="hero">
+    <div class="brand-row">
+      <a class="seal-wrap" href="../../index.html" aria-label="CLV Civil Tools Knowledge Base home"><img src="../../assets/logos/clv-seal-cropped.svg" alt="City of Las Vegas seal"></a>
+      <div class="brand-copy"><h1>How To: LOCATE PARCEL</h1><p>Q2 GIS + Aerials parcel search workflow.</p></div>
+    </div>
+  </header>
+  <main class="content-wrap">
+    <div class="list-panel">
+      <h2>LOCATE PARCEL</h2>
+      <p style="color:var(--muted)">Searches parcel records by APN or owner name, lets the user choose from the matching results, zooms to the parcel, highlights the property boundary, and turns on the map background for location review.</p>
+
+      <div class="howto-note"><strong>Result:</strong> The selected parcel is highlighted in magenta and the drawing zooms to the parcel location.</div>
+
+      <h3>Basic Use</h3>
+      <ol class="howto-checklist">
+        <li>Open the <strong>GIS</strong> tab and select <strong>LOCATE PARCEL</strong>.</li>
+        <li>Choose whether to search by <strong>APN</strong> or <strong>OWNER</strong>.</li>
+        <li>Enter the search value and click <strong>Search</strong>.</li>
+        <li>Select the correct result and click <strong>OK</strong>.</li>
+        <li>Review the highlighted parcel boundary in the drawing.</li>
+      </ol>
+
+      <figure class="howto-figure locate-parcel-figure locate-parcel-menu">
+        <img src="../../assets/screenshots/locate-parcel/parcel-step-01-menu.png" alt="GIS tab with the LOCATE PARCEL button highlighted under the Address section">
+        <figcaption><strong>Step 1:</strong> Open the <strong>GIS</strong> tab. Under <strong>ADDRESS</strong>, select <strong>LOCATE PARCEL</strong>.</figcaption>
+      </figure>
+
+      <figure class="howto-figure locate-parcel-figure locate-parcel-dialog">
+        <img src="../../assets/screenshots/locate-parcel/parcel-step-02-search-type.png" alt="CLV Locate Parcel dialog with the search type dropdown expanded showing APN and OWNER options">
+        <figcaption><strong>Step 2:</strong> In the <strong>CLV LOCATE PARCEL</strong> dialog, choose the search type. Use <strong>APN</strong> to search by parcel number, or <strong>OWNER</strong> to search by owner name.</figcaption>
+      </figure>
+
+      <figure class="howto-figure locate-parcel-figure locate-parcel-dialog">
+        <img src="../../assets/screenshots/locate-parcel/parcel-step-03-search.png" alt="CLV Locate Parcel dialog with an APN entered and the Search button highlighted">
+        <figcaption><strong>Step 3:</strong> Enter the APN, APN wildcard, or owner name search text. Click <strong>Search</strong> to look for matching parcel records.</figcaption>
+      </figure>
+
+      <figure class="howto-figure locate-parcel-figure locate-parcel-dialog">
+        <img src="../../assets/screenshots/locate-parcel/parcel-step-04-results-ok.png" alt="CLV Locate Parcel dialog showing a selected parcel result with the OK button highlighted">
+        <figcaption><strong>Step 4:</strong> Review the search results. Select the correct parcel record, then click <strong>OK</strong>.</figcaption>
+      </figure>
+
+      <figure class="howto-figure locate-parcel-figure locate-parcel-wide">
+        <img src="../../assets/screenshots/locate-parcel/parcel-step-05-final.png" alt="Civil 3D drawing zoomed to the selected parcel with the parcel boundary highlighted in magenta over Bing Hybrid imagery">
+        <figcaption><strong>Step 5:</strong> Review the located parcel. The selected property boundary is highlighted in magenta and the map background is turned on for visual confirmation.</figcaption>
+      </figure>
+
+      <h3>Notes</h3>
+      <ul class="howto-checklist">
+        <li>For APN searches, the tool supports a full APN or an APN wildcard.</li>
+        <li>Owner searches may return multiple results. Review the parcel number, owner name, and street information before clicking <strong>OK</strong>.</li>
+        <li>If a map type prompt appears at the command line, press <strong>Enter</strong> to accept the default option shown, or choose the desired map background.</li>
+      </ul>
+
+      <p><a class="back-link" href="../../tools/q2/gis.html#address">← Back to Q2 GIS</a></p>
+    </div>
+  </main>
+  <footer class="footer"><div>For support or suggestions, contact <a href="mailto:mdwillis@lasvegasnevada.gov">mdwillis@lasvegasnevada.gov</a></div></footer>
+
+<a class="clv-chat-support" href="https://teams.microsoft.com/l/chat/0/0?users=mdwillis@lasvegasnevada.gov&amp;topicName=CAD%20Knowledge%20Base%20Support&amp;message=Hi%20Mark%2C%20I%20need%20help%20with%20the%20CAD%20Knowledge%20Base." target="_blank" rel="noopener" aria-label="Live Chat in Microsoft Teams">
+  <span aria-hidden="true">💬</span><span>Live Chat</span>
+</a>
+</body>
+</html>
