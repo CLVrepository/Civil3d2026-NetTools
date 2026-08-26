@@ -1,0 +1,6 @@
+﻿# CLV Knowledge Base Upload Manifest
+# Generated: 2026-08-26 09:30:44
+# Files below are temporary upload items.
+# README.md is permanent and is not listed.
+
+KnowledgeBase\UPLOAD\Screenshot 2026-08-26 091931.png
