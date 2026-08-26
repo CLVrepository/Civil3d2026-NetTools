@@ -41,9 +41,13 @@ $StatusLines = @(git status --short --untracked-files=all)
 
 $OutsideUpload = @(
     $StatusLines | Where-Object {
-        $_ -and
-        $_.Length -ge 4 -and
-        $_.Substring(3).Replace('\', '/') -notlike "$UploadRelative/*"
+        if (-not $_ -or $_.Length -lt 4) {
+            return $false
+        }
+
+        $Path = $_.Substring(3).Trim('"').Replace('\', '/')
+
+        $Path -notlike "$UploadRelative/*"
     }
 )
 
