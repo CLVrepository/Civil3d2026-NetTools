@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = (git rev-parse --show-toplevel).Trim()
 $UploadFolder = Join-Path $RepoRoot "KnowledgeBase\UPLOAD"
+$UploadRelative = "KnowledgeBase/UPLOAD"
 $Manifest = Join-Path $UploadFolder "UPLOAD_MANIFEST.txt"
 
 Write-Host ""
@@ -30,17 +31,37 @@ if ($Branch -ne "kb-upload") {
 }
 
 # ------------------------------------------------------------
-# Verify clean working tree
+# Verify repository state
+#
+# Changes inside KnowledgeBase/UPLOAD are expected.
+# Everything else must be clean.
 # ------------------------------------------------------------
 
-$Status = git status --short
+$StatusLines = @(git status --short --untracked-files=all)
 
-if ($Status) {
-    Write-Host "ERROR: Working tree is not clean." -ForegroundColor Red
+$OutsideUpload = @(
+    $StatusLines | Where-Object {
+        $_ -and
+        $_.Length -ge 4 -and
+        $_.Substring(3).Replace('\', '/') -notlike "$UploadRelative/*"
+    }
+)
+
+if ($OutsideUpload.Count -gt 0) {
+    Write-Host "ERROR: There are changes outside the UPLOAD folder." -ForegroundColor Red
     Write-Host ""
-    git status --short
+    Write-Host "Those changes must be resolved before uploading." -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "Resolve the existing changes before uploading." -ForegroundColor Yellow
+
+    foreach ($Line in $OutsideUpload) {
+        Write-Host "  $Line" -ForegroundColor Red
+    }
+
+    Write-Host ""
+    Write-Host "Expected upload staging area:" -ForegroundColor Yellow
+    Write-Host "  KnowledgeBase\UPLOAD\" -ForegroundColor Yellow
+    Write-Host ""
+
     exit 1
 }
 
@@ -56,15 +77,18 @@ if (-not (Test-Path $UploadFolder)) {
 
 # ------------------------------------------------------------
 # Find upload files
+#
 # README.md is permanent and is excluded.
 # Existing manifest is also excluded.
 # ------------------------------------------------------------
 
-$Files = Get-ChildItem $UploadFolder -File -Recurse |
-    Where-Object {
-        $_.Name -ne "README.md" -and
-        $_.Name -ne "UPLOAD_MANIFEST.txt"
-    }
+$Files = @(
+    Get-ChildItem $UploadFolder -File -Recurse |
+        Where-Object {
+            $_.Name -ne "README.md" -and
+            $_.Name -ne "UPLOAD_MANIFEST.txt"
+        }
+)
 
 if ($Files.Count -eq 0) {
     Write-Host "No files found to upload." -ForegroundColor Yellow
@@ -108,12 +132,12 @@ foreach ($File in $Files) {
 $ManifestLines | Set-Content $Manifest -Encoding UTF8
 
 # ------------------------------------------------------------
-# Stage
+# Stage upload folder
 # ------------------------------------------------------------
 
 Write-Host "Staging upload..." -ForegroundColor Cyan
 
-git add -- "$UploadFolder"
+git add -- "KnowledgeBase/UPLOAD"
 
 # ------------------------------------------------------------
 # Show staged files
