@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<!-- Switch to Windows TFM so WinForms is available -->
-		<TargetFramework>net8.0-windows</TargetFramework>
+		<TargetFramework>net10.0-windows</TargetFramework>
 
 		<!-- Enable Windows Forms (gives you System.Windows.Forms, Control, Button, etc.) -->
 		<UseWindowsForms>true</UseWindowsForms>
