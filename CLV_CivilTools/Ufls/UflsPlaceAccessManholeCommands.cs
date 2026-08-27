@@ -50,11 +50,11 @@ namespace CLV_CivilTools.Ufls
                 using (doc.LockDocument())
                 using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
-                    Point3d markerLocation = PromptForManholeMarker(ed, tr);
-                    if (markerLocation == Point3d.Origin && !PromptForMarkerSucceeded)
+                    Point3d markerLocation = PromptForManholeMarker(ed, tr, out bool markerSelected);
+                    if (!markerSelected)
                         return;
 
-                    Structure boxStructure = PromptForBoxStructure(ed, tr);
+                    Structure? boxStructure = PromptForBoxStructure(ed, tr);
                     if (boxStructure == null)
                         return;
 
@@ -77,8 +77,8 @@ namespace CLV_CivilTools.Ufls
                     if (selectedPart == null)
                         return;
 
-                    double rimElevation = PromptForRimElevation(ed, tr, boxStructure);
-                    if (!PromptForRimElevationSucceeded)
+                    double rimElevation = PromptForRimElevation(ed, tr, boxStructure, out bool rimSelected);
+                    if (!rimSelected)
                         return;
 
                     ObjectId newStructureId = ObjectId.Null;
@@ -120,12 +120,9 @@ namespace CLV_CivilTools.Ufls
             }
         }
 
-        private static bool PromptForMarkerSucceeded { get; set; }
-        private static bool PromptForRimElevationSucceeded { get; set; }
-
-        private static Point3d PromptForManholeMarker(Editor ed, Transaction tr)
+        private static Point3d PromptForManholeMarker(Editor ed, Transaction tr, out bool selected)
         {
-            PromptForMarkerSucceeded = false;
+            selected = false;
 
             PromptEntityOptions peo = new PromptEntityOptions(
                 "\nSelect UFLS_MH_MARK for access manhole center: ");
@@ -141,7 +138,7 @@ namespace CLV_CivilTools.Ufls
             if (!string.Equals(blockName, MarkerBlockName, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Selected block is '{blockName}', not {MarkerBlockName}.");
 
-            PromptForMarkerSucceeded = true;
+            selected = true;
             Point3d p = marker.Position;
             return new Point3d(p.X, p.Y, p.Z);
         }
@@ -159,7 +156,7 @@ namespace CLV_CivilTools.Ufls
             return btr.Name ?? string.Empty;
         }
 
-        private static Structure PromptForBoxStructure(Editor ed, Transaction tr)
+        private static Structure? PromptForBoxStructure(Editor ed, Transaction tr)
         {
             PromptEntityOptions peo = new PromptEntityOptions(
                 "\nSelect TYPE 2 BOX STRUCTURE (network/name/rim source): ");
@@ -168,10 +165,9 @@ namespace CLV_CivilTools.Ufls
 
             PromptEntityResult per = ed.GetEntity(peo);
             if (per.Status != PromptStatus.OK)
-                return null!;
+                return null;
 
-            Structure structure = (Structure)tr.GetObject(per.ObjectId, OpenMode.ForRead);
-            return structure;
+            return (Structure)tr.GetObject(per.ObjectId, OpenMode.ForRead);
         }
 
         private static List<AccessPartChoice> GetAccessPartChoices(Transaction tr, PartsList partsList)
@@ -223,33 +219,23 @@ namespace CLV_CivilTools.Ufls
 
         private static AccessPartChoice? PromptForAccessPart(Editor ed, IReadOnlyList<AccessPartChoice> choices)
         {
-            int maxOptions = Math.Min(choices.Count, 35);
+            int maxOptions = Math.Min(choices.Count, 26);
             if (choices.Count > maxOptions)
             {
                 ed.WriteMessage(
                     $"\nPLACE ACCESS MANHOLE: {choices.Count} access part sizes are available; showing the first {maxOptions}.");
             }
 
-            PromptKeywordOptions pko = new PromptKeywordOptions("\nSelect ACCESS STRUCTURE part [");
+            ed.WriteMessage("\nACCESS STRUCTURE PARTS:\n");
             for (int i = 0; i < maxOptions; i++)
-            {
-                string token = MakeOptionToken(i);
-                if (i > 0)
-                    pko.Keywords.Add(token);
-                else
-                    pko.Keywords.Add(token);
+                ed.WriteMessage($"  {MakeOptionToken(i)} = {choices[i].DisplayName}\n");
 
-                pko.AppendKeywordsToMessage = false;
-            }
-
-            pko.AppendKeywordsToMessage = false;
+            PromptKeywordOptions pko = new PromptKeywordOptions(
+                "\nSelect ACCESS STRUCTURE part: ");
             pko.AllowNone = false;
-
-            ed.WriteMessage("\n");
             for (int i = 0; i < maxOptions; i++)
-                ed.WriteMessage($"  {MakeOptionToken(i)}={choices[i].DisplayName}\n");
+                pko.Keywords.Add(MakeOptionToken(i));
 
-            pko.Message = "\nSelect ACCESS STRUCTURE part: ";
             PromptResult pr = ed.GetKeywords(pko);
             if (pr.Status != PromptStatus.OK)
                 return null;
@@ -262,31 +248,27 @@ namespace CLV_CivilTools.Ufls
         }
 
         private static string MakeOptionToken(int index)
-        {
-            if (index < 9)
-                return (index + 1).ToString(CultureInfo.InvariantCulture);
-
-            return ((char)('A' + (index - 9))).ToString();
-        }
+            => ((char)('A' + index)).ToString(CultureInfo.InvariantCulture);
 
         private static int ParseOptionToken(string token)
         {
-            if (int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out int numeric))
-                return numeric - 1;
+            if (string.IsNullOrWhiteSpace(token) || token.Length != 1)
+                return -1;
 
-            if (token.Length == 1 && token[0] >= 'A' && token[0] <= 'Z')
-                return 9 + (token[0] - 'A');
-
-            return -1;
+            char c = char.ToUpperInvariant(token[0]);
+            return c >= 'A' && c <= 'Z' ? c - 'A' : -1;
         }
 
-        private static double PromptForRimElevation(Editor ed, Transaction tr, Structure boxStructure)
+        private static double PromptForRimElevation(
+            Editor ed,
+            Transaction tr,
+            Structure boxStructure,
+            out bool selected)
         {
-            PromptForRimElevationSucceeded = false;
+            selected = false;
 
             PromptKeywordOptions sourceOptions = new PromptKeywordOptions(
-                "\nRIM ELEVATION SOURCE [BOX/USER/AEC]: ",
-                "BOX USER AEC");
+                "\nRIM ELEVATION SOURCE: ");
             sourceOptions.Keywords.Add("BOX");
             sourceOptions.Keywords.Add("USER");
             sourceOptions.Keywords.Add("AEC");
@@ -334,7 +316,7 @@ namespace CLV_CivilTools.Ufls
                     return 0.0;
             }
 
-            PromptForRimElevationSucceeded = true;
+            selected = true;
             return elevation;
         }
 
@@ -387,7 +369,11 @@ namespace CLV_CivilTools.Ufls
         private static double GetSortBarrelDiameter(string displayName)
         {
             Match match = Regex.Match(displayName, @"^(?<d>\d+(?:\.\d+)?)\s*\"");
-            return match.Success && double.TryParse(match.Groups["d"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value)
+            return match.Success && double.TryParse(
+                match.Groups["d"].Value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out double value)
                 ? value
                 : double.MaxValue;
         }
