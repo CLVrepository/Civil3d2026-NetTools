@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How To: STREET NAMES | CLV Civil Tools Knowledge Base</title>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+</head>
+<body class="subpage">
+  <header class="hero">
+    <div class="brand-row">
+      <a class="seal-wrap" href="../../index.html" aria-label="CLV Civil Tools Knowledge Base home"><img class="seal-wrap" src="../../assets/logos/clv-seal-cropped.svg" alt="City of Las Vegas seal"></a>
+      <div class="brand-copy"><h1>How To: STREET NAMES</h1><p>Q4 Survey + Mapping roadway label workflow.</p></div>
+    </div>
+  </header>
+  <main class="content-wrap">
+    <div class="list-panel">
+      <h2>STREET NAMES</h2>
+      <p style="color:var(--muted)">Creates roadway name labels from GIS street centerline data. The project must be geolocated and have the correct coordinate system assigned before running this command.</p>
+      <div class="howto-note"><strong>Result:</strong> Roadway labels are created from available GIS data inside the selected boundary area. Some cleanup may still be required, such as removing duplicate labels or adjusting labels that do not land in the preferred location.</div>
+      <div class="howto-critical"><strong>Critical setting:</strong> In the <strong>Convert Labels to Text</strong> dialog, set <strong>Selection Scope</strong> to <strong>Labels within the view window</strong>. Do not leave it set to the full data set, or Civil 3D may attempt to create labels for the entire GIS data set.</div>
+      <h3>Before You Start</h3>
+      <ol class="howto-checklist">
+        <li>Confirm the drawing is geolocated.</li>
+        <li>Confirm the correct coordinate system is assigned.</li>
+        <li>Zoom near the project area where labels are needed.</li>
+        <li>Use a boundary that covers the desired label area only.</li>
+        <li>Be ready to set the label conversion target layer to <strong>C-ROAD-LABL</strong>.</li>
+      </ol>
+      <h3>Workflow</h3>
+      <ol class="howto-checklist">
+        <li>Open Q4 Survey + Mapping and select <strong>STREET NAMES</strong> under <strong>LABEL → ROADWAY</strong>.</li>
+        <li>Choose the appropriate boundary mode and identify the desired label area.</li>
+        <li>Verify the view window contains only the area that should be converted.</li>
+        <li>Continue to the <strong>Convert Labels to Text</strong> dialog.</li>
+        <li>Set <strong>Select the Target</strong> to <strong>C-ROAD-LABL</strong>.</li>
+        <li>Set <strong>Selection Scope</strong> to <strong>Labels within the view window</strong>.</li>
+        <li>Review the resulting street-name text and clean up duplicates or placement as needed.</li>
+      </ol>
+      <h3>Notes</h3>
+      <ul class="howto-checklist">
+        <li>If no GIS road data exists inside the selected area, no roadway labels will be created.</li>
+        <li>The command is intended to speed up roadway labeling, not replace final drafting review.</li>
+        <li>Verify text height, layer, and label locations before plotting or issuing drawings.</li>
+        <li><strong>STREET NAMES</strong> is the current palette name for the older <strong>LABEL ROADS</strong> workflow. The filename remains <code>label-roads.html</code> so existing bookmarks do not break.</li>
+      </ul>
+      <p><a class="back-link" href="../../tools/q4/index.html#roadway">← Back to Q4 Survey + Mapping</a></p>
+    </div>
+  </main>
+  <footer class="footer"><div>For support or suggestions, contact <a href="mailto:mdwillis@lasvegasnevada.gov">mdwillis@lasvegasnevada.gov</a></div></footer>
+<a class="clv-chat-support" href="https://teams.microsoft.com/l/chat/0/0?users=mdwillis@lasvegasnevada.gov&amp;topicName=CAD%20Knowledge%20Base%20Support&amp;message=Hi%20Mark%2C%20I%20need%20help%20with%20the%20CAD%20Knowledge%20Base." target="_blank" rel="noopener" aria-label="Live Chat in Microsoft Teams"><span aria-hidden="true">💬</span><span>Live Chat</span></a>
+</body>
+</html>

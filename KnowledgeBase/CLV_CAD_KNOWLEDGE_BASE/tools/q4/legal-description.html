@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Q4 Survey + Mapping - LEGAL DESCRIPTION | CLV Civil Tools Knowledge Base</title>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+</head>
+<body class="clv-page">
+  <header class="clv-topbar">
+    <a class="clv-brand" href="../../index.html" aria-label="CLV Civil Tools Knowledge Base home">
+      <img src="../../assets/logos/clv-seal-cropped.svg" alt="City of Las Vegas seal">
+      <span class="clv-brand-text"><span>CITY OF</span><strong>LAS VEGAS</strong></span>
+    </a>
+    <div class="clv-service-title">Q4 Survey + Mapping</div>
+    <div class="clv-top-search" role="search" aria-label="Search this site">
+      <input aria-label="Search this site" placeholder="Search this site..." type="search">
+      <span aria-hidden="true">⌕</span>
+    </div>
+  </header>
+
+  <div class="clv-app-shell">
+    <aside class="clv-sidebar" aria-label="Q4 Survey + Mapping sections">
+      <div class="clv-sidebar-title">Q4 MENU</div>
+      <nav>
+        <a class="" href="index.html">LABEL</a>
+        <a class="active" href="mapping.html">MAPPING</a>
+        <a class="" href="gis.html">GIS</a>
+      </nav>
+      <div class="clv-help-card">
+        <div>Need help?</div>
+        <a href="mailto:mdwillis@lasvegasnevada.gov">Contact Web / CAD Services</a>
+      </div>
+    </aside>
+
+    <main class="clv-main">
+      <a class="clv-back-button" href="../../index.html" aria-label="Back to Home">‹ Back to Home</a>
+      <div class="clv-kicker">Q4 MAPPING · TOOLS</div>
+      <h1>LEGAL DESCRIPTION</h1>
+      <p class="clv-lead">Build, review, edit, save, and export a legal description from a connected traverse of AutoCAD LINE and ARC entities.</p>
+
+      <section class="clv-card" id="start">
+        <h2>STARTING THE BUILDER</h2>
+        <ol>
+          <li>Run <code>LEGALDESC</code> / <code>CLV-LEGAL-DESCRIPTION</code>.</li>
+          <li>Select one connected traverse made from individual AutoCAD LINE and ARC entities.</li>
+          <li>Choose the desired Point of Beginning endpoint.</li>
+          <li>Optionally identify a separate Point of Commencement.</li>
+          <li>Review the resulting legal-description palette.</li>
+        </ol>
+        <p><strong>Reopen:</strong> <code>LEGALDESC-OPEN</code> reopens the most recently saved legal-description session stored in the current drawing.</p>
+      </section>
+
+      <section class="clv-card" id="geometry">
+        <h2>GEOMETRY AND REVIEW</h2>
+        <p>The builder orders an unordered LINE/ARC selection into a connected traverse using a 0.10-foot endpoint tolerance while preserving the original source entities.</p>
+        <ul>
+          <li>Line bearings and distances are calculated.</li>
+          <li>Curve direction, radius, central angle, and arc length are calculated.</li>
+          <li>The complete traverse can be reversed from the palette.</li>
+          <li>Traverse length and enclosed area are reported.</li>
+          <li>Forward misclosure and an independently sequenced reverse-direction build result are reported.</li>
+          <li>Selecting a course row highlights its source entity; <strong>SELECT / ZOOM COURSE</strong> centers the view on that course.</li>
+        </ul>
+      </section>
+
+      <section class="clv-card" id="text-editor">
+        <h2>TEXT EDITOR</h2>
+        <p>Each course can be edited individually before the final legal wording is generated.</p>
+        <ul>
+          <li>Include or exclude a course.</li>
+          <li>Edit prefix, along/context wording, and suffix.</li>
+          <li>Use a complete geometry-text override when needed.</li>
+          <li><strong>REGENERATE TEXT</strong> rebuilds the legal text from the course data.</li>
+          <li>The full preview remains editable for final wording.</li>
+          <li><strong>SAVE TO DRAWING</strong> stores the complete session and edited text in the drawing.</li>
+          <li><strong>EXPORT TXT</strong> writes the displayed description to a text file.</li>
+        </ul>
+      </section>
+
+      <section class="clv-card" id="linked-mtext">
+        <h2>CAD REVIEW AND LINKED MTEXT</h2>
+        <p>The drawing can store the editable legal-description session and maintain linked MText as the live CAD review copy. Use the linked MText workflow to review the final paragraph-form legal description in the drawing before export.</p>
+      </section>
+
+      <section class="clv-card" id="docx">
+        <h2>EXPORT LEGAL DOCX</h2>
+        <ol>
+          <li>Build and review the legal description in the palette editor.</li>
+          <li>Place or update linked MText for CAD review.</li>
+          <li>Select <strong>EXPORT LEGAL DOCX</strong>.</li>
+          <li>Confirm APN, date, preparer, peer reviewer, explanation, basis of bearings, and exhibit statement.</li>
+          <li>Select the output <code>.docx</code> path.</li>
+        </ol>
+        <p>The exported DOCX is the formatted City Surveyor deliverable. Word does not need to be running for the export. Open the finished DOCX for final page-layout review before issuance.</p>
+      </section>
+
+      <section class="clv-card" id="scope">
+        <h2>CURRENT SCOPE AND LIMITATIONS</h2>
+        <ul>
+          <li>Input geometry must be one connected traverse of individual LINE and ARC entities.</li>
+          <li>Polylines, splines, ellipses, Civil 3D parcels, and alignment entities are not converted by this workflow.</li>
+          <li>A separate POC can be recorded and identified in the opening wording, but the current Phase 1-2 workflow does not automatically calculate or write the commencement tie from POC to POB.</li>
+          <li>Street names, intersections, PLSS callouts, monument descriptions, record documents, and adjoining ownership are entered manually through the available context or override fields.</li>
+          <li>Generated wording is a drafting aid and requires review by the responsible survey/legal professional.</li>
+        </ul>
+      </section>
+
+      <footer class="clv-page-footer">
+        <div>For support or suggestions, contact <a href="mailto:mdwillis@lasvegasnevada.gov">mdwillis@lasvegasnevada.gov</a></div>
+        <a href="../../index.html">Knowledge Base Home</a>
+      </footer>
+    </main>
+  </div>
+
+<a class="clv-chat-support" href="https://teams.microsoft.com/l/chat/0/0?users=mdwillis@lasvegasnevada.gov&amp;topicName=CAD%20Knowledge%20Base%20Support&amp;message=Hi%20Mark%2C%20I%20need%20help%20with%20the%20CAD%20Knowledge%20Base." target="_blank" rel="noopener" aria-label="Live Chat in Microsoft Teams">
+  <span aria-hidden="true">💬</span><span>Live Chat</span>
+</a>
+</body>
+</html>

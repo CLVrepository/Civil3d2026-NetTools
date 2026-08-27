@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Q2 GIS | CLV Civil Tools Knowledge Base</title>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+</head>
+<body class="clv-page">
+  <header class="clv-topbar">
+    <a class="clv-brand" href="../../index.html" aria-label="CLV Civil Tools Knowledge Base home">
+      <img src="../../assets/logos/clv-seal-cropped.svg" alt="City of Las Vegas seal">
+      <span class="clv-brand-text"><span>CITY OF</span><strong>LAS VEGAS</strong></span>
+    </a>
+    <div class="clv-service-title">Q2 GIS + Aerials</div>
+    <div class="clv-top-search" role="search" aria-label="Search this site">
+      <input aria-label="Search this site" placeholder="Search this site..." type="search">
+      <span aria-hidden="true">⌕</span>
+    </div>
+  </header>
+
+  <div class="clv-app-shell">
+    <aside class="clv-sidebar" aria-label="Q2 GIS + Aerials sections">
+      <div class="clv-sidebar-title">Q2 MENU</div>
+      <nav>
+        <a class="" href="index.html">AERIAL</a>
+        <a class="active" href="gis.html">GIS</a>
+      </nav>
+      <div class="clv-help-card">
+        <div>Need help?</div>
+        <a href="mailto:mdwillis@lasvegasnevada.gov">Contact Web / CAD Services</a>
+      </div>
+    </aside>
+
+    <main class="clv-main">
+      <a class="clv-back-button" href="../../index.html" aria-label="Back to Home">‹ Back to Home</a>
+      <div class="clv-kicker">Q2 MENU</div>
+      <h1>GIS</h1>
+      <p class="clv-lead">Address and parcel locating, GIS imports, coordinate zone overlays, PLSS section overlays, GIS cleanup tools, and Survey GIS XData inspection.</p>
+
+      <section class="clv-card" id="address">
+        <h2>ADDRESS</h2>
+        <p>Locate project areas by address, intersection, parcel number, or owner name.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="Address tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>LOCATE ADDRESS</strong></div><div role="cell">Allows user to specify address or intersection. Will give options when solutions found, and will then zoom to the location and turn on Bing Maps.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/gis/locate-address.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>LOCATE PARCEL</strong></div><div role="cell">Allows user to specify parcel number or owner name. Will give options when solutions found, and will zoom to the location, highlight selected property, and turn on Bing Maps.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/gis/locate-parcel.html">HOW TO</a></div></div>
+        </div>
+      </section>
+
+      <section class="clv-card" id="data">
+        <h2>DATA</h2>
+        <p>Import GIS data or open the restricted data creation tool set.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="Data tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>IMPORT GIS</strong></div><div role="cell">Allows user to import GIS data. Once dialog box opens the user can specify what type of data to import.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/gis/import-gis.html">HOW TO</a></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>CREATE DATA</strong></div><div role="cell">This opens a tool set used to create GIS data sets. This is a restricted tool set, only certain users have access.</div><div role="cell"></div></div>
+        </div>
+      </section>
+
+      <section class="clv-card" id="section-coordinate-system">
+        <h2>SECTION/COORDINATE SYSTEM</h2>
+        <p>Displays or unloads reference overlays for City coordinate zones and PLSS section information.</p>
+        <div class="clv-tool-table" role="table" aria-label="Section and Coordinate System tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>DISPLAY COORDINATE ZONES</strong></div><div role="cell">Displays the City coordinate zone reference overlay so users can verify whether the project area falls within the LVF or LVHEF coordinate system area.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>UNLOAD COORDINATE ZONES</strong></div><div role="cell">Unloads the coordinate zone reference overlay from the drawing.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>DISPLAY SECTIONS</strong></div><div role="cell">Displays the TOWNSHIP/RANGE map.</div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>UNLOAD SECTIONS</strong></div><div role="cell">Unloads the TOWNSHIP/RANGE map.</div></div>
+        </div>
+      </section>
+
+      <section class="clv-card" id="gis-tools">
+        <h2>GIS TOOLS</h2>
+        <p>Centerline cleanup and Survey GIS report tools.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="GIS Tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>HTML SURVEY REPORT</strong></div><div role="cell">This is a report document for the Survey GIS data that has been added. It is broken out via Sewer, Storm, and project number. It is a searchable document.<br>Note: This data is mainly populated as new project data is collected per UFLS surveys. Older data sets may not be available. If specific data is desired, a request can be put in to the Survey Department.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/gis/html-survey-report.html">HOW TO</a></div></div>
+        </div>
+      </section>
+
+      <section class="clv-card" id="xdata">
+        <h2>XDATA</h2>
+        <p>Inspect Survey GIS object tags created by the Survey Department workflow.</p>
+        <div class="clv-tool-table clv-tool-table-actions" role="table" aria-label="XData tools">
+          <div class="clv-tool-row clv-tool-head" role="row"><div role="columnheader">Tool</div><div role="columnheader">Purpose</div><div role="columnheader" class="clv-action-head" aria-label="Help links"></div></div>
+          <div class="clv-tool-row" role="row"><div role="cell"><strong>OD INSPECT</strong></div><div role="cell">When Survey GIS data is created, the objects are tagged with XDATA. After selecting tool, select the Survey GIS object you want to see the XDATA for. County GIS data does not contain XDATA. This is only available for GIS data that the Survey Department creates.</div><div role="cell"><a class="clv-action-link" href="../../quicktips/gis/od-inspect.html">HOW TO</a></div></div>
+        </div>
+      </section>
+
+      <footer class="clv-page-footer">
+        <div>For support or suggestions, contact <a href="mailto:mdwillis@lasvegasnevada.gov">mdwillis@lasvegasnevada.gov</a></div>
+        <a href="../../index.html">Knowledge Base Home</a>
+      </footer>
+    </main>
+  </div>
+
+<a class="clv-chat-support" href="https://teams.microsoft.com/l/chat/0/0?users=mdwillis@lasvegasnevada.gov&amp;topicName=CAD%20Knowledge%20Base%20Support&amp;message=Hi%20Mark%2C%20I%20need%20help%20with%20the%20CAD%20Knowledge%20Base." target="_blank" rel="noopener" aria-label="Live Chat in Microsoft Teams">
+  <span aria-hidden="true">💬</span><span>Live Chat</span>
+</a>
+</body>
+</html>
