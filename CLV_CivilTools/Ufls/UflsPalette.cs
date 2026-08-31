@@ -201,6 +201,8 @@ namespace CLV_CivilTools
 
             layout.Controls.Add(CreateSectionLabel("STORM JUNCTION STRUCTURE"));
             layout.Controls.Add(CreateCommandButton("RESIZE JUNCTION", "SD-JUNCTION-SIZE"));
+            layout.Controls.Add(CreateCommandButton("ADJUST TOP ELEV", "UFLS-ADJ-TOP-ELEV"));
+            layout.Controls.Add(CreateCommandButton("PLACE ACCESS MANHOLE", "UFLS-PLACE-ACCESS-MH"));
 
             layout.Controls.Add(CreateSectionLabel("STORM DRAIN - MOVE"));
             layout.Controls.Add(CreateCommandButtonRow("JNCT - SINGLE", "UFLS-ADJ-JNCT-SINGLE", "JNCT - ALL", "UFLS-ADJ-JNCT-ALL"));

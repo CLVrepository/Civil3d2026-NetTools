@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -321,7 +322,7 @@ namespace CLV_CivilTools.Gis
             var sb = new StringBuilder();
             sb.AppendLine("FILEDIA 0");
             sb.AppendLine("CMDDIA 0");
-            sb.AppendLine("-LAYER");
+            sb.AppendLine("_.-LAYER");
             sb.AppendLine("T");
             sb.AppendLine("0");
             sb.AppendLine();
@@ -555,6 +556,7 @@ namespace CLV_CivilTools.Gis
 
         public string SelectedNetworkKind => _rbStorm.Checked ? "STRM" : "SSWR";
         public string SelectedCoordinateSystem => _rbLvhef.Checked ? "NV83.NCRS-LVHEF" : "NV83.NCRS-LVF";
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public bool AttemptBestEffortAutomation
         {
             get => _chkAutoRun.Checked;
