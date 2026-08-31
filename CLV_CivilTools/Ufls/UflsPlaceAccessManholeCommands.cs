@@ -3,379 +3,211 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
-
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
-using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.Civil.DatabaseServices;
 
-using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
-using CivilCogoPoint = Autodesk.Civil.DatabaseServices.CogoPoint;
-
 namespace CLV_CivilTools.Ufls
 {
-    /// <summary>
-    /// Places a circular access structure at the UFLS_MH_MARK location.
-    /// The selected Type 2 box structure supplies the pipe network and, when
-    /// requested, the rim elevation and source name. No pipes are created.
-    /// </summary>
     public static class UflsPlaceAccessManholeCommands
     {
-        private const string MarkerBlockName = "UFLS_MH_MARK";
-        private const string AccessFamilyText = "ACCESS STRUCTURE";
-
-        private sealed class AccessPartChoice
-        {
-            public ObjectId FamilyId { get; init; }
-            public ObjectId SizeId { get; init; }
-            public string FamilyName { get; init; } = string.Empty;
-            public string SizeName { get; init; } = string.Empty;
-            public string DisplayName { get; init; } = string.Empty;
-        }
-
-        [CommandMethod("UFLS-PLACE-ACCESS-MH", CommandFlags.Modal)]
+        [Autodesk.AutoCAD.Runtime.CommandMethod("UFLS-PLACE-ACCESS-MH", Autodesk.AutoCAD.Runtime.CommandFlags.Modal)]
         public static void PlaceAccessManhole()
         {
-            Document? doc = AcadApp.DocumentManager.MdiActiveDocument;
+            Document doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null)
                 return;
 
-            Database db = doc.Database;
             Editor ed = doc.Editor;
+            Database db = doc.Database;
 
             try
             {
-                using (doc.LockDocument())
+                PromptEntityOptions markPrompt = new PromptEntityOptions("\nSelect UFLS_MH_MARK: ");
+                markPrompt.SetRejectMessage("\nSelect a UFLS_MH_MARK block.");
+                markPrompt.AddAllowedClass(typeof(BlockReference), false);
+                PromptEntityResult markResult = ed.GetEntity(markPrompt);
+                if (markResult.Status != PromptStatus.OK)
+                    return;
+
+                Point3d location;
+                ObjectId boxId;
                 using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
-                    Point3d markerLocation = PromptForManholeMarker(ed, tr, out bool markerSelected);
-                    if (!markerSelected)
-                        return;
+                    BlockReference mark = tr.GetObject(markResult.ObjectId, OpenMode.ForRead) as BlockReference
+                        ?? throw new InvalidOperationException("The selected object is not a block reference.");
 
-                    Structure? boxStructure = PromptForBoxStructure(ed, tr);
-                    if (boxStructure == null)
-                        return;
+                    BlockTableRecord btr = (BlockTableRecord)tr.GetObject(mark.BlockTableRecord, OpenMode.ForRead);
+                    string blockName = btr.Name;
+                    if (!string.Equals(blockName, "UFLS_MH_MARK", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("The selected block is not UFLS_MH_MARK.");
 
-                    if (boxStructure.NetworkId.IsNull)
-                        throw new InvalidOperationException("The selected box structure is not assigned to a pipe network.");
+                    location = mark.Position;
+                    tr.Commit();
+                }
 
-                    Network network = (Network)tr.GetObject(boxStructure.NetworkId, OpenMode.ForWrite);
-                    if (network.PartsListId.IsNull)
+                PromptEntityOptions boxPrompt = new PromptEntityOptions("\nSelect Type 2 box structure: ");
+                boxPrompt.SetRejectMessage("\nSelect a Civil 3D structure.");
+                boxPrompt.AddAllowedClass(typeof(Structure), false);
+                PromptEntityResult boxResult = ed.GetEntity(boxPrompt);
+                if (boxResult.Status != PromptStatus.OK)
+                    return;
+                boxId = boxResult.ObjectId;
+
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    Structure box = tr.GetObject(boxId, OpenMode.ForRead) as Structure
+                        ?? throw new InvalidOperationException("Unable to open the selected structure.");
+                    Network network = tr.GetObject(box.NetworkId, OpenMode.ForRead) as Network
+                        ?? throw new InvalidOperationException("The selected structure does not belong to a pipe network.");
+
+                    ObjectId partsListId = network.PartsListId;
+                    if (partsListId.IsNull)
                         throw new InvalidOperationException("The selected network does not have a Parts List.");
 
-                    PartsList partsList = (PartsList)tr.GetObject(network.PartsListId, OpenMode.ForRead);
-                    List<AccessPartChoice> choices = GetAccessPartChoices(tr, partsList);
-                    if (choices.Count == 0)
+                    PartsList partsList = tr.GetObject(partsListId, OpenMode.ForRead) as PartsList
+                        ?? throw new InvalidOperationException("Unable to open the network Parts List.");
+
+                    List<PartFamily> families = new List<PartFamily>();
+                    foreach (ObjectId familyId in partsList.GetPartFamilyIds())
                     {
-                        throw new InvalidOperationException(
-                            "No ACCESS STRUCTURE part sizes were found in the selected network's Parts List.");
+                        PartFamily family = tr.GetObject(familyId, OpenMode.ForRead) as PartFamily;
+                        if (family == null)
+                            continue;
+
+                        if (family.Name.IndexOf("ACCESS STRUCTURE", StringComparison.OrdinalIgnoreCase) >= 0)
+                            families.Add(family);
                     }
 
-                    AccessPartChoice? selectedPart = PromptForAccessPart(ed, choices);
-                    if (selectedPart == null)
+                    if (families.Count == 0)
+                        throw new InvalidOperationException("No ACCESS STRUCTURE part family was found in the selected network Parts List.");
+
+                    List<PartChoice> choices = new List<PartChoice>();
+                    foreach (PartFamily family in families.OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase))
+                    {
+                        foreach (ObjectId sizeId in family.GetPartSizeIds())
+                        {
+                            PartSize size = tr.GetObject(sizeId, OpenMode.ForRead) as PartSize;
+                            if (size == null)
+                                continue;
+
+                            string display = family.Name + " — " + size.Name;
+                            choices.Add(new PartChoice(family.ObjectId, size.ObjectId, display));
+                        }
+                    }
+
+                    if (choices.Count == 0)
+                        throw new InvalidOperationException("No ACCESS STRUCTURE part sizes were found in the selected Parts List.");
+
+                    ed.WriteMessage("\nAvailable ACCESS STRUCTURE parts:");
+                    for (int i = 0; i < choices.Count; i++)
+                        ed.WriteMessage($"\n  {i + 1}. {choices[i].DisplayName}");
+
+                    PromptIntegerOptions choicePrompt = new PromptIntegerOptions($"\nSelect access structure [1-{choices.Count}] <1>: ")
+                    {
+                        AllowNone = true,
+                        LowerLimit = 1,
+                        UpperLimit = choices.Count
+                    };
+                    PromptIntegerResult choiceResult = ed.GetInteger(choicePrompt);
+                    if (choiceResult.Status != PromptStatus.OK && choiceResult.Status != PromptStatus.None)
                         return;
 
-                    double rimElevation = PromptForRimElevation(ed, tr, boxStructure, out bool rimSelected);
-                    if (!rimSelected)
+                    int choiceIndex = choiceResult.Status == PromptStatus.None ? 0 : choiceResult.Value - 1;
+                    PartChoice choice = choices[choiceIndex];
+
+                    PromptKeywordOptions rimPrompt = new PromptKeywordOptions("\nRim elevation source [BOX/User/AEC] <BOX>: ", "BOX User AEC")
+                    {
+                        AllowNone = true
+                    };
+                    PromptResult rimResult = ed.GetKeywords(rimPrompt);
+                    if (rimResult.Status != PromptStatus.OK && rimResult.Status != PromptStatus.None)
                         return;
 
-                    ObjectId newStructureId = ObjectId.Null;
-                    network.AddStructure(
-                        selectedPart.FamilyId,
-                        selectedPart.SizeId,
-                        markerLocation,
-                        0.0,
-                        ref newStructureId,
-                        false);
+                    string rimMode = rimResult.Status == PromptStatus.None ? "BOX" : rimResult.StringResult;
+                    double rimElevation;
+                    if (rimMode.Equals("BOX", StringComparison.OrdinalIgnoreCase))
+                    {
+                        rimElevation = box.RimElevation;
+                    }
+                    else if (rimMode.Equals("User", StringComparison.OrdinalIgnoreCase))
+                    {
+                        PromptDoubleOptions elevPrompt = new PromptDoubleOptions("\nEnter rim elevation: ")
+                        {
+                            AllowNegative = true
+                        };
+                        PromptDoubleResult elevResult = ed.GetDouble(elevPrompt);
+                        if (elevResult.Status != PromptStatus.OK)
+                            return;
+                        rimElevation = elevResult.Value;
+                    }
+                    else
+                    {
+                        PromptEntityOptions pointPrompt = new PromptEntityOptions("\nSelect AEC/COGO point: ");
+                        pointPrompt.SetRejectMessage("\nSelect an AEC/COGO point.");
+                        pointPrompt.AddAllowedClass(typeof(CogoPoint), false);
+                        PromptEntityResult pointResult = ed.GetEntity(pointPrompt);
+                        if (pointResult.Status != PromptStatus.OK)
+                            return;
 
-                    if (newStructureId.IsNull)
-                        throw new InvalidOperationException("Civil 3D did not return the new access structure ObjectId.");
+                        CogoPoint point = tr.GetObject(pointResult.ObjectId, OpenMode.ForRead) as CogoPoint
+                            ?? throw new InvalidOperationException("Unable to open the selected COGO point.");
+                        rimElevation = point.Elevation;
+                    }
 
-                    Structure accessStructure = (Structure)tr.GetObject(newStructureId, OpenMode.ForWrite);
+                    string newName = RemoveJsSuffix(box.Name);
 
-                    accessStructure.AutomaticRimSurfaceAdjustment = false;
-                    accessStructure.RimElevation = rimElevation;
-                    accessStructure.ControlSumpBy = StructureControlSumpType.ByElevation;
-
-                    string sourceName = boxStructure.Name ?? string.Empty;
-                    string newName = RemoveJsSuffix(sourceName);
-                    if (!string.IsNullOrWhiteSpace(newName))
-                        accessStructure.Name = newName;
-
-                    accessStructure.RecordGraphicsModified(true);
                     tr.Commit();
 
-                    ed.WriteMessage($"\nPLACE ACCESS MANHOLE: Created '{accessStructure.Name}'.");
-                    ed.WriteMessage($"\nPLACE ACCESS MANHOLE: Part = {selectedPart.DisplayName}.");
-                    ed.WriteMessage($"\nPLACE ACCESS MANHOLE: Location = {markerLocation.X:0.###}, {markerLocation.Y:0.###}.");
-                    ed.WriteMessage($"\nPLACE ACCESS MANHOLE: Rim elevation = {rimElevation:0.##}.");
-                    ed.WriteMessage("\nPLACE ACCESS MANHOLE: Sump control = Elevation. No pipes created.");
+                    using (Transaction createTr = db.TransactionManager.StartTransaction())
+                    {
+                        Network writableNetwork = createTr.GetObject(network.ObjectId, OpenMode.ForWrite) as Network
+                            ?? throw new InvalidOperationException("Unable to open the network for writing.");
+
+                        ObjectId newStructureId = ObjectId.Null;
+                        writableNetwork.AddStructure(choice.FamilyId, choice.SizeId, location, 0.0, ref newStructureId, false);
+
+                        Structure newStructure = createTr.GetObject(newStructureId, OpenMode.ForWrite) as Structure
+                            ?? throw new InvalidOperationException("Civil 3D did not create the access structure.");
+
+                        newStructure.Name = newName;
+                        newStructure.RimElevation = rimElevation;
+                        newStructure.SumpOverride = true;
+                        newStructure.SumpElevation = rimElevation;
+
+                        createTr.Commit();
+                    }
+
+                    ed.WriteMessage($"\nAccess manhole placed at {location.X:F3}, {location.Y:F3}. Rim elevation: {rimElevation:F3}. Name: {newName}");
                 }
             }
             catch (System.Exception ex)
             {
-                ed.WriteMessage($"\nPLACE ACCESS MANHOLE error: {ex.Message}");
+                ed.WriteMessage($"\nPLACE ACCESS MANHOLE failed: {ex.Message}");
             }
-        }
-
-        private static Point3d PromptForManholeMarker(Editor ed, Transaction tr, out bool selected)
-        {
-            selected = false;
-
-            PromptEntityOptions peo = new PromptEntityOptions(
-                "\nSelect UFLS_MH_MARK for access manhole center: ");
-            peo.SetRejectMessage("\nSelect the UFLS_MH_MARK block.");
-            peo.AddAllowedClass(typeof(BlockReference), exactMatch: true);
-
-            PromptEntityResult per = ed.GetEntity(peo);
-            if (per.Status != PromptStatus.OK)
-                return Point3d.Origin;
-
-            BlockReference marker = (BlockReference)tr.GetObject(per.ObjectId, OpenMode.ForRead);
-            string blockName = GetEffectiveBlockName(tr, marker);
-            if (!string.Equals(blockName, MarkerBlockName, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"Selected block is '{blockName}', not {MarkerBlockName}.");
-
-            selected = true;
-            Point3d p = marker.Position;
-            return new Point3d(p.X, p.Y, p.Z);
-        }
-
-        private static string GetEffectiveBlockName(Transaction tr, BlockReference blockReference)
-        {
-            ObjectId definitionId = blockReference.IsDynamicBlock
-                ? blockReference.DynamicBlockTableRecord
-                : blockReference.BlockTableRecord;
-
-            if (definitionId.IsNull)
-                return string.Empty;
-
-            BlockTableRecord btr = (BlockTableRecord)tr.GetObject(definitionId, OpenMode.ForRead);
-            return btr.Name ?? string.Empty;
-        }
-
-        private static Structure? PromptForBoxStructure(Editor ed, Transaction tr)
-        {
-            PromptEntityOptions peo = new PromptEntityOptions(
-                "\nSelect TYPE 2 BOX STRUCTURE (network/name/rim source): ");
-            peo.SetRejectMessage("\nSelect a Civil 3D structure.");
-            peo.AddAllowedClass(typeof(Structure), exactMatch: true);
-
-            PromptEntityResult per = ed.GetEntity(peo);
-            if (per.Status != PromptStatus.OK)
-                return null;
-
-            return (Structure)tr.GetObject(per.ObjectId, OpenMode.ForRead);
-        }
-
-        private static List<AccessPartChoice> GetAccessPartChoices(Transaction tr, PartsList partsList)
-        {
-            var choices = new List<AccessPartChoice>();
-            ObjectIdCollection familyIds = partsList.GetPartFamilyIdsByDomain(DomainType.Structure);
-
-            foreach (ObjectId familyId in familyIds)
-            {
-                PartFamily family = (PartFamily)tr.GetObject(familyId, OpenMode.ForRead);
-                string familyName = family.Name ?? string.Empty;
-
-                if (familyName.IndexOf(AccessFamilyText, StringComparison.OrdinalIgnoreCase) < 0)
-                    continue;
-
-                for (int i = 0; i < family.PartSizeCount; i++)
-                {
-                    ObjectId sizeId = family[i];
-                    if (sizeId.IsNull)
-                        continue;
-
-                    PartSize size = (PartSize)tr.GetObject(sizeId, OpenMode.ForRead);
-                    string sizeName = size.Name ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(sizeName))
-                        continue;
-
-                    string barrel = TryGetBarrelDiameter(size);
-                    string display = string.IsNullOrWhiteSpace(barrel)
-                        ? $"{familyName} / {sizeName}"
-                        : $"{barrel} BARREL / {familyName} / {sizeName}";
-
-                    choices.Add(new AccessPartChoice
-                    {
-                        FamilyId = family.ObjectId,
-                        SizeId = size.ObjectId,
-                        FamilyName = familyName,
-                        SizeName = sizeName,
-                        DisplayName = display
-                    });
-                }
-            }
-
-            return choices
-                .OrderBy(c => GetSortBarrelDiameter(c.DisplayName))
-                .ThenBy(c => c.FamilyName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(c => c.SizeName, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-
-        private static AccessPartChoice? PromptForAccessPart(Editor ed, IReadOnlyList<AccessPartChoice> choices)
-        {
-            int maxOptions = Math.Min(choices.Count, 26);
-            if (choices.Count > maxOptions)
-            {
-                ed.WriteMessage(
-                    $"\nPLACE ACCESS MANHOLE: {choices.Count} access part sizes are available; showing the first {maxOptions}.");
-            }
-
-            ed.WriteMessage("\nACCESS STRUCTURE PARTS:\n");
-            for (int i = 0; i < maxOptions; i++)
-                ed.WriteMessage($"  {MakeOptionToken(i)} = {choices[i].DisplayName}\n");
-
-            PromptKeywordOptions pko = new PromptKeywordOptions(
-                "\nSelect ACCESS STRUCTURE part: ");
-            pko.AllowNone = false;
-            for (int i = 0; i < maxOptions; i++)
-                pko.Keywords.Add(MakeOptionToken(i));
-
-            PromptResult pr = ed.GetKeywords(pko);
-            if (pr.Status != PromptStatus.OK)
-                return null;
-
-            int selectedIndex = ParseOptionToken(pr.StringResult);
-            if (selectedIndex < 0 || selectedIndex >= maxOptions)
-                return null;
-
-            return choices[selectedIndex];
-        }
-
-        private static string MakeOptionToken(int index)
-            => ((char)('A' + index)).ToString(CultureInfo.InvariantCulture);
-
-        private static int ParseOptionToken(string token)
-        {
-            if (string.IsNullOrWhiteSpace(token) || token.Length != 1)
-                return -1;
-
-            char c = char.ToUpperInvariant(token[0]);
-            return c >= 'A' && c <= 'Z' ? c - 'A' : -1;
-        }
-
-        private static double PromptForRimElevation(
-            Editor ed,
-            Transaction tr,
-            Structure boxStructure,
-            out bool selected)
-        {
-            selected = false;
-
-            PromptKeywordOptions sourceOptions = new PromptKeywordOptions(
-                "\nRIM ELEVATION SOURCE: ");
-            sourceOptions.Keywords.Add("BOX");
-            sourceOptions.Keywords.Add("USER");
-            sourceOptions.Keywords.Add("AEC");
-            sourceOptions.AllowNone = false;
-
-            PromptResult sourceResult = ed.GetKeywords(sourceOptions);
-            if (sourceResult.Status != PromptStatus.OK)
-                return 0.0;
-
-            double elevation;
-            switch (sourceResult.StringResult.ToUpperInvariant())
-            {
-                case "BOX":
-                    elevation = boxStructure.RimElevation;
-                    break;
-
-                case "USER":
-                    PromptDoubleOptions pdo = new PromptDoubleOptions(
-                        "\nEnter rim elevation: ");
-                    pdo.AllowNegative = true;
-                    pdo.AllowZero = true;
-
-                    PromptDoubleResult pdr = ed.GetDouble(pdo);
-                    if (pdr.Status != PromptStatus.OK)
-                        return 0.0;
-
-                    elevation = pdr.Value;
-                    break;
-
-                case "AEC":
-                    PromptEntityOptions peo = new PromptEntityOptions(
-                        "\nSelect AEC/COGO point for rim elevation: ");
-                    peo.SetRejectMessage("\nSelect a Civil 3D COGO point.");
-                    peo.AddAllowedClass(typeof(CivilCogoPoint), exactMatch: true);
-
-                    PromptEntityResult per = ed.GetEntity(peo);
-                    if (per.Status != PromptStatus.OK)
-                        return 0.0;
-
-                    CivilCogoPoint point = (CivilCogoPoint)tr.GetObject(per.ObjectId, OpenMode.ForRead);
-                    elevation = point.Elevation;
-                    break;
-
-                default:
-                    return 0.0;
-            }
-
-            selected = true;
-            return elevation;
         }
 
         private static string RemoveJsSuffix(string name)
         {
-            if (string.IsNullOrWhiteSpace(name))
-                return name;
-
-            return Regex.Replace(
-                name.Trim(),
-                @"-JS$",
-                string.Empty,
-                RegexOptions.IgnoreCase);
+            if (name.EndsWith("-JS", StringComparison.OrdinalIgnoreCase))
+                return name.Substring(0, name.Length - 3);
+            return name;
         }
 
-        private static string TryGetBarrelDiameter(PartSize size)
+        private sealed class PartChoice
         {
-            try
+            public ObjectId FamilyId { get; }
+            public ObjectId SizeId { get; }
+            public string DisplayName { get; }
+
+            public PartChoice(ObjectId familyId, ObjectId sizeId, string displayName)
             {
-                PartDataField? field = size.SizeDataRecord.GetDataFieldBy(PartContextType.StructInnerDiameter);
-                if (field?.Value == null)
-                    field = size.SizeDataRecord.GetDataFieldBy(PartContextType.StructDiameter);
-
-                if (field?.Value == null)
-                    return string.Empty;
-
-                if (!double.TryParse(
-                        Convert.ToString(field.Value, CultureInfo.InvariantCulture),
-                        NumberStyles.Float,
-                        CultureInfo.InvariantCulture,
-                        out double value))
-                {
-                    return string.Empty;
-                }
-
-                if (value > 0.0 && value < 10.0)
-                    value *= 12.0;
-
-                if (value < 40.0 || value > 100.0)
-                    return string.Empty;
-
-                return $"{value:0.#}\"";
+                FamilyId = familyId;
+                SizeId = sizeId;
+                DisplayName = displayName;
             }
-            catch
-            {
-                return string.Empty;
-            }
-        }
-
-        private static double GetSortBarrelDiameter(string displayName)
-        {
-            Match match = Regex.Match(displayName, @"^(?<d>\d+(?:\.\d+)?)\s*\"");
-            return match.Success && double.TryParse(
-                match.Groups["d"].Value,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out double value)
-                ? value
-                : double.MaxValue;
         }
     }
 }
