@@ -34,12 +34,12 @@ namespace CLV_CivilTools.Ufls
                 ObjectId boxId;
                 string boxName;
                 ObjectId networkId;
-                double boxSumpElevation;
+                double boxRimElevation;
 
                 using (doc.LockDocument())
                 using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
-                    PromptEntityOptions boxPrompt = new PromptEntityOptions("\nSelect Type 2 box structure: ");
+                    PromptEntityOptions boxPrompt = new PromptEntityOptions("\nSelect box structure: ");
                     boxPrompt.SetRejectMessage("\nSelect a Civil 3D structure.");
                     boxPrompt.AddAllowedClass(typeof(Structure), false);
 
@@ -54,7 +54,7 @@ namespace CLV_CivilTools.Ufls
                     boxId = box.ObjectId;
                     boxName = box.Name;
                     networkId = box.NetworkId;
-                    boxSumpElevation = box.SumpElevation;
+                    boxRimElevation = box.RimElevation;
 
                     tr.Commit();
                 }
@@ -91,13 +91,16 @@ namespace CLV_CivilTools.Ufls
                     rimElevation = dialog.ManualRimElevation;
                 }
 
-                double availableHeight = rimElevation - boxSumpElevation;
+                // The access-man­hole barrel depth is measured from the access rim down to
+                // the rim of the underlying box structure. The box rim, not the box sump,
+                // is the elevation used for the new access structure's sump.
+                double availableHeight = rimElevation - boxRimElevation;
                 double typeIMinimum = barrelInches == 48 ? TypeIMinimum48 : TypeIMinimum60;
                 string structureType = availableHeight >= typeIMinimum ? "TYPE I" : "TYPE IA";
 
                 ed.WriteMessage(
                     $"\nPLACE ACCESS MANHOLE: Rim={rimElevation:F3}, " +
-                    $"Box Sump={boxSumpElevation:F3}, Available Height={availableHeight:F3}'.");
+                    $"Box Rim={boxRimElevation:F3}, Available Height={availableHeight:F3}'.");
                 ed.WriteMessage(
                     $"\nPLACE ACCESS MANHOLE: {barrelInches}\" barrel requires {typeIMinimum:F3}' for Type I -> {structureType}.");
 
@@ -158,7 +161,7 @@ namespace CLV_CivilTools.Ufls
                     newStructure.AutomaticRimSurfaceAdjustment = false;
                     newStructure.ControlSumpBy = StructureControlSumpType.ByElevation;
                     newStructure.RimElevation = rimElevation;
-                    newStructure.SumpElevation = boxSumpElevation;
+                    newStructure.SumpElevation = boxRimElevation;
                     newStructure.Name = RemoveJsSuffix(boxName);
 
                     tr.Commit();
@@ -167,7 +170,7 @@ namespace CLV_CivilTools.Ufls
                         $"\nPLACE ACCESS MANHOLE: Created '{newStructure.Name}' using '{choice.DisplayName}'.");
                     ed.WriteMessage(
                         $"\n  Type={structureType}, Barrel={barrelInches}\", Lid={lidInches}\", " +
-                        $"Rim={rimElevation:F3}, Sump={boxSumpElevation:F3}, " +
+                        $"Rim={rimElevation:F3}, Sump={boxRimElevation:F3}, " +
                         "Auto Surface Adjustment=False, Control Sump By=Elevation.");
                 }
             }
@@ -346,7 +349,7 @@ namespace CLV_CivilTools.Ufls
                 MaximizeBox = false;
                 MinimizeBox = false;
                 ShowInTaskbar = false;
-                ClientSize = new System.Drawing.Size(400, 250);
+                ClientSize = new System.Drawing.Size(400, 285);
 
                 var barrelLabel = new WinForms.Label
                 {
@@ -436,8 +439,9 @@ namespace CLV_CivilTools.Ufls
                     Text = "OK",
                     DialogResult = WinForms.DialogResult.OK,
                     Left = 224,
-                    Top = 218,
-                    Width = 75
+                    Top = 235,
+                    Width = 75,
+                    Height = 28
                 };
 
                 var cancelButton = new WinForms.Button
@@ -445,8 +449,9 @@ namespace CLV_CivilTools.Ufls
                     Text = "Cancel",
                     DialogResult = WinForms.DialogResult.Cancel,
                     Left = 310,
-                    Top = 218,
-                    Width = 75
+                    Top = 235,
+                    Width = 75,
+                    Height = 28
                 };
 
                 AcceptButton = okButton;
