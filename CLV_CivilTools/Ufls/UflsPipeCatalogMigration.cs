@@ -120,7 +120,9 @@ namespace CLV_CivilTools.Ufls
             else
             {
                 int index = 1;
-                foreach (PipePartGroup group in report.PipeGroups.Values.OrderBy(g => g.FamilyName).ThenBy(g => g.SizeName))
+                foreach (PipePartGroup group in report.PipeGroups.Values
+                             .OrderBy(g => g.FamilyName)
+                             .ThenBy(g => g.SizeName))
                 {
                     ed.WriteMessage(
                         $"\n  P{index++:000} | Count={group.Count} | Family='{group.FamilyName}' | Size='{group.SizeName}'" +
@@ -141,29 +143,36 @@ namespace CLV_CivilTools.Ufls
                 int index = 1;
                 foreach (StructurePartGroup group in report.StructureGroups.Values
                              .OrderBy(g => g.FamilyName)
-                             .ThenBy(g => g.SizeName)
-                             .ThenBy(g => g.InnerLength)
-                             .ThenBy(g => g.InnerWidth))
+                             .ThenBy(g => g.SizeName))
                 {
-                    string custom = group.HasMultiplePhysicalSizes ? "CUSTOM/VARIANT" : "STANDARD";
-
                     ed.WriteMessage(
-                        $"\n  S{index++:000} | Count={group.Count} | {custom}" +
-                        $" | Family='{group.FamilyName}' | Size='{group.SizeName}'" +
-                        $" | Inner L={FormatDimension(group.InnerLength)}" +
-                        $" W={FormatDimension(group.InnerWidth)}" +
-                        $" H={FormatDimension(group.InnerHeight)}" +
-                        $" ID={FormatDimension(group.InnerDiameter)}");
+                        $"\n  S{index++:000} | Count={group.Count} | Family='{group.FamilyName}' | Size='{group.SizeName}'" +
+                        $" | Physical variants={group.Variants.Count}");
+
+                    foreach (StructurePhysicalVariant variant in group.Variants.Values
+                                 .OrderBy(v => v.InnerLength)
+                                 .ThenBy(v => v.InnerWidth)
+                                 .ThenBy(v => v.InnerDiameter)
+                                 .ThenBy(v => v.InnerHeight))
+                    {
+                        ed.WriteMessage(
+                            $"\n       Count={variant.Count}" +
+                            $" | Inner L={FormatDimension(variant.InnerLength)}" +
+                            $" W={FormatDimension(variant.InnerWidth)}" +
+                            $" H={FormatDimension(variant.InnerHeight)}" +
+                            $" ID={FormatDimension(variant.InnerDiameter)}");
+                    }
 
                     if (group.NetworkNames.Count > 0)
-                        ed.WriteMessage($" | Networks={string.Join(", ", group.NetworkNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}");
+                        ed.WriteMessage($"\n       Networks={string.Join(", ", group.NetworkNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}");
                 }
             }
 
             ed.WriteMessage("\n\nANALYSIS STATUS");
             ed.WriteMessage("\n  No pipe, structure, Parts List, or catalog data was changed.");
-            ed.WriteMessage("\n  The next migration phase can use these grouped identities for explicit mapping.");
-            ed.WriteMessage("\n  Structure groups retain actual inner dimensions so custom box sizes are not lost.");
+            ed.WriteMessage("\n  Family + size combinations are grouped so the next phase can map once per legacy part identity.");
+            ed.WriteMessage("\n  Structure physical dimensions are recorded separately so custom box dimensions are preserved.");
+            ed.WriteMessage("\n  This phase deliberately does not guess whether a dimension is standard or custom; that comparison belongs to target-family mapping.");
             ed.WriteMessage("\n");
         }
 
@@ -254,26 +263,23 @@ namespace CLV_CivilTools.Ufls
 
                 var key = new StructureGroupKey(
                     Normalize(structure.PartFamilyName),
-                    Normalize(structure.PartSizeName),
-                    Round(structure.InnerLength),
-                    Round(structure.InnerDiameterOrWidth),
-                    Round(structure.InnerHeight),
-                    Round(structure.InnerDiameterOrWidth == 0.0 ? structure.DiameterOrWidth : 0.0));
+                    Normalize(structure.PartSizeName));
 
                 if (!StructureGroups.TryGetValue(key, out StructurePartGroup? group))
                 {
                     group = new StructurePartGroup(
                         structure.PartFamilyName,
-                        structure.PartSizeName,
-                        structure.InnerLength,
-                        structure.InnerDiameterOrWidth,
-                        structure.InnerHeight,
-                        structure.InnerDiameterOrWidth > 0.0 ? 0.0 : structure.DiameterOrWidth);
+                        structure.PartSizeName);
                     StructureGroups.Add(key, group);
                 }
 
                 group.Count++;
                 group.NetworkNames.Add(networkName);
+                group.AddVariant(
+                    structure.InnerLength,
+                    structure.InnerDiameterOrWidth,
+                    structure.InnerHeight,
+                    structure.InnerDiameterOrWidth > 0.0 ? 0.0 : structure.DiameterOrWidth);
             }
 
             private static string Normalize(string value)
@@ -319,41 +325,76 @@ namespace CLV_CivilTools.Ufls
 
         private readonly record struct StructureGroupKey(
             string FamilyName,
-            string SizeName,
-            double InnerLength,
-            double InnerWidth,
-            double InnerHeight,
-            double InnerDiameter);
+            string SizeName);
 
         private sealed class StructurePartGroup
         {
-            public StructurePartGroup(
-                string familyName,
-                string sizeName,
+            public StructurePartGroup(string familyName, string sizeName)
+            {
+                FamilyName = familyName;
+                SizeName = sizeName;
+            }
+
+            public string FamilyName { get; }
+            public string SizeName { get; }
+            public int Count { get; set; }
+            public HashSet<string> NetworkNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+            public Dictionary<StructurePhysicalKey, StructurePhysicalVariant> Variants { get; } = new();
+
+            public void AddVariant(
                 double innerLength,
                 double innerWidth,
                 double innerHeight,
                 double innerDiameter)
             {
-                FamilyName = familyName;
-                SizeName = sizeName;
+                var key = new StructurePhysicalKey(
+                    Round(innerLength),
+                    Round(innerWidth),
+                    Round(innerHeight),
+                    Round(innerDiameter));
+
+                if (!Variants.TryGetValue(key, out StructurePhysicalVariant? variant))
+                {
+                    variant = new StructurePhysicalVariant(
+                        innerLength,
+                        innerWidth,
+                        innerHeight,
+                        innerDiameter);
+                    Variants.Add(key, variant);
+                }
+
+                variant.Count++;
+            }
+
+            private static double Round(double value)
+                => Math.Round(value, 6, MidpointRounding.AwayFromZero);
+        }
+
+        private readonly record struct StructurePhysicalKey(
+            double InnerLength,
+            double InnerWidth,
+            double InnerHeight,
+            double InnerDiameter);
+
+        private sealed class StructurePhysicalVariant
+        {
+            public StructurePhysicalVariant(
+                double innerLength,
+                double innerWidth,
+                double innerHeight,
+                double innerDiameter)
+            {
                 InnerLength = innerLength;
                 InnerWidth = innerWidth;
                 InnerHeight = innerHeight;
                 InnerDiameter = innerDiameter;
             }
 
-            public string FamilyName { get; }
-            public string SizeName { get; }
             public double InnerLength { get; }
             public double InnerWidth { get; }
             public double InnerHeight { get; }
             public double InnerDiameter { get; }
             public int Count { get; set; }
-            public HashSet<string> NetworkNames { get; } = new(StringComparer.OrdinalIgnoreCase);
-
-            public bool HasMultiplePhysicalSizes =>
-                InnerLength > 0.0 || InnerWidth > 0.0 || InnerDiameter > 0.0;
         }
     }
 }
