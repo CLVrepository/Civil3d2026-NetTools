@@ -134,7 +134,7 @@ namespace CLV_CivilTools.Ufls
             var rec = new LayerTableRecord
             {
                 Name = ReviewLayer,
-                Color = Color.FromColorIndex(ColorMethod.ByAci, 1),
+                Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByAci, 1),
                 IsPlottable = false
             };
             ObjectId id = lt.Add(rec);
@@ -148,7 +148,7 @@ namespace CLV_CivilTools.Ufls
             var circle = new Circle(center, Vector3d.ZAxis, 3.0)
             {
                 LayerId = layerId,
-                Color = Color.FromColorIndex(ColorMethod.ByAci, 1),
+                Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByAci, 1),
                 LineWeight = LineWeight.LineWeight050
             };
             ms.AppendEntity(circle);
