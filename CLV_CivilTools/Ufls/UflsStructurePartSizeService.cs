@@ -108,13 +108,28 @@ namespace CLV_CivilTools.Ufls
                 }
 
                 List<PartSizeInfo> sizesAfter = GetFamilyPartSizes(tr, family);
-                foreach (PartSizeInfo size in sizesAfter)
+                List<PartSizeInfo> newlyAdded = sizesAfter
+                    .Where(size => !sizesBefore.Any(before => before.Id == size.Id))
+                    .ToList();
+
+                foreach (PartSizeInfo size in newlyAdded)
                 {
-                    if (!sizesBefore.Any(s => s.Id == size.Id) && SizeMatches(size, targetWidthInches, targetLengthInches, targetWallInches))
+                    if (SizeMatches(size, targetWidthInches, targetLengthInches, targetWallInches))
                     {
                         CopyPreferredFamilySizeStyle(tr, sizesBefore, size.Id, ed);
                         return size.Id;
                     }
+                }
+
+                // Some Civil 3D families format generated size names differently than the source family
+                // (for example: "SDDI : L=30 x W=18 Walls=6 Inch"). If AddPartSize created exactly one
+                // new definition, that new ObjectId is authoritative even if its display-name parser changes.
+                if (newlyAdded.Count == 1)
+                {
+                    PartSizeInfo added = newlyAdded[0];
+                    CopyPreferredFamilySizeStyle(tr, sizesBefore, added.Id, ed);
+                    ed.WriteMessage($"\nPIPE CATALOG MIGRATION: resolved newly added size '{added.Name}' by ObjectId.");
+                    return added.Id;
                 }
 
                 if (TryFindExactSize(sizesAfter, targetWidthInches, targetLengthInches, targetWallInches, out PartSizeInfo afterMatch))
@@ -157,7 +172,32 @@ namespace CLV_CivilTools.Ufls
                 if (source == null)
                     return;
 
-                bool copied = CopyStyleProperties(source, target);
+                bool copied = false;
+
+                // PartStyleId is the Civil 3D Parts List "Style" column. Use the strongly typed
+                // property first so added sizes inherit the exact outline style from the family.
+                if (source is PartSize sourceSize && target is PartSize targetSize)
+                {
+                    if (!sourceSize.PartStyleId.IsNull)
+                    {
+                        targetSize.PartStyleId = sourceSize.PartStyleId;
+                        copied = true;
+                    }
+
+                    if (!sourceSize.RulesStyleId.IsNull)
+                    {
+                        targetSize.RulesStyleId = sourceSize.RulesStyleId;
+                        copied = true;
+                    }
+
+                    if (!sourceSize.MaterialStyleId.IsNull)
+                    {
+                        targetSize.MaterialStyleId = sourceSize.MaterialStyleId;
+                        copied = true;
+                    }
+                }
+
+                copied |= CopyStyleProperties(source, target);
 
                 object? sourcePartData = GetPropertyValue(source, "PartData");
                 object? targetPartData = GetPropertyValue(target, "PartData");
@@ -207,6 +247,24 @@ namespace CLV_CivilTools.Ufls
 
         private static string GetStyleName(object source)
         {
+            if (source is PartSize partSize && !partSize.PartStyleId.IsNull)
+            {
+                try
+                {
+                    DBObject? style = partSize.Database?.TransactionManager.TopTransaction?.GetObject(
+                        partSize.PartStyleId,
+                        OpenMode.ForRead,
+                        false);
+                    if (style != null)
+                    {
+                        PropertyInfo? namePi = style.GetType().GetProperty("Name", BindingFlags.Instance | BindingFlags.Public);
+                        if (namePi?.GetValue(style) is string resolvedName && !string.IsNullOrWhiteSpace(resolvedName))
+                            return resolvedName;
+                    }
+                }
+                catch { }
+            }
+
             foreach (string propertyName in new[] { "StyleName", "PartStyleName", "ModelStyleName", "PlanStyleName" })
             {
                 PropertyInfo? pi = source.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
@@ -336,7 +394,7 @@ namespace CLV_CivilTools.Ufls
             widthInches = 0.0;
             var m = System.Text.RegularExpressions.Regex.Match(
                 text,
-                @"L\s*=\s*(?<len>[0-9]+(?:\.[0-9]+)?)\s*''\s*x\s*W\s*=\s*(?<wid>[0-9]+(?:\.[0-9]+)?)\s*''",
+                @"L\s*=\s*(?<len>[0-9]+(?:\.[0-9]+)?)\s*(?:''|""|INCH(?:ES)?)?\s*x\s*W\s*=\s*(?<wid>[0-9]+(?:\.[0-9]+)?)\s*(?:''|""|INCH(?:ES)?)?",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             return m.Success &&
                    double.TryParse(m.Groups["len"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out lengthInches) &&
