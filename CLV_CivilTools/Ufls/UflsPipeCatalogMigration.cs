@@ -418,6 +418,10 @@ namespace CLV_CivilTools.Ufls
                 if (IsSeparatorFamily(family))
                     continue;
 
+                bool hasKnownTargetShape = !string.IsNullOrWhiteSpace(family.Shape);
+                if (hasKnownTargetShape && !ShapesCompatible(expectedShape, family.Shape))
+                    continue;
+
                 foreach (TargetPartSizeInventory size in family.Sizes)
                 {
                     int score = 0;
@@ -440,10 +444,6 @@ namespace CLV_CivilTools.Ufls
                     {
                         score += 20;
                         reasons.Add("bounding shape compatible");
-                    }
-                    else if (!string.IsNullOrWhiteSpace(family.Shape))
-                    {
-                        score -= 40;
                     }
 
                     score += TokenOverlapScore(legacyText, targetText, 9, 63, reasons);
