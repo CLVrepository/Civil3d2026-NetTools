@@ -541,7 +541,7 @@ namespace CLV_CivilTools.Ufls
             if (inchWord.Success && double.TryParse(inchWord.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double inches))
                 return inches;
 
-            Match doubleQuote = Regex.Match(value, @"(?<![0-9.])([0-9]+(?:\.[0-9]+)?)\s*(?:''|\"\")");
+            Match doubleQuote = Regex.Match(value, @"(?<![0-9.])([0-9]+(?:\.[0-9]+)?)\s*(?:''|"")");
             if (doubleQuote.Success && double.TryParse(doubleQuote.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out inches))
                 return inches;
 
