@@ -102,17 +102,26 @@ namespace CLV_CivilTools.Ufls
                     ?? throw new InvalidOperationException("PartFamily.AddPartSize(...) was not found.");
                 object? addResult = addMethod.Invoke(family, new[] { sizeFilterRecord });
                 if (addResult is ObjectId addedId && !addedId.IsNull)
+                {
+                    CopyPreferredFamilySizeStyle(tr, sizesBefore, addedId, ed);
                     return addedId;
+                }
 
                 List<PartSizeInfo> sizesAfter = GetFamilyPartSizes(tr, family);
                 foreach (PartSizeInfo size in sizesAfter)
                 {
                     if (!sizesBefore.Any(s => s.Id == size.Id) && SizeMatches(size, targetWidthInches, targetLengthInches, targetWallInches))
+                    {
+                        CopyPreferredFamilySizeStyle(tr, sizesBefore, size.Id, ed);
                         return size.Id;
+                    }
                 }
 
                 if (TryFindExactSize(sizesAfter, targetWidthInches, targetLengthInches, targetWallInches, out PartSizeInfo afterMatch))
+                {
+                    CopyPreferredFamilySizeStyle(tr, sizesBefore, afterMatch.Id, ed);
                     return afterMatch.Id;
+                }
 
                 throw new InvalidOperationException("AddPartSize completed but a matching size could not be resolved afterwards.");
             }
@@ -131,6 +140,128 @@ namespace CLV_CivilTools.Ufls
             double targetLengthInches,
             Editor ed)
             => EnsureMatchingBoxSize(tr, family, targetWidthInches, targetLengthInches, 0.0, ed);
+
+        private static void CopyPreferredFamilySizeStyle(
+            Transaction tr,
+            IReadOnlyList<PartSizeInfo> existingSizes,
+            ObjectId targetSizeId,
+            Editor ed)
+        {
+            if (targetSizeId.IsNull || existingSizes.Count == 0)
+                return;
+
+            try
+            {
+                DBObject target = tr.GetObject(targetSizeId, OpenMode.ForWrite, false);
+                DBObject? source = SelectPreferredStyleSource(tr, existingSizes);
+                if (source == null)
+                    return;
+
+                bool copied = CopyStyleProperties(source, target);
+
+                object? sourcePartData = GetPropertyValue(source, "PartData");
+                object? targetPartData = GetPropertyValue(target, "PartData");
+                if (sourcePartData != null && targetPartData != null)
+                    copied |= CopyStyleProperties(sourcePartData, targetPartData);
+
+                if (copied)
+                {
+                    string styleName = GetStyleName(source);
+                    ed.WriteMessage(string.IsNullOrWhiteSpace(styleName)
+                        ? "\nPIPE CATALOG MIGRATION: copied target-family part style to the added size."
+                        : $"\nPIPE CATALOG MIGRATION: applied target-family style '{styleName}' to the added size.");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\nPIPE CATALOG MIGRATION: size was added, but its target-family style could not be copied: {ex.Message}");
+            }
+        }
+
+        private static DBObject? SelectPreferredStyleSource(Transaction tr, IReadOnlyList<PartSizeInfo> sizes)
+        {
+            DBObject? fallback = null;
+            DBObject? nonStandard = null;
+
+            foreach (PartSizeInfo size in sizes)
+            {
+                try
+                {
+                    DBObject obj = tr.GetObject(size.Id, OpenMode.ForRead, false);
+                    fallback ??= obj;
+                    string styleName = GetStyleName(obj);
+                    if (styleName.Contains("OUTLINE", StringComparison.OrdinalIgnoreCase))
+                        return obj;
+                    if (!string.IsNullOrWhiteSpace(styleName) &&
+                        !styleName.Equals("Standard", StringComparison.OrdinalIgnoreCase))
+                        nonStandard ??= obj;
+                }
+                catch
+                {
+                    // Continue looking for another existing size definition.
+                }
+            }
+
+            return nonStandard ?? fallback;
+        }
+
+        private static string GetStyleName(object source)
+        {
+            foreach (string propertyName in new[] { "StyleName", "PartStyleName", "ModelStyleName", "PlanStyleName" })
+            {
+                PropertyInfo? pi = source.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+                if (pi?.PropertyType == typeof(string) && pi.GetValue(source) is string value && !string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+
+            object? partData = GetPropertyValue(source, "PartData");
+            if (partData != null)
+            {
+                foreach (string propertyName in new[] { "StyleName", "PartStyleName", "ModelStyleName", "PlanStyleName" })
+                {
+                    PropertyInfo? pi = partData.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+                    if (pi?.PropertyType == typeof(string) && pi.GetValue(partData) is string value && !string.IsNullOrWhiteSpace(value))
+                        return value;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static bool CopyStyleProperties(object source, object target)
+        {
+            bool copied = false;
+
+            foreach (string propertyName in new[] { "StyleId", "PartStyleId", "ModelStyleId", "PlanStyleId" })
+            {
+                PropertyInfo? sourcePi = source.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+                PropertyInfo? targetPi = target.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+                if (sourcePi?.PropertyType != typeof(ObjectId) || targetPi?.PropertyType != typeof(ObjectId) || !targetPi.CanWrite)
+                    continue;
+
+                if (sourcePi.GetValue(source) is ObjectId styleId && !styleId.IsNull)
+                {
+                    targetPi.SetValue(target, styleId);
+                    copied = true;
+                }
+            }
+
+            foreach (string propertyName in new[] { "StyleName", "PartStyleName", "ModelStyleName", "PlanStyleName" })
+            {
+                PropertyInfo? sourcePi = source.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+                PropertyInfo? targetPi = target.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+                if (sourcePi?.PropertyType != typeof(string) || targetPi?.PropertyType != typeof(string) || !targetPi.CanWrite)
+                    continue;
+
+                if (sourcePi.GetValue(source) is string styleName && !string.IsNullOrWhiteSpace(styleName))
+                {
+                    targetPi.SetValue(target, styleName);
+                    copied = true;
+                }
+            }
+
+            return copied;
+        }
 
         private static List<PartSizeInfo> GetFamilyPartSizes(Transaction tr, PartFamily family)
         {
