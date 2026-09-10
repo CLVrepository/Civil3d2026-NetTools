@@ -73,6 +73,14 @@ namespace CLV_CivilTools.Ufls
                         return;
                     }
 
+                    // Make the selected target list active on the network BEFORE swapping.
+                    // This is important for very old/orphaned catalog parts whose old family reference is invalid.
+                    foreach (ObjectId networkId in networkIds)
+                    {
+                        if (tr.GetObject(networkId, OpenMode.ForWrite, false) is Network network)
+                            network.PartsListId = target.Id;
+                    }
+
                     int swapped = 0;
                     int failed = 0;
                     int manual = 0;
@@ -127,23 +135,63 @@ namespace CLV_CivilTools.Ufls
                                 }
                             }
 
+                            string expectedSizeName = GetPartSizeName(tr, targetSizeId);
+                            int rowSwapped = 0;
+
                             foreach (ObjectId objectId in row.ObjectIds)
                             {
                                 try
                                 {
-                                    if (tr.GetObject(objectId, OpenMode.ForWrite, false) is Part part)
+                                    if (tr.GetObject(objectId, OpenMode.ForWrite, false) is not Part part)
                                     {
-                                        part.SwapPartFamilyAndSize(family.Id, targetSizeId);
+                                        failed++;
+                                        row.Status = "FAILED VERIFY";
+                                        continue;
+                                    }
+
+                                    part.SwapPartFamilyAndSize(family.Id, targetSizeId);
+
+                                    if (VerifyPartSwap(part, family.Id, expectedSizeName))
+                                    {
+                                        rowSwapped++;
                                         swapped++;
+                                    }
+                                    else
+                                    {
+                                        failed++;
+                                        row.Status = "FAILED VERIFY";
+                                        if (part is AcEntity failedEntity)
+                                        {
+                                            failedEntity.ColorIndex = 1;
+                                            failedEntity.RecordGraphicsModified(true);
+                                        }
+                                        ed.WriteMessage(
+                                            $"\n  FAILED VERIFY {row.Id} object {objectId.Handle}: " +
+                                            $"expected '{family.Name}' / '{expectedSizeName}', " +
+                                            $"actual family='{SafePartIdentity(part, "PartFamilyName")}', size='{SafePartIdentity(part, "PartSizeName")}'.");
                                     }
                                 }
                                 catch (System.Exception ex)
                                 {
                                     failed++;
                                     row.Status = "FAILED";
+                                    try
+                                    {
+                                        if (tr.GetObject(objectId, OpenMode.ForWrite, false) is AcEntity failedEntity)
+                                        {
+                                            failedEntity.ColorIndex = 1;
+                                            failedEntity.RecordGraphicsModified(true);
+                                        }
+                                    }
+                                    catch { }
                                     ed.WriteMessage($"\n  FAILED {row.Id} object {objectId.Handle}: {ex.Message}");
                                 }
                             }
+
+                            if (rowSwapped == row.ObjectIds.Count)
+                                row.Status = "MIGRATED";
+                            else if (rowSwapped > 0)
+                                row.Status = "PARTIAL / REVIEW";
                         }
                         catch (System.Exception ex)
                         {
@@ -153,24 +201,15 @@ namespace CLV_CivilTools.Ufls
                         }
                     }
 
-                    // Make every unresolved/manual row easy to locate in plan view.
+                    // Make every unresolved/manual/failed row easy to locate in plan view.
                     int redHighlighted = HighlightManualRowsRed(tr, rows);
-
-                    if (swapped > 0)
-                    {
-                        foreach (ObjectId networkId in networkIds)
-                        {
-                            if (tr.GetObject(networkId, OpenMode.ForWrite, false) is Network network)
-                                network.PartsListId = target.Id;
-                        }
-                    }
 
                     tr.Commit();
 
                     ed.WriteMessage("\n\nPIPE CATALOG MIGRATION RESULT");
-                    ed.WriteMessage($"\n  Swapped parts: {swapped}");
+                    ed.WriteMessage($"\n  Swapped and verified parts: {swapped}");
                     ed.WriteMessage($"\n  Manual-review/replacement rows: {manual}");
-                    ed.WriteMessage($"\n  Manual parts highlighted red: {redHighlighted}");
+                    ed.WriteMessage($"\n  Manual/failed parts highlighted red: {redHighlighted}");
                     ed.WriteMessage($"\n  Skipped rows: {skipped}");
                     ed.WriteMessage($"\n  Failures: {failed}");
                     ed.WriteMessage($"\n  Target Parts List: {target.Name}");
@@ -403,7 +442,6 @@ namespace CLV_CivilTools.Ufls
 
         private static ObjectId ResolveStructureTargetSize(Transaction tr, Editor ed, TargetFamily family, MigrationRow row)
         {
-            // Box structures always resolve from physical dimensions so L/W/WALL are all preserved.
             if (row.LengthFeet > 0.0 && row.WidthFeet > 0.0)
             {
                 if (tr.GetObject(family.Id, OpenMode.ForWrite, false) is not PartFamily civilFamily)
@@ -418,7 +456,6 @@ namespace CLV_CivilTools.Ufls
                     ed);
             }
 
-            // Cylindrical structures are only auto-swapped when an exact named target size exists.
             TargetSize? exactName = family.Sizes.FirstOrDefault(s =>
                 string.Equals(Normalize(s.Name), Normalize(row.LegacySize), StringComparison.OrdinalIgnoreCase));
             return exactName?.Id ?? ObjectId.Null;
@@ -436,6 +473,39 @@ namespace CLV_CivilTools.Ufls
             double inches = row.DiameterFeet * 12.0;
             return family.Sizes.FirstOrDefault(s =>
                 ExtractFirstInches(s.Name) is double d && Math.Abs(d - inches) < 0.11);
+        }
+
+        private static string GetPartSizeName(Transaction tr, ObjectId sizeId)
+        {
+            try
+            {
+                if (tr.GetObject(sizeId, OpenMode.ForRead, false) is DBObject obj)
+                {
+                    string name = SafeString(obj, "Name");
+                    if (!string.IsNullOrWhiteSpace(name)) return name;
+                    name = SafeString(obj, "PartSizeName");
+                    if (!string.IsNullOrWhiteSpace(name)) return name;
+                }
+            }
+            catch { }
+            return string.Empty;
+        }
+
+        private static bool VerifyPartSwap(Part part, ObjectId expectedFamilyId, string expectedSizeName)
+        {
+            ObjectId actualFamilyId = SafeObjectId(part, "PartFamilyId");
+            if (!actualFamilyId.IsNull && actualFamilyId != expectedFamilyId)
+                return false;
+
+            string actualSize = SafeString(part, "PartSizeName");
+            if (!string.IsNullOrWhiteSpace(expectedSizeName) &&
+                !string.IsNullOrWhiteSpace(actualSize) &&
+                !string.Equals(Normalize(actualSize), Normalize(expectedSizeName), StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            // If Civil 3D exposes either family or size after the swap and neither contradicts the target,
+            // treat it as verified. Very old parts may still throw on one of these getters.
+            return !actualFamilyId.IsNull || !string.IsNullOrWhiteSpace(actualSize);
         }
 
         private static bool PartTypesCompatible(string a, string b)
@@ -492,6 +562,16 @@ namespace CLV_CivilTools.Ufls
             catch { return string.Empty; }
         }
 
+        private static ObjectId SafeObjectId(object source, string prop)
+        {
+            try
+            {
+                object? value = source.GetType().GetProperty(prop)?.GetValue(source);
+                return value is ObjectId id ? id : ObjectId.Null;
+            }
+            catch { return ObjectId.Null; }
+        }
+
         private static double SafeDouble(object source, string prop)
         {
             try { return source.GetType().GetProperty(prop)?.GetValue(source) is double d ? d : 0.0; }
@@ -505,6 +585,7 @@ namespace CLV_CivilTools.Ufls
                    value.Contains("CHOOSE", StringComparison.Ordinal) ||
                    value.Contains("MANUAL", StringComparison.Ordinal) ||
                    value.Contains("FAILED", StringComparison.Ordinal) ||
+                   value.Contains("PARTIAL", StringComparison.Ordinal) ||
                    value.Contains("NO TARGET SIZE", StringComparison.Ordinal);
         }
 
@@ -524,10 +605,7 @@ namespace CLV_CivilTools.Ufls
                             highlighted++;
                         }
                     }
-                    catch
-                    {
-                        // Do not abort migration because one object could not be highlighted.
-                    }
+                    catch { }
                 }
             }
             return highlighted;
