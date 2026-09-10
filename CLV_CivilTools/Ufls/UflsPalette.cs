@@ -223,6 +223,10 @@ namespace CLV_CivilTools
             layout.Controls.Add(CreateSectionLabel("FINALIZE"));
             layout.Controls.Add(CreateCommandButton("ASSIGN QUALITY", "UFLS-FINALIZE-QUALITY"));
 
+            layout.Controls.Add(CreateSectionLabel("TOOL"));
+            layout.Controls.Add(CreateCommandButton("MIGRATE PIPE CATALOG", "UFLS-PIPE-CATALOG-MIGRATE-UI"));
+            layout.Controls.Add(CreateCommandButton("REBUILD STRC 2D", "UFLS-STRC-2D-FROM-PART"));
+
             return layout;
         }
 
