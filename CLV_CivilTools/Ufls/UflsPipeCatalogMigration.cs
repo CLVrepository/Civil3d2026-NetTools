@@ -640,12 +640,13 @@ namespace CLV_CivilTools.Ufls
             if (variants.Count == 0)
                 return false;
 
-            representative = variants[0];
+            StructurePhysicalVariant first = variants[0];
+            representative = first;
             return variants.All(v =>
-                NearlyEqual(v.InnerLength, representative.InnerLength) &&
-                NearlyEqual(v.InnerWidth, representative.InnerWidth) &&
-                NearlyEqual(v.InnerDiameter, representative.InnerDiameter) &&
-                NearlyEqual(v.WallThickness, representative.WallThickness));
+                NearlyEqual(v.InnerLength, first.InnerLength) &&
+                NearlyEqual(v.InnerWidth, first.InnerWidth) &&
+                NearlyEqual(v.InnerDiameter, first.InnerDiameter) &&
+                NearlyEqual(v.WallThickness, first.WallThickness));
         }
 
         private static ObjectId FindMatchingStructureSize(Transaction tr, ObjectId familyId, StructurePhysicalVariant legacy)
