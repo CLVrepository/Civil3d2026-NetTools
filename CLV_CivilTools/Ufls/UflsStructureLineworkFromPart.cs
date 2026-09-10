@@ -92,30 +92,16 @@ namespace CLV_CivilTools.Ufls
                             return;
                         }
 
-                        // Civil 3D rectangular structures are normally oriented with their
-                        // LENGTH axis perpendicular to the connected pipe run. Derive that
-                        // orientation from the actual connected pipe geometry rather than
-                        // trusting the structure Rotation value alone.
-                        bool pipeRotationUsed = TryGetPipeAxisRotation(structure, tr, out double pipeAxisRotation, out int pipeCountUsed);
-                        double rectangleRotation;
-                        string rotationSource;
+                        // Civil 3D reports the rectangular structure orientation on the
+                        // opposite box axis from the L/W footprint convention used here.
+                        // Do not infer orientation from connected pipes; they may enter at
+                        // arbitrary angles. Apply the observed 90 degree axis correction to
+                        // the structure's own rotation.
+                        double structureRotation = SafeDouble(structure, "Rotation");
+                        if (Math.Abs(structureRotation) < 1e-12)
+                            structureRotation = SafeDouble(structure, "RotationAngle");
 
-                        if (pipeRotationUsed)
-                        {
-                            rectangleRotation = NormalizeAngle(pipeAxisRotation + Math.PI / 2.0);
-                            rotationSource = $"connected pipe geometry ({pipeCountUsed} pipe{(pipeCountUsed == 1 ? string.Empty : "s")})";
-                        }
-                        else
-                        {
-                            double structureRotation = SafeDouble(structure, "Rotation");
-                            if (Math.Abs(structureRotation) < 1e-12)
-                                structureRotation = SafeDouble(structure, "RotationAngle");
-
-                            // The Civil 3D structure rotation tracks the pipe-facing axis for
-                            // these rectangular structures, so the long footprint axis is +90°.
-                            rectangleRotation = NormalizeAngle(structureRotation + Math.PI / 2.0);
-                            rotationSource = "structure Rotation fallback";
-                        }
+                        double rectangleRotation = NormalizeAngle(structureRotation + Math.PI / 2.0);
 
                         Polyline inner = BuildCenteredRectangle(center, innerLength, innerWidth, rectangleRotation);
                         inner.Layer = LayerInner;
@@ -132,7 +118,8 @@ namespace CLV_CivilTools.Ufls
                             $"\nUFLS-STRC-2D-FROM-PART: box footprint created. " +
                             $"Inner L={innerLength:0.###}' W={innerWidth:0.###}'; " +
                             $"Outer L={outerLength:0.###}' W={outerWidth:0.###}'. " +
-                            $"Rotation={RadiansToDegrees(rectangleRotation):0.###}° from {rotationSource}.");
+                            $"Structure rotation={RadiansToDegrees(structureRotation):0.###}°; " +
+                            $"footprint rotation={RadiansToDegrees(rectangleRotation):0.###}° (+90° axis correction).");
                         return;
                     }
 
@@ -176,97 +163,6 @@ namespace CLV_CivilTools.Ufls
             catch (System.Exception ex)
             {
                 ed.WriteMessage($"\nUFLS-STRC-2D-FROM-PART error: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Returns the dominant connected-pipe AXIS angle in the XY plane. Because pipe
-        /// direction can be forward or reverse, doubled-angle vector averaging is used;
-        /// this treats angles 180 degrees apart as the same axis. Longer pipes carry more
-        /// weight so a short side connection does not dominate an inline run.
-        /// </summary>
-        private static bool TryGetPipeAxisRotation(Structure structure, Transaction tr, out double rotation, out int pipeCountUsed)
-        {
-            rotation = 0.0;
-            pipeCountUsed = 0;
-
-            try
-            {
-                int count = structure.ConnectedPipesCount;
-                if (count <= 0)
-                    return false;
-
-                PropertyInfo? connectedPipeProperty = structure.GetType().GetProperty(
-                    "ConnectedPipe",
-                    BindingFlags.Instance | BindingFlags.Public);
-
-                if (connectedPipeProperty == null)
-                    return false;
-
-                double sumCos = 0.0;
-                double sumSin = 0.0;
-                double totalWeight = 0.0;
-                double firstAngle = 0.0;
-                bool haveFirstAngle = false;
-
-                for (int i = 0; i < count; i++)
-                {
-                    ObjectId pipeId;
-                    try
-                    {
-                        object? value = connectedPipeProperty.GetValue(structure, new object[] { i });
-                        if (value is not ObjectId id || id.IsNull || !id.IsValid)
-                            continue;
-                        pipeId = id;
-                    }
-                    catch
-                    {
-                        continue;
-                    }
-
-                    if (tr.GetObject(pipeId, OpenMode.ForRead, false) is not Pipe pipe)
-                        continue;
-
-                    Point3d start = pipe.StartPoint;
-                    Point3d end = pipe.EndPoint;
-                    double dx = end.X - start.X;
-                    double dy = end.Y - start.Y;
-                    double length = Math.Sqrt(dx * dx + dy * dy);
-                    if (length <= 1e-9)
-                        continue;
-
-                    double angle = Math.Atan2(dy, dx);
-                    if (!haveFirstAngle)
-                    {
-                        firstAngle = angle;
-                        haveFirstAngle = true;
-                    }
-
-                    double weight = Math.Max(length, 1.0);
-                    sumCos += Math.Cos(2.0 * angle) * weight;
-                    sumSin += Math.Sin(2.0 * angle) * weight;
-                    totalWeight += weight;
-                    pipeCountUsed++;
-                }
-
-                if (pipeCountUsed == 0)
-                    return false;
-
-                // A balanced set of perpendicular connections can cancel the doubled-angle
-                // mean. In that uncommon case, use the first valid connected pipe axis.
-                double resultant = Math.Sqrt(sumCos * sumCos + sumSin * sumSin);
-                if (resultant <= Math.Max(totalWeight * 1e-6, 1e-9))
-                {
-                    rotation = NormalizeAngle(firstAngle);
-                    return true;
-                }
-
-                rotation = NormalizeAngle(0.5 * Math.Atan2(sumSin, sumCos));
-                return true;
-            }
-            catch
-            {
-                return false;
             }
         }
 
@@ -409,7 +305,6 @@ namespace CLV_CivilTools.Ufls
             if (!m.Success || !double.TryParse(m.Groups["wall"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
                 return false;
 
-            // Existing structure size names use inches for wall values even where the unit text is omitted.
             feet = value / 12.0;
             return feet > 0.0;
         }
