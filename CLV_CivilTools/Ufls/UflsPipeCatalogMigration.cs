@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -17,14 +18,18 @@ using AcDbObject = Autodesk.AutoCAD.DatabaseServices.DBObject;
 namespace CLV_CivilTools.Ufls
 {
     /// <summary>
-    /// Non-destructive inventory used as the first phase of Pipe Network catalog migration.
-    /// It inventories the parts actually present in the current drawing, grouped by
-    /// family/size and, for structures, by actual physical dimensions. It also inventories
-    /// a user-selected target Parts List so later phases can map legacy parts only to parts
-    /// explicitly allowed by that target list. No drawing data or Parts List is modified.
+    /// Non-destructive inventory and candidate analysis for Pipe Network catalog migration.
+    /// The target Parts List selected by the user is the authority for candidate parts.
+    /// No drawing data or Parts List is modified by this command.
     /// </summary>
     public static class UflsPipeCatalogMigrationCommands
     {
+        private static readonly string[] StopWords =
+        {
+            "PIPE", "STRUCTURE", "INCH", "INCHES", "FOOT", "FEET", "WALL", "WALLS",
+            "WITH", "AND", "THE", "GENERAL", "CUSTOM", "SIZE", "TYPE"
+        };
+
         [CommandMethod("UFLS", "UFLS-PIPE-CATALOG-ANALYZE", CommandFlags.Modal)]
         [CommandMethod("UFLS", "MIGRATE-PIPE-CATALOG-ANALYZE", CommandFlags.Modal)]
         public static void AnalyzePipeCatalogMigration()
@@ -67,25 +72,18 @@ namespace CLV_CivilTools.Ufls
 
                         string networkName = GetStringProperty(network, "Name");
                         string partsListName = ResolvePartsListName(tr, network);
-                        report.Networks.Add(new NetworkInventory(
-                            networkId,
-                            networkName,
-                            partsListName));
+                        report.Networks.Add(new NetworkInventory(networkId, networkName, partsListName));
 
                         foreach (ObjectId pipeId in network.GetPipeIds())
                         {
-                            if (tr.GetObject(pipeId, OpenMode.ForRead, false) is not Pipe pipe)
-                                continue;
-
-                            report.AddPipe(pipe, networkName);
+                            if (tr.GetObject(pipeId, OpenMode.ForRead, false) is Pipe pipe)
+                                report.AddPipe(pipe, networkName);
                         }
 
                         foreach (ObjectId structureId in network.GetStructureIds())
                         {
-                            if (tr.GetObject(structureId, OpenMode.ForRead, false) is not Structure structure)
-                                continue;
-
-                            report.AddStructure(structure, networkName);
+                            if (tr.GetObject(structureId, OpenMode.ForRead, false) is Structure structure)
+                                report.AddStructure(structure, networkName);
                         }
                     }
 
@@ -113,14 +111,11 @@ namespace CLV_CivilTools.Ufls
                 }
                 catch
                 {
-                    // Ignore an unreadable/stale Parts List entry rather than aborting selection.
+                    // Ignore stale/unreadable entries.
                 }
             }
 
-            choices = choices
-                .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
+            choices = choices.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
             if (choices.Count == 0)
             {
                 ed.WriteMessage("\nPIPE CATALOG ANALYZE: no usable Parts Lists were found in the drawing.");
@@ -129,7 +124,6 @@ namespace CLV_CivilTools.Ufls
 
             ed.WriteMessage("\n\nSELECT TARGET PARTS LIST");
             ed.WriteMessage("\nThe selected list is the authority for migration candidates; the full catalog is not searched.");
-
             for (int i = 0; i < choices.Count; i++)
                 ed.WriteMessage($"\n  [{i + 1}] {choices[i].Name}");
 
@@ -143,10 +137,9 @@ namespace CLV_CivilTools.Ufls
             };
 
             PromptIntegerResult result = ed.GetInteger(options);
-            if (result.Status != PromptStatus.OK)
-                return ObjectId.Null;
-
-            return choices[result.Value - 1].Id;
+            return result.Status == PromptStatus.OK
+                ? choices[result.Value - 1].Id
+                : ObjectId.Null;
         }
 
         private static TargetPartsListInventory BuildTargetPartsListInventory(Transaction tr, ObjectId partsListId)
@@ -166,9 +159,7 @@ namespace CLV_CivilTools.Ufls
             DomainType domain,
             List<TargetPartFamilyInventory> destination)
         {
-            ObjectIdCollection familyIds = partsList.GetPartFamilyIdsByDomain(domain);
-
-            foreach (ObjectId familyId in familyIds)
+            foreach (ObjectId familyId in partsList.GetPartFamilyIdsByDomain(domain))
             {
                 try
                 {
@@ -198,7 +189,7 @@ namespace CLV_CivilTools.Ufls
                         }
                         catch
                         {
-                            // Keep inventorying other sizes if one target size is unreadable.
+                            // Continue with other target sizes.
                         }
                     }
 
@@ -206,18 +197,14 @@ namespace CLV_CivilTools.Ufls
                 }
                 catch
                 {
-                    // Keep inventorying other families if one target family is unreadable.
+                    // Continue with other target families.
                 }
             }
         }
 
-        private static void WriteReport(
-            Editor ed,
-            PipeCatalogMigrationInventory report,
-            TargetPartsListInventory target)
+        private static void WriteReport(Editor ed, PipeCatalogMigrationInventory report, TargetPartsListInventory target)
         {
-            ed.WriteMessage("\n");
-            ed.WriteMessage("\n============================================================");
+            ed.WriteMessage("\n\n============================================================");
             ed.WriteMessage("\nCLV PIPE CATALOG MIGRATION - NON-DESTRUCTIVE ANALYSIS");
             ed.WriteMessage("\n============================================================");
             ed.WriteMessage($"\nNetworks:   {report.Networks.Count}");
@@ -232,123 +219,340 @@ namespace CLV_CivilTools.Ufls
                 string partsList = string.IsNullOrWhiteSpace(network.PartsListName)
                     ? "<unable to resolve>"
                     : network.PartsListName;
-
                 ed.WriteMessage($"\n  {network.Name} | Parts List: {partsList}");
             }
 
             ed.WriteMessage("\n\nPIPE PART GROUPS");
-            if (report.PipeGroups.Count == 0)
+            int pipeIndex = 1;
+            foreach (PipePartGroup group in report.PipeGroups.Values
+                         .OrderBy(g => g.FamilyName)
+                         .ThenBy(g => g.SizeName))
             {
-                ed.WriteMessage("\n  <none>");
-            }
-            else
-            {
-                int index = 1;
-                foreach (PipePartGroup group in report.PipeGroups.Values
-                             .OrderBy(g => g.FamilyName)
-                             .ThenBy(g => g.SizeName))
-                {
-                    ed.WriteMessage(
-                        $"\n  P{index++:000} | Count={group.Count} | Family='{group.FamilyName}' | Size='{group.SizeName}'" +
-                        $" | Shape={group.Shape} | ID/W={FormatDimension(group.InnerDiameterOrWidth)} | H={FormatDimension(group.InnerHeight)}");
-
-                    if (group.NetworkNames.Count > 0)
-                        ed.WriteMessage($" | Networks={string.Join(", ", group.NetworkNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}");
-                }
+                ed.WriteMessage(
+                    $"\n  P{pipeIndex++:000} | Count={group.Count} | Family='{group.FamilyName}' | Size='{group.SizeName}'" +
+                    $" | Shape={group.Shape} | ID/W={FormatDimension(group.InnerDiameterOrWidth)} | H={FormatDimension(group.InnerHeight)}");
+                if (group.NetworkNames.Count > 0)
+                    ed.WriteMessage($" | Networks={string.Join(", ", group.NetworkNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}");
             }
 
             ed.WriteMessage("\n\nSTRUCTURE PART GROUPS");
-            if (report.StructureGroups.Count == 0)
+            int structureIndex = 1;
+            foreach (StructurePartGroup group in report.StructureGroups.Values
+                         .OrderBy(g => g.FamilyName)
+                         .ThenBy(g => g.SizeName))
             {
-                ed.WriteMessage("\n  <none>");
-            }
-            else
-            {
-                int index = 1;
-                foreach (StructurePartGroup group in report.StructureGroups.Values
-                             .OrderBy(g => g.FamilyName)
-                             .ThenBy(g => g.SizeName))
+                ed.WriteMessage(
+                    $"\n  S{structureIndex++:000} | Count={group.Count} | Family='{group.FamilyName}' | Size='{group.SizeName}'" +
+                    $" | Physical variants={group.Variants.Count}");
+
+                foreach (StructurePhysicalVariant variant in group.Variants.Values
+                             .OrderBy(v => v.InnerLength)
+                             .ThenBy(v => v.InnerWidth)
+                             .ThenBy(v => v.InnerDiameter)
+                             .ThenBy(v => v.InnerHeight))
                 {
                     ed.WriteMessage(
-                        $"\n  S{index++:000} | Count={group.Count} | Family='{group.FamilyName}' | Size='{group.SizeName}'" +
-                        $" | Physical variants={group.Variants.Count}");
-
-                    foreach (StructurePhysicalVariant variant in group.Variants.Values
-                                 .OrderBy(v => v.InnerLength)
-                                 .ThenBy(v => v.InnerWidth)
-                                 .ThenBy(v => v.InnerDiameter)
-                                 .ThenBy(v => v.InnerHeight))
-                    {
-                        ed.WriteMessage(
-                            $"\n       Count={variant.Count}" +
-                            $" | Inner L={FormatDimension(variant.InnerLength)}" +
-                            $" W={FormatDimension(variant.InnerWidth)}" +
-                            $" H={FormatDimension(variant.InnerHeight)}" +
-                            $" ID={FormatDimension(variant.InnerDiameter)}");
-                    }
-
-                    if (group.NetworkNames.Count > 0)
-                        ed.WriteMessage($"\n       Networks={string.Join(", ", group.NetworkNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}");
+                        $"\n       Count={variant.Count}" +
+                        $" | Inner L={FormatDimension(variant.InnerLength)}" +
+                        $" W={FormatDimension(variant.InnerWidth)}" +
+                        $" H={FormatDimension(variant.InnerHeight)}" +
+                        $" ID={FormatDimension(variant.InnerDiameter)}");
                 }
+
+                if (group.NetworkNames.Count > 0)
+                    ed.WriteMessage($"\n       Networks={string.Join(", ", group.NetworkNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}");
             }
 
-            WriteTargetPartsListReport(ed, target);
+            WriteCandidateReport(ed, report, target);
 
             ed.WriteMessage("\n\nANALYSIS STATUS");
             ed.WriteMessage("\n  No pipe, structure, Parts List, or catalog data was changed.");
-            ed.WriteMessage("\n  The target Parts List was selected interactively and is the authority for future migration candidates.");
-            ed.WriteMessage("\n  Family + size combinations are grouped so the next phase can map once per legacy part identity.");
-            ed.WriteMessage("\n  Structure physical dimensions are recorded separately so custom box dimensions are preserved.");
-            ed.WriteMessage("\n  Unresolvable legacy family/size names are retained as <invalid/unresolved> so one bad catalog reference does not abort the scan.");
-            ed.WriteMessage("\n  Shape-specific structure dimensions that Civil 3D does not expose for a given structure are left blank instead of aborting the scan.");
-            ed.WriteMessage("\n  This phase deliberately does not change parts or guess ambiguous mappings.");
+            ed.WriteMessage("\n  The selected target Parts List is the only authority for migration candidates.");
+            ed.WriteMessage("\n  Candidate rankings are advisory only; ambiguous matches require confirmation before migration.");
+            ed.WriteMessage("\n  Instance structure heights/dimensions remain separately recorded for later preservation.");
             ed.WriteMessage("\n");
         }
 
-        private static void WriteTargetPartsListReport(Editor ed, TargetPartsListInventory target)
+        private static void WriteCandidateReport(Editor ed, PipeCatalogMigrationInventory report, TargetPartsListInventory target)
         {
-            int pipeSizeCount = target.PipeFamilies.Sum(f => f.Sizes.Count);
-            int structureSizeCount = target.StructureFamilies.Sum(f => f.Sizes.Count);
+            ed.WriteMessage("\n\n============================================================");
+            ed.WriteMessage("\nMIGRATION CANDIDATE MAPPING - NO CHANGES MADE");
+            ed.WriteMessage("\n============================================================");
+            ed.WriteMessage($"\nTarget Parts List: {target.Name}");
 
-            ed.WriteMessage("\n\nTARGET PARTS LIST INVENTORY");
-            ed.WriteMessage($"\n  Target: {target.Name}");
-            ed.WriteMessage($"\n  Pipe families: {target.PipeFamilies.Count} | Pipe sizes: {pipeSizeCount}");
-            ed.WriteMessage($"\n  Structure families: {target.StructureFamilies.Count} | Structure sizes: {structureSizeCount}");
+            ed.WriteMessage("\n\nPIPE CANDIDATES");
+            int pipeIndex = 1;
+            foreach (PipePartGroup legacy in report.PipeGroups.Values
+                         .OrderBy(g => g.FamilyName)
+                         .ThenBy(g => g.SizeName))
+            {
+                List<PartCandidate> candidates = FindPipeCandidates(legacy, target.PipeFamilies);
+                WriteCandidates(ed, $"P{pipeIndex++:000}", legacy.SizeName, candidates);
+            }
 
-            ed.WriteMessage("\n\n  TARGET PIPE FAMILIES / SIZES");
-            WriteTargetFamilies(ed, target.PipeFamilies);
-
-            ed.WriteMessage("\n\n  TARGET STRUCTURE FAMILIES / SIZES");
-            WriteTargetFamilies(ed, target.StructureFamilies);
+            ed.WriteMessage("\n\nSTRUCTURE CANDIDATES");
+            int structureIndex = 1;
+            foreach (StructurePartGroup legacy in report.StructureGroups.Values
+                         .OrderBy(g => g.FamilyName)
+                         .ThenBy(g => g.SizeName))
+            {
+                List<PartCandidate> candidates = FindStructureCandidates(legacy, target.StructureFamilies);
+                WriteCandidates(ed, $"S{structureIndex++:000}", legacy.SizeName, candidates);
+            }
         }
 
-        private static void WriteTargetFamilies(Editor ed, IEnumerable<TargetPartFamilyInventory> families)
+        private static void WriteCandidates(Editor ed, string id, string legacySize, List<PartCandidate> candidates)
         {
-            var ordered = families
-                .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            if (ordered.Count == 0)
+            if (candidates.Count == 0)
             {
-                ed.WriteMessage("\n    <none>");
+                ed.WriteMessage($"\n  {id} | NO MATCH | Legacy='{legacySize}'");
                 return;
             }
 
-            foreach (TargetPartFamilyInventory family in ordered)
+            PartCandidate top = candidates[0];
+            int secondScore = candidates.Count > 1 ? candidates[1].Score : int.MinValue;
+            string confidence = GetConfidence(top.Score, secondScore);
+
+            ed.WriteMessage(
+                $"\n  {id} | {confidence} | Legacy='{legacySize}'" +
+                $"\n       BEST: Family='{top.FamilyName}' | Size='{top.SizeName}' | Score={top.Score}" +
+                $"\n       Why: {string.Join("; ", top.Reasons)}");
+
+            foreach (PartCandidate alternate in candidates.Skip(1).Take(2))
             {
-                string shape = string.IsNullOrWhiteSpace(family.Shape)
-                    ? string.Empty
-                    : $" | Shape={family.Shape}";
-
-                ed.WriteMessage($"\n    Family='{family.Name}' | Sizes={family.Sizes.Count}{shape}");
-
-                foreach (TargetPartSizeInventory size in family.Sizes
-                             .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase))
-                {
-                    ed.WriteMessage($"\n      - {size.Name}");
-                }
+                ed.WriteMessage(
+                    $"\n       ALT : Family='{alternate.FamilyName}' | Size='{alternate.SizeName}' | Score={alternate.Score}");
             }
         }
+
+        private static string GetConfidence(int bestScore, int secondScore)
+        {
+            if (bestScore < 25)
+                return "NO MATCH";
+
+            int margin = secondScore == int.MinValue ? bestScore : bestScore - secondScore;
+            if (bestScore >= 100 && margin >= 25)
+                return "HIGH";
+            if (bestScore >= 65 && margin >= 15)
+                return "MEDIUM";
+            return "AMBIGUOUS";
+        }
+
+        private static List<PartCandidate> FindPipeCandidates(
+            PipePartGroup legacy,
+            IEnumerable<TargetPartFamilyInventory> targetFamilies)
+        {
+            var results = new List<PartCandidate>();
+            double legacyDiameterInches = legacy.InnerDiameterOrWidth * 12.0;
+            string legacyText = $"{legacy.FamilyName} {legacy.SizeName}";
+
+            foreach (TargetPartFamilyInventory family in targetFamilies)
+            {
+                foreach (TargetPartSizeInventory size in family.Sizes)
+                {
+                    int score = 0;
+                    var reasons = new List<string>();
+                    string targetText = $"{family.Name} {size.Name} {size.Description}";
+
+                    if (NamesEqual(legacy.SizeName, size.Name))
+                    {
+                        score += 90;
+                        reasons.Add("exact normalized size name");
+                    }
+
+                    string material = DetectPipeMaterial(legacyText);
+                    if (!string.IsNullOrEmpty(material) && ContainsToken(targetText, material))
+                    {
+                        score += 55;
+                        reasons.Add($"material/type keyword {material}");
+                    }
+
+                    if (ShapesCompatible(legacy.Shape, family.Shape))
+                    {
+                        score += 20;
+                        reasons.Add("shape compatible");
+                    }
+
+                    double? targetInches = ExtractPrimaryInches(size.Name);
+                    if (targetInches.HasValue && Math.Abs(targetInches.Value - legacyDiameterInches) < 0.11)
+                    {
+                        score += 60;
+                        reasons.Add($"diameter {legacyDiameterInches:0.###} in matches");
+                    }
+
+                    score += TokenOverlapScore(legacyText, targetText, 6, 30, reasons);
+
+                    if (family.Name.Equals("UNKNOWN Pipe", StringComparison.OrdinalIgnoreCase) &&
+                        !string.IsNullOrEmpty(material) &&
+                        !material.Equals("UNKNOWN", StringComparison.OrdinalIgnoreCase))
+                    {
+                        score -= 30;
+                        reasons.Add("UNKNOWN family de-prioritized because legacy material is identifiable");
+                    }
+
+                    if (score > 0)
+                        results.Add(new PartCandidate(family.Name, size.Name, score, reasons));
+                }
+            }
+
+            return results
+                .OrderByDescending(c => c.Score)
+                .ThenBy(c => c.FamilyName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(c => c.SizeName, StringComparer.OrdinalIgnoreCase)
+                .Take(5)
+                .ToList();
+        }
+
+        private static List<PartCandidate> FindStructureCandidates(
+            StructurePartGroup legacy,
+            IEnumerable<TargetPartFamilyInventory> targetFamilies)
+        {
+            var results = new List<PartCandidate>();
+            string legacyText = $"{legacy.FamilyName} {legacy.SizeName}";
+            string expectedShape = legacy.Variants.Values.Any(v => v.InnerLength > 0.0) ? "Box" : "Cylinder";
+
+            foreach (TargetPartFamilyInventory family in targetFamilies)
+            {
+                foreach (TargetPartSizeInventory size in family.Sizes)
+                {
+                    int score = 0;
+                    var reasons = new List<string>();
+                    string targetText = $"{family.Name} {size.Name} {size.Description}";
+
+                    if (NamesEqual(legacy.FamilyName, family.Name))
+                    {
+                        score += 100;
+                        reasons.Add("exact normalized family name");
+                    }
+
+                    if (NamesEqual(legacy.SizeName, size.Name))
+                    {
+                        score += 90;
+                        reasons.Add("exact normalized size name");
+                    }
+
+                    if (ShapesCompatible(expectedShape, family.Shape))
+                    {
+                        score += 20;
+                        reasons.Add("bounding shape compatible");
+                    }
+                    else if (!string.IsNullOrWhiteSpace(family.Shape))
+                    {
+                        score -= 30;
+                    }
+
+                    score += TokenOverlapScore(legacyText, targetText, 9, 63, reasons);
+
+                    string kind = DetectStructureKind(legacyText);
+                    if (!string.IsNullOrEmpty(kind) && ContainsToken(targetText, kind))
+                    {
+                        score += 35;
+                        reasons.Add($"structure type keyword {kind}");
+                    }
+
+                    if (score > 0)
+                        results.Add(new PartCandidate(family.Name, size.Name, score, reasons));
+                }
+            }
+
+            return results
+                .OrderByDescending(c => c.Score)
+                .ThenBy(c => c.FamilyName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(c => c.SizeName, StringComparer.OrdinalIgnoreCase)
+                .Take(5)
+                .ToList();
+        }
+
+        private static int TokenOverlapScore(
+            string source,
+            string target,
+            int pointsPerToken,
+            int maximum,
+            List<string> reasons)
+        {
+            HashSet<string> sourceTokens = GetMeaningfulTokens(source);
+            HashSet<string> targetTokens = GetMeaningfulTokens(target);
+            List<string> common = sourceTokens.Intersect(targetTokens, StringComparer.OrdinalIgnoreCase).ToList();
+            if (common.Count == 0)
+                return 0;
+
+            int score = Math.Min(maximum, common.Count * pointsPerToken);
+            reasons.Add($"shared keywords: {string.Join(",", common.Take(6))}");
+            return score;
+        }
+
+        private static HashSet<string> GetMeaningfulTokens(string value)
+        {
+            string normalized = Regex.Replace(NormalizeName(value), "[^A-Z0-9]+", " ");
+            return normalized
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Where(t => t.Length > 1)
+                .Where(t => !StopWords.Contains(t, StringComparer.OrdinalIgnoreCase))
+                .Where(t => !double.TryParse(t, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static string DetectPipeMaterial(string text)
+        {
+            string n = NormalizeName(text);
+            if (n.Contains("HERCP")) return "HERCP";
+            if (n.Contains("RCP")) return "RCP";
+            if (n.Contains("RCB")) return "RCB";
+            if (n.Contains("C900")) return "C900";
+            if (n.Contains("PVC")) return "PVC";
+            if (n.Contains("HDPE")) return "HDPE";
+            if (n.Contains("ACP")) return "ACP";
+            if (n.Contains("ABANDON")) return "ABANDONED";
+            if (n.Contains("UNKNOWN")) return "UNKNOWN";
+            return string.Empty;
+        }
+
+        private static string DetectStructureKind(string text)
+        {
+            string n = NormalizeName(text);
+            if (n.Contains("MANHOLE")) return "MANHOLE";
+            if (n.Contains("DROP INLET")) return "INLET";
+            if (n.Contains("INLET")) return "INLET";
+            if (n.Contains("JUNCTION")) return "JUNCTION";
+            if (n.Contains("ACCESS")) return "ACCESS";
+            return string.Empty;
+        }
+
+        private static bool ContainsToken(string text, string token)
+            => NormalizeName(text).Contains(NormalizeName(token), StringComparison.OrdinalIgnoreCase);
+
+        private static bool ShapesCompatible(string legacyShape, string targetShape)
+        {
+            if (string.IsNullOrWhiteSpace(legacyShape) || string.IsNullOrWhiteSpace(targetShape))
+                return false;
+
+            string a = NormalizeName(legacyShape);
+            string b = NormalizeName(targetShape);
+            if (a == b)
+                return true;
+
+            return (a.Contains("CIRC") || a.Contains("CYL")) &&
+                   (b.Contains("CIRC") || b.Contains("CYL"));
+        }
+
+        private static double? ExtractPrimaryInches(string value)
+        {
+            Match inchWord = Regex.Match(value, @"(?<![0-9.])([0-9]+(?:\.[0-9]+)?)\s*(?:INCH|IN\b)", RegexOptions.IgnoreCase);
+            if (inchWord.Success && double.TryParse(inchWord.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double inches))
+                return inches;
+
+            Match doubleQuote = Regex.Match(value, @"(?<![0-9.])([0-9]+(?:\.[0-9]+)?)\s*(?:''|\"\")");
+            if (doubleQuote.Success && double.TryParse(doubleQuote.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out inches))
+                return inches;
+
+            return null;
+        }
+
+        private static bool NamesEqual(string a, string b)
+            => string.Equals(NormalizeName(a), NormalizeName(b), StringComparison.OrdinalIgnoreCase);
+
+        private static string NormalizeName(string value)
+            => Regex.Replace((value ?? string.Empty).Trim().ToUpperInvariant(), @"\s+", " ");
 
         private static string ResolvePartsListName(Transaction tr, Network network)
         {
@@ -367,7 +571,7 @@ namespace CLV_CivilTools.Ufls
             }
             catch
             {
-                // Older drawings can retain a stale or invalid PartsListId.
+                // Older drawings can retain stale PartsListId references.
             }
 
             return string.Empty;
@@ -422,7 +626,6 @@ namespace CLV_CivilTools.Ufls
         {
             if (Math.Abs(value) < 1e-9)
                 return "-";
-
             return value.ToString("0.###", CultureInfo.InvariantCulture);
         }
 
@@ -431,23 +634,21 @@ namespace CLV_CivilTools.Ufls
             public List<NetworkInventory> Networks { get; } = new();
             public Dictionary<PipeGroupKey, PipePartGroup> PipeGroups { get; } = new();
             public Dictionary<StructureGroupKey, StructurePartGroup> StructureGroups { get; } = new();
-
             public int PipeInstances { get; private set; }
             public int StructureInstances { get; private set; }
 
             public void AddPipe(Pipe pipe, string networkName)
             {
                 PipeInstances++;
-
                 string familyName = GetPartIdentityProperty(pipe, "PartFamilyName");
                 string sizeName = GetPartIdentityProperty(pipe, "PartSizeName");
 
                 var key = new PipeGroupKey(
-                    Normalize(familyName),
-                    Normalize(sizeName),
-                    Normalize(pipe.CrossSectionalShape.ToString()),
-                    Round(pipe.InnerDiameterOrWidth),
-                    Round(pipe.InnerHeight));
+                    NormalizeName(familyName),
+                    NormalizeName(sizeName),
+                    NormalizeName(pipe.CrossSectionalShape.ToString()),
+                    Math.Round(pipe.InnerDiameterOrWidth, 6),
+                    Math.Round(pipe.InnerHeight, 6));
 
                 if (!PipeGroups.TryGetValue(key, out PipePartGroup? group))
                 {
@@ -467,13 +668,9 @@ namespace CLV_CivilTools.Ufls
             public void AddStructure(Structure structure, string networkName)
             {
                 StructureInstances++;
-
                 string familyName = GetPartIdentityProperty(structure, "PartFamilyName");
                 string sizeName = GetPartIdentityProperty(structure, "PartSizeName");
-
-                var key = new StructureGroupKey(
-                    Normalize(familyName),
-                    Normalize(sizeName));
+                var key = new StructureGroupKey(NormalizeName(familyName), NormalizeName(sizeName));
 
                 if (!StructureGroups.TryGetValue(key, out StructurePartGroup? group))
                 {
@@ -494,12 +691,6 @@ namespace CLV_CivilTools.Ufls
 
                 group.AddVariant(innerLength, innerWidth, height, innerDiameter);
             }
-
-            private static string Normalize(string value)
-                => value?.Trim().ToUpperInvariant() ?? string.Empty;
-
-            private static double Round(double value)
-                => Math.Round(value, 6, MidpointRounding.AwayFromZero);
         }
 
         private sealed class TargetPartsListInventory
@@ -535,6 +726,7 @@ namespace CLV_CivilTools.Ufls
 
         private sealed record TargetPartSizeInventory(ObjectId Id, string Name, string Description);
         private sealed record NetworkInventory(ObjectId Id, string Name, string PartsListName);
+        private sealed record PartCandidate(string FamilyName, string SizeName, int Score, List<string> Reasons);
 
         private readonly record struct PipeGroupKey(
             string FamilyName,
@@ -545,12 +737,7 @@ namespace CLV_CivilTools.Ufls
 
         private sealed class PipePartGroup
         {
-            public PipePartGroup(
-                string familyName,
-                string sizeName,
-                string shape,
-                double innerDiameterOrWidth,
-                double innerHeight)
+            public PipePartGroup(string familyName, string sizeName, string shape, double innerDiameterOrWidth, double innerHeight)
             {
                 FamilyName = familyName;
                 SizeName = sizeName;
@@ -587,26 +774,19 @@ namespace CLV_CivilTools.Ufls
             public void AddVariant(double innerLength, double innerWidth, double innerHeight, double innerDiameter)
             {
                 var key = new StructurePhysicalKey(
-                    Round(innerLength),
-                    Round(innerWidth),
-                    Round(innerHeight),
-                    Round(innerDiameter));
+                    Math.Round(innerLength, 6),
+                    Math.Round(innerWidth, 6),
+                    Math.Round(innerHeight, 6),
+                    Math.Round(innerDiameter, 6));
 
                 if (!Variants.TryGetValue(key, out StructurePhysicalVariant? variant))
                 {
-                    variant = new StructurePhysicalVariant(
-                        innerLength,
-                        innerWidth,
-                        innerHeight,
-                        innerDiameter);
+                    variant = new StructurePhysicalVariant(innerLength, innerWidth, innerHeight, innerDiameter);
                     Variants.Add(key, variant);
                 }
 
                 variant.Count++;
             }
-
-            private static double Round(double value)
-                => Math.Round(value, 6, MidpointRounding.AwayFromZero);
         }
 
         private readonly record struct StructurePhysicalKey(
@@ -617,11 +797,7 @@ namespace CLV_CivilTools.Ufls
 
         private sealed class StructurePhysicalVariant
         {
-            public StructurePhysicalVariant(
-                double innerLength,
-                double innerWidth,
-                double innerHeight,
-                double innerDiameter)
+            public StructurePhysicalVariant(double innerLength, double innerWidth, double innerHeight, double innerDiameter)
             {
                 InnerLength = innerLength;
                 InnerWidth = innerWidth;
