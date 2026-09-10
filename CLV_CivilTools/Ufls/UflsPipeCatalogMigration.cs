@@ -23,6 +23,8 @@ namespace CLV_CivilTools.Ufls
     /// </summary>
     public static class UflsPipeCatalogMigrationCommands
     {
+        private const string UnresolvedPart = "<invalid/unresolved>";
+
         private static readonly string[] StopWords =
         {
             "PIPE", "STRUCTURE", "INCH", "INCHES", "FOOT", "FEET", "WALL", "WALLS",
@@ -187,30 +189,38 @@ namespace CLV_CivilTools.Ufls
                         GetStringProperty(family, "PartType"),
                         domain == DomainType.Pipe ? GetStringProperty(family, "SweptShape") : GetStringProperty(family, "BoundingShape"));
 
-                    for (int i = 0; i < family.PartSizeCount; i++)
-                    {
-                        try
-                        {
-                            ObjectId sizeId = family[i];
-                            if (tr.GetObject(sizeId, OpenMode.ForRead, false) is PartSize size)
-                            {
-                                targetFamily.Sizes.Add(new TargetPartSizeInventory(
-                                    sizeId,
-                                    GetPartIdentityProperty(size, "Name"),
-                                    GetStringProperty(size, "Description")));
-                            }
-                        }
-                        catch
-                        {
-                            // Continue with other target sizes.
-                        }
-                    }
-
+                    RefreshTargetFamilySizes(tr, targetFamily);
                     destination.Add(targetFamily);
                 }
                 catch
                 {
                     // Continue with other target families.
+                }
+            }
+        }
+
+        private static void RefreshTargetFamilySizes(Transaction tr, TargetPartFamilyInventory targetFamily)
+        {
+            targetFamily.Sizes.Clear();
+            if (tr.GetObject(targetFamily.Id, OpenMode.ForRead, false) is not PartFamily family)
+                return;
+
+            for (int i = 0; i < family.PartSizeCount; i++)
+            {
+                try
+                {
+                    ObjectId sizeId = family[i];
+                    if (tr.GetObject(sizeId, OpenMode.ForRead, false) is PartSize size)
+                    {
+                        targetFamily.Sizes.Add(new TargetPartSizeInventory(
+                            sizeId,
+                            GetPartIdentityProperty(size, "Name"),
+                            GetStringProperty(size, "Description")));
+                    }
+                }
+                catch
+                {
+                    // Continue with other target sizes.
                 }
             }
         }
@@ -247,7 +257,8 @@ namespace CLV_CivilTools.Ufls
                 foreach (StructurePhysicalVariant variant in group.Variants.Values)
                 {
                     ed.WriteMessage($"\n       Count={variant.Count} | Inner L={FormatDimension(variant.InnerLength)}" +
-                                    $" W={FormatDimension(variant.InnerWidth)} H={FormatDimension(variant.InnerHeight)} ID={FormatDimension(variant.InnerDiameter)}");
+                                    $" W={FormatDimension(variant.InnerWidth)} H={FormatDimension(variant.InnerHeight)}" +
+                                    $" ID={FormatDimension(variant.InnerDiameter)} Wall={FormatDimension(variant.WallThickness)}");
                 }
             }
 
@@ -256,7 +267,8 @@ namespace CLV_CivilTools.Ufls
             ed.WriteMessage("\n\nANALYSIS STATUS");
             ed.WriteMessage("\n  No pipe, structure, Parts List, or catalog data was changed.");
             ed.WriteMessage("\n  Candidate rankings are advisory only.");
-            ed.WriteMessage("\n  Target PartType compatibility is checked before the migration command can swap a part.");
+            ed.WriteMessage("\n  Unresolved legacy structures require user classification during migration.");
+            ed.WriteMessage("\n  A structure swap requires a target size matching the legacy physical dimensions.");
         }
 
         private static void WriteCandidateReport(Editor ed, PipeCatalogMigrationInventory report, TargetPartsListInventory target)
@@ -274,7 +286,17 @@ namespace CLV_CivilTools.Ufls
             ed.WriteMessage("\n\nSTRUCTURE CANDIDATES");
             int s = 1;
             foreach (StructurePartGroup legacy in OrderedStructures(report))
-                WriteCandidates(ed, $"S{s++:000}", legacy.SizeName, legacy.PartType, FindStructureCandidates(legacy, target.StructureFamilies));
+            {
+                string id = $"S{s++:000}";
+                if (IsUnresolved(legacy.FamilyName))
+                {
+                    ed.WriteMessage($"\n  {id} | MANUAL CLASSIFICATION REQUIRED | Legacy='{legacy.SizeName}'");
+                    ed.WriteMessage("\n       Old/default Civil 3D structures may represent a junction, drop inlet, access structure, or other current part.");
+                    continue;
+                }
+
+                WriteCandidates(ed, id, legacy.SizeName, legacy.PartType, FindStructureCandidates(legacy, target.StructureFamilies));
+            }
         }
 
         private static void WriteCandidates(Editor ed, string id, string legacySize, string legacyPartType, List<PartCandidate> candidates)
@@ -312,8 +334,10 @@ namespace CLV_CivilTools.Ufls
             ed.WriteMessage("\nCLV PIPE CATALOG MIGRATION - CONTROLLED MIGRATION");
             ed.WriteMessage("\n============================================================");
             ed.WriteMessage($"\nTarget Parts List: {target.Name}");
-            ed.WriteMessage("\nOnly confirmed, HIGH-confidence, PartType-compatible candidates can be swapped.");
-            ed.WriteMessage("\nType-changing/combination structures are left untouched for manual replacement.");
+            ed.WriteMessage("\nPipes and clearly identified structures can be swapped after confirmation.");
+            ed.WriteMessage("\nUnresolved/default legacy structures require the user to choose the current target family.");
+            ed.WriteMessage("\nIf the chosen family is a different Civil 3D PartType, the tool leaves it for manual replacement/reconnect.");
+            ed.WriteMessage("\nFor like-for-like structure swaps, the target size must match the legacy physical dimensions before swapping.");
 
             var accepted = new List<AcceptedMigration>();
             int manualRequired = 0;
@@ -322,15 +346,15 @@ namespace CLV_CivilTools.Ufls
             int p = 1;
             foreach (PipePartGroup legacy in OrderedPipes(report))
             {
-                ReviewMigrationGroup(ed, $"P{p++:000}", legacy.SizeName, legacy.PartType, legacy.ObjectIds,
-                    FindPipeCandidates(legacy, target.PipeFamilies), false, accepted, ref manualRequired, ref noMatch);
+                ReviewPipeMigrationGroup(ed, $"P{p++:000}", legacy,
+                    FindPipeCandidates(legacy, target.PipeFamilies), accepted, ref manualRequired, ref noMatch);
             }
 
             int s = 1;
             foreach (StructurePartGroup legacy in OrderedStructures(report))
             {
-                ReviewMigrationGroup(ed, $"S{s++:000}", legacy.SizeName, legacy.PartType, legacy.ObjectIds,
-                    FindStructureCandidates(legacy, target.StructureFamilies), true, accepted, ref manualRequired, ref noMatch);
+                ReviewStructureMigrationGroup(ed, tr, $"S{s++:000}", legacy, target,
+                    accepted, ref manualRequired, ref noMatch);
             }
 
             if (accepted.Count == 0)
@@ -349,7 +373,7 @@ namespace CLV_CivilTools.Ufls
 
             if (!PromptYesNo(ed, "Proceed with these swaps and update network Parts List", false))
             {
-                ed.WriteMessage("\nMigration cancelled. Drawing unchanged.");
+                ed.WriteMessage("\nMigration cancelled. Drawing unchanged except any target sizes explicitly added during review.");
                 return;
             }
 
@@ -391,61 +415,437 @@ namespace CLV_CivilTools.Ufls
                 ed.WriteMessage("\n  Review failed parts before saving the drawing.");
         }
 
-        private static void ReviewMigrationGroup(
+        private static void ReviewPipeMigrationGroup(
             Editor ed,
             string groupId,
-            string legacySize,
-            string legacyPartType,
-            List<ObjectId> objectIds,
+            PipePartGroup legacy,
             List<PartCandidate> candidates,
-            bool isStructure,
             List<AcceptedMigration> accepted,
             ref int manualRequired,
             ref int noMatch)
         {
+            if (!TryGetHighCompatibleCandidate(ed, groupId, legacy.SizeName, legacy.PartType, candidates, out PartCandidate? top, ref manualRequired, ref noMatch))
+                return;
+
+            ed.WriteMessage($"\n\n  {groupId} | HIGH | {legacy.ObjectIds.Count} pipe(s)");
+            ed.WriteMessage($"\n       FROM: '{legacy.SizeName}' | Type={legacy.PartType}");
+            ed.WriteMessage($"\n       TO  : '{top!.FamilyName}' / '{top.SizeName}' | Type={top.PartType}");
+
+            if (PromptYesNo(ed, $"Accept {groupId} mapping", false))
+                accepted.Add(new AcceptedMigration(groupId, legacy.ObjectIds, top));
+            else
+                ed.WriteMessage($"\n       {groupId} skipped by user.");
+        }
+
+        private static void ReviewStructureMigrationGroup(
+            Editor ed,
+            Transaction tr,
+            string groupId,
+            StructurePartGroup legacy,
+            TargetPartsListInventory target,
+            List<AcceptedMigration> accepted,
+            ref int manualRequired,
+            ref int noMatch)
+        {
+            TargetPartFamilyInventory? selectedFamily;
+            PartCandidate? suggested = null;
+
+            if (IsUnresolved(legacy.FamilyName))
+            {
+                ed.WriteMessage($"\n\n  {groupId} | MANUAL CLASSIFICATION REQUIRED | {legacy.ObjectIds.Count} structure(s)");
+                ed.WriteMessage($"\n       Legacy: '{legacy.SizeName}' | Type={legacy.PartType}");
+                WriteLegacyStructureDimensions(ed, legacy);
+                ed.WriteMessage("\n       This old/default part may have been used for a different modern structure type.");
+
+                if (!PromptYesNo(ed, $"Choose the current target family for {groupId}", false))
+                {
+                    manualRequired++;
+                    return;
+                }
+
+                selectedFamily = SelectTargetStructureFamily(ed, target.StructureFamilies);
+                if (selectedFamily == null)
+                {
+                    ed.WriteMessage($"\n       {groupId} target-family selection cancelled.");
+                    manualRequired++;
+                    return;
+                }
+            }
+            else
+            {
+                List<PartCandidate> candidates = FindStructureCandidates(legacy, target.StructureFamilies);
+                if (candidates.Count == 0)
+                {
+                    ed.WriteMessage($"\n  {groupId} | NO MATCH | '{legacy.SizeName}' -> SKIPPED");
+                    noMatch++;
+                    return;
+                }
+
+                suggested = candidates[0];
+                string confidence = GetConfidence(suggested.Score, candidates.Count > 1 ? candidates[1].Score : int.MinValue);
+                if (confidence != "HIGH")
+                {
+                    ed.WriteMessage($"\n  {groupId} | {confidence} | '{legacy.SizeName}' -> MANUAL REVIEW");
+                    manualRequired++;
+                    return;
+                }
+
+                selectedFamily = target.StructureFamilies.FirstOrDefault(f => f.Id == suggested.FamilyId);
+                if (selectedFamily == null)
+                {
+                    noMatch++;
+                    return;
+                }
+            }
+
+            if (!PartTypesCompatible(legacy.PartType, selectedFamily.PartType))
+            {
+                ed.WriteMessage($"\n  {groupId} | MANUAL REPLACEMENT REQUIRED");
+                ed.WriteMessage($"\n       Legacy Type : {legacy.PartType}");
+                ed.WriteMessage($"\n       Chosen Family: {selectedFamily.Name} | Type={selectedFamily.PartType}");
+                ed.WriteMessage("\n       The modern part is a different Civil 3D PartType. Replace/reconnect this structure manually using the plans.");
+                manualRequired++;
+                return;
+            }
+
+            if (!TryGetSingleHorizontalSize(legacy, out StructurePhysicalVariant? representative))
+            {
+                ed.WriteMessage($"\n  {groupId} | MANUAL REVIEW REQUIRED");
+                ed.WriteMessage("\n       This legacy group contains more than one horizontal structure size. It cannot be swapped as one group.");
+                manualRequired++;
+                return;
+            }
+
+            ObjectId matchingSizeId = FindMatchingStructureSize(tr, selectedFamily.Id, representative!);
+            if (matchingSizeId.IsNull)
+            {
+                ed.WriteMessage($"\n  {groupId} | TARGET SIZE MISSING");
+                WriteRequiredTargetSize(ed, representative!);
+
+                if (!PromptYesNo(ed, $"Add this matching size to '{selectedFamily.Name}' in the target Parts List", true))
+                {
+                    ed.WriteMessage("\n       Size was not added; structure group left untouched.");
+                    manualRequired++;
+                    return;
+                }
+
+                matchingSizeId = TryAddMatchingStructureSize(ed, tr, selectedFamily, representative!);
+                if (matchingSizeId.IsNull)
+                {
+                    ed.WriteMessage("\n       Civil 3D did not create a matching target size. Add the size manually in the Parts List, then rerun migration.");
+                    manualRequired++;
+                    return;
+                }
+
+                RefreshTargetFamilySizes(tr, selectedFamily);
+            }
+
+            string targetSizeName = GetObjectName(tr, matchingSizeId);
+            var finalCandidate = new PartCandidate(
+                selectedFamily.Id,
+                matchingSizeId,
+                selectedFamily.Name,
+                targetSizeName,
+                selectedFamily.PartType,
+                suggested?.Score ?? 100,
+                suggested?.Reasons ?? new List<string> { "user-selected target family; physical size matched" });
+
+            ed.WriteMessage($"\n\n  {groupId} | READY | {legacy.ObjectIds.Count} structure(s)");
+            ed.WriteMessage($"\n       FROM: '{legacy.SizeName}' | Type={legacy.PartType}");
+            ed.WriteMessage($"\n       TO  : '{selectedFamily.Name}' / '{targetSizeName}' | Type={selectedFamily.PartType}");
+            WriteRequiredTargetSize(ed, representative!);
+            ed.WriteMessage("\n       Height is preserved as an instance condition; it is not used to create the catalog size.");
+
+            if (PromptYesNo(ed, $"Accept {groupId} mapping", false))
+                accepted.Add(new AcceptedMigration(groupId, legacy.ObjectIds, finalCandidate));
+            else
+                ed.WriteMessage($"\n       {groupId} skipped by user.");
+        }
+
+        private static bool TryGetHighCompatibleCandidate(
+            Editor ed,
+            string groupId,
+            string legacySize,
+            string legacyPartType,
+            List<PartCandidate> candidates,
+            out PartCandidate? top,
+            ref int manualRequired,
+            ref int noMatch)
+        {
+            top = null;
             if (candidates.Count == 0)
             {
                 ed.WriteMessage($"\n  {groupId} | NO MATCH | '{legacySize}' -> SKIPPED");
                 noMatch++;
-                return;
+                return false;
             }
 
-            PartCandidate top = candidates[0];
+            top = candidates[0];
             string confidence = GetConfidence(top.Score, candidates.Count > 1 ? candidates[1].Score : int.MinValue);
             if (confidence == "NO MATCH")
             {
                 ed.WriteMessage($"\n  {groupId} | NO MATCH | '{legacySize}' -> SKIPPED");
                 noMatch++;
-                return;
+                return false;
             }
 
             if (!PartTypesCompatible(legacyPartType, top.PartType))
             {
-                ed.WriteMessage($"\n  {groupId} | MANUAL REPLACEMENT REQUIRED");
-                ed.WriteMessage($"\n       Legacy: '{legacySize}' | Type={legacyPartType}");
-                ed.WriteMessage($"\n       Suggested target: '{top.FamilyName}' / '{top.SizeName}' | Type={top.PartType}");
-                ed.WriteMessage("\n       Civil 3D cannot safely SwapPartFamilyAndSize across these part types.");
+                ed.WriteMessage($"\n  {groupId} | MANUAL REPLACEMENT REQUIRED | Type {legacyPartType} -> {top.PartType}");
                 manualRequired++;
-                return;
+                return false;
             }
 
             if (confidence != "HIGH")
             {
                 ed.WriteMessage($"\n  {groupId} | {confidence} | '{legacySize}' -> SKIPPED (not HIGH confidence)");
                 manualRequired++;
-                return;
+                return false;
             }
 
-            ed.WriteMessage($"\n\n  {groupId} | HIGH | {objectIds.Count} part(s)");
-            ed.WriteMessage($"\n       FROM: '{legacySize}' | Type={legacyPartType}");
-            ed.WriteMessage($"\n       TO  : '{top.FamilyName}' / '{top.SizeName}' | Type={top.PartType}");
-            if (isStructure)
-                ed.WriteMessage("\n       Note: Civil 3D swap preserves pipe connection levels, but inspect structure geometry after migration.");
+            return true;
+        }
 
-            if (PromptYesNo(ed, $"Accept {groupId} mapping", false))
-                accepted.Add(new AcceptedMigration(groupId, objectIds, top));
+        private static TargetPartFamilyInventory? SelectTargetStructureFamily(Editor ed, IEnumerable<TargetPartFamilyInventory> families)
+        {
+            List<TargetPartFamilyInventory> choices = families
+                .Where(f => !IsSeparatorFamily(f))
+                .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (choices.Count == 0)
+                return null;
+
+            ed.WriteMessage("\n\n       TARGET STRUCTURE FAMILIES");
+            for (int i = 0; i < choices.Count; i++)
+                ed.WriteMessage($"\n         [{i + 1}] {choices[i].Name} | Type={choices[i].PartType} | Shape={choices[i].Shape}");
+
+            var options = new PromptIntegerOptions("\n       Enter target family number: ")
+            {
+                AllowNone = false,
+                AllowNegative = false,
+                AllowZero = false,
+                LowerLimit = 1,
+                UpperLimit = choices.Count
+            };
+
+            PromptIntegerResult result = ed.GetInteger(options);
+            return result.Status == PromptStatus.OK ? choices[result.Value - 1] : null;
+        }
+
+        private static bool TryGetSingleHorizontalSize(StructurePartGroup legacy, out StructurePhysicalVariant? representative)
+        {
+            representative = null;
+            List<StructurePhysicalVariant> variants = legacy.Variants.Values.ToList();
+            if (variants.Count == 0)
+                return false;
+
+            representative = variants[0];
+            return variants.All(v =>
+                NearlyEqual(v.InnerLength, representative.InnerLength) &&
+                NearlyEqual(v.InnerWidth, representative.InnerWidth) &&
+                NearlyEqual(v.InnerDiameter, representative.InnerDiameter) &&
+                NearlyEqual(v.WallThickness, representative.WallThickness));
+        }
+
+        private static ObjectId FindMatchingStructureSize(Transaction tr, ObjectId familyId, StructurePhysicalVariant legacy)
+        {
+            if (tr.GetObject(familyId, OpenMode.ForRead, false) is not PartFamily family)
+                return ObjectId.Null;
+
+            for (int i = 0; i < family.PartSizeCount; i++)
+            {
+                try
+                {
+                    ObjectId id = family[i];
+                    if (tr.GetObject(id, OpenMode.ForRead, false) is PartSize size && StructureSizeMatches(size, legacy))
+                        return id;
+                }
+                catch
+                {
+                    // Continue searching.
+                }
+            }
+
+            return ObjectId.Null;
+        }
+
+        private static bool StructureSizeMatches(PartSize size, StructurePhysicalVariant legacy)
+        {
+            double wall = GetPartSizeValue(size, PartContextType.WallThickness);
+
+            if (legacy.InnerLength > 0.0)
+            {
+                double innerLength = GetPartSizeValue(size, PartContextType.StructInnerLength);
+                double innerWidth = GetPartSizeValue(size, PartContextType.StructInnerWidth);
+
+                if (innerLength <= 0.0)
+                {
+                    double outerLength = GetPartSizeValue(size, PartContextType.StructLength);
+                    if (outerLength > 0.0 && wall > 0.0)
+                        innerLength = outerLength - (2.0 * wall);
+                }
+
+                if (innerWidth <= 0.0)
+                {
+                    double outerWidth = GetPartSizeValue(size, PartContextType.StructWidth);
+                    if (outerWidth > 0.0 && wall > 0.0)
+                        innerWidth = outerWidth - (2.0 * wall);
+                }
+
+                return innerLength > 0.0 && innerWidth > 0.0 &&
+                       DimensionsMatchEitherOrientation(innerLength, innerWidth, legacy.InnerLength, legacy.InnerWidth) &&
+                       WallMatchesWhenKnown(wall, legacy.WallThickness);
+            }
+
+            double innerDiameter = GetPartSizeValue(size, PartContextType.StructInnerDiameter);
+            if (innerDiameter <= 0.0)
+            {
+                double outerDiameter = GetPartSizeValue(size, PartContextType.StructDiameter);
+                if (outerDiameter > 0.0 && wall > 0.0)
+                    innerDiameter = outerDiameter - (2.0 * wall);
+            }
+
+            return legacy.InnerDiameter > 0.0 && innerDiameter > 0.0 &&
+                   NearlyEqual(innerDiameter, legacy.InnerDiameter) &&
+                   WallMatchesWhenKnown(wall, legacy.WallThickness);
+        }
+
+        private static ObjectId TryAddMatchingStructureSize(
+            Editor ed,
+            Transaction tr,
+            TargetPartFamilyInventory targetFamily,
+            StructurePhysicalVariant legacy)
+        {
+            try
+            {
+                if (tr.GetObject(targetFamily.Id, OpenMode.ForWrite, false) is not PartFamily family)
+                    return ObjectId.Null;
+
+                int before = family.PartSizeCount;
+                using var filter = new SizeFilterRecord(family);
+
+                bool dimensionSet;
+                if (legacy.InnerLength > 0.0)
+                {
+                    bool lengthSet = TrySetFilterValue(filter, PartContextType.StructInnerLength, legacy.InnerLength);
+                    bool widthSet = TrySetFilterValue(filter, PartContextType.StructInnerWidth, legacy.InnerWidth);
+
+                    if (!lengthSet && legacy.WallThickness > 0.0)
+                        lengthSet = TrySetFilterValue(filter, PartContextType.StructLength, legacy.InnerLength + 2.0 * legacy.WallThickness);
+                    if (!widthSet && legacy.WallThickness > 0.0)
+                        widthSet = TrySetFilterValue(filter, PartContextType.StructWidth, legacy.InnerWidth + 2.0 * legacy.WallThickness);
+
+                    dimensionSet = lengthSet && widthSet;
+                }
+                else
+                {
+                    bool diameterSet = TrySetFilterValue(filter, PartContextType.StructInnerDiameter, legacy.InnerDiameter);
+                    if (!diameterSet && legacy.WallThickness > 0.0)
+                        diameterSet = TrySetFilterValue(filter, PartContextType.StructDiameter, legacy.InnerDiameter + 2.0 * legacy.WallThickness);
+                    dimensionSet = diameterSet;
+                }
+
+                if (legacy.WallThickness > 0.0)
+                    TrySetFilterValue(filter, PartContextType.WallThickness, legacy.WallThickness);
+
+                if (!dimensionSet)
+                {
+                    ed.WriteMessage("\n       Target family does not expose writable size parameters for the required dimensions.");
+                    return ObjectId.Null;
+                }
+
+                family.AddPartSize(filter);
+                int after = family.PartSizeCount;
+                ed.WriteMessage($"\n       Parts List family size count: {before} -> {after}");
+
+                ObjectId match = FindMatchingStructureSize(tr, targetFamily.Id, legacy);
+                if (!match.IsNull)
+                    ed.WriteMessage($"\n       Added/found matching size: {GetObjectName(tr, match)}");
+                return match;
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\n       Unable to add target size automatically: {ex.Message}");
+                return ObjectId.Null;
+            }
+        }
+
+        private static bool TrySetFilterValue(SizeFilterRecord filter, PartContextType context, double value)
+        {
+            try
+            {
+                SizeFilterField field = filter.GetParamByContextAndIndex(context, 0);
+                if (field == null || field.IsReadOnly)
+                    return false;
+                field.Value = value;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static double GetPartSizeValue(PartSize size, PartContextType context)
+        {
+            try
+            {
+                using PartDataRecord record = size.SizeDataRecord;
+                PartDataField field = record.GetDataFieldBy(context);
+                if (field?.Value == null)
+                    return 0.0;
+                return Convert.ToDouble(field.Value, CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return 0.0;
+            }
+        }
+
+        private static void WriteLegacyStructureDimensions(Editor ed, StructurePartGroup legacy)
+        {
+            foreach (StructurePhysicalVariant variant in legacy.Variants.Values)
+                WriteRequiredTargetSize(ed, variant);
+        }
+
+        private static void WriteRequiredTargetSize(Editor ed, StructurePhysicalVariant variant)
+        {
+            if (variant.InnerLength > 0.0)
+            {
+                ed.WriteMessage($"\n       Required size: Inner L={FormatDimension(variant.InnerLength)} ft" +
+                                $" x W={FormatDimension(variant.InnerWidth)} ft" +
+                                $" | Wall={FormatDimension(variant.WallThickness)} ft");
+            }
             else
-                ed.WriteMessage($"\n       {groupId} skipped by user.");
+            {
+                ed.WriteMessage($"\n       Required size: Inner Diameter={FormatDimension(variant.InnerDiameter)} ft" +
+                                $" | Wall={FormatDimension(variant.WallThickness)} ft");
+            }
+        }
+
+        private static bool DimensionsMatchEitherOrientation(double aL, double aW, double bL, double bW)
+            => (NearlyEqual(aL, bL) && NearlyEqual(aW, bW)) ||
+               (NearlyEqual(aL, bW) && NearlyEqual(aW, bL));
+
+        private static bool WallMatchesWhenKnown(double targetWall, double legacyWall)
+            => legacyWall <= 0.0 || targetWall <= 0.0 || NearlyEqual(targetWall, legacyWall);
+
+        private static bool NearlyEqual(double a, double b)
+            => Math.Abs(a - b) <= 0.01;
+
+        private static string GetObjectName(Transaction tr, ObjectId id)
+        {
+            try
+            {
+                if (tr.GetObject(id, OpenMode.ForRead, false) is AcDbObject obj)
+                    return GetPartIdentityProperty(obj, "Name");
+            }
+            catch
+            {
+                // Ignore.
+            }
+            return "<unresolved target size>";
         }
 
         private static bool PromptYesNo(Editor ed, string message, bool defaultYes)
@@ -563,6 +963,9 @@ namespace CLV_CivilTools.Ufls
                 return false;
             return NamesEqual(legacyPartType, targetPartType);
         }
+
+        private static bool IsUnresolved(string value)
+            => NamesEqual(value, UnresolvedPart);
 
         private static bool IsSeparatorFamily(TargetPartFamilyInventory family)
         {
@@ -704,7 +1107,7 @@ namespace CLV_CivilTools.Ufls
         private static string GetPartIdentityProperty(object source, string propertyName)
         {
             string value = GetStringProperty(source, propertyName);
-            return string.IsNullOrWhiteSpace(value) ? "<invalid/unresolved>" : value;
+            return string.IsNullOrWhiteSpace(value) ? UnresolvedPart : value;
         }
 
         private static string FormatDimension(double value)
@@ -761,8 +1164,9 @@ namespace CLV_CivilTools.Ufls
                 double innerWidth = GetDoubleProperty(structure, "InnerDiameterOrWidth");
                 double height = GetDoubleProperty(structure, "Height");
                 double outerWidth = GetDoubleProperty(structure, "DiameterOrWidth");
+                double wallThickness = GetDoubleProperty(structure, "WallThickness");
                 double innerDiameter = innerWidth > 0.0 && innerLength <= 0.0 ? innerWidth : (innerWidth > 0.0 ? 0.0 : outerWidth);
-                group.AddVariant(innerLength, innerWidth, height, innerDiameter);
+                group.AddVariant(innerLength, innerWidth, height, innerDiameter, wallThickness);
             }
         }
 
@@ -823,28 +1227,35 @@ namespace CLV_CivilTools.Ufls
             public List<ObjectId> ObjectIds { get; } = new();
             public Dictionary<StructurePhysicalKey, StructurePhysicalVariant> Variants { get; } = new();
 
-            public void AddVariant(double innerLength, double innerWidth, double innerHeight, double innerDiameter)
+            public void AddVariant(double innerLength, double innerWidth, double innerHeight, double innerDiameter, double wallThickness)
             {
-                var key = new StructurePhysicalKey(Math.Round(innerLength, 6), Math.Round(innerWidth, 6), Math.Round(innerHeight, 6), Math.Round(innerDiameter, 6));
+                var key = new StructurePhysicalKey(
+                    Math.Round(innerLength, 6),
+                    Math.Round(innerWidth, 6),
+                    Math.Round(innerHeight, 6),
+                    Math.Round(innerDiameter, 6),
+                    Math.Round(wallThickness, 6));
+
                 if (!Variants.TryGetValue(key, out StructurePhysicalVariant? variant))
                 {
-                    variant = new StructurePhysicalVariant(innerLength, innerWidth, innerHeight, innerDiameter);
+                    variant = new StructurePhysicalVariant(innerLength, innerWidth, innerHeight, innerDiameter, wallThickness);
                     Variants.Add(key, variant);
                 }
                 variant.Count++;
             }
         }
 
-        private readonly record struct StructurePhysicalKey(double InnerLength, double InnerWidth, double InnerHeight, double InnerDiameter);
+        private readonly record struct StructurePhysicalKey(double InnerLength, double InnerWidth, double InnerHeight, double InnerDiameter, double WallThickness);
 
         private sealed class StructurePhysicalVariant
         {
-            public StructurePhysicalVariant(double innerLength, double innerWidth, double innerHeight, double innerDiameter)
-            { InnerLength = innerLength; InnerWidth = innerWidth; InnerHeight = innerHeight; InnerDiameter = innerDiameter; }
+            public StructurePhysicalVariant(double innerLength, double innerWidth, double innerHeight, double innerDiameter, double wallThickness)
+            { InnerLength = innerLength; InnerWidth = innerWidth; InnerHeight = innerHeight; InnerDiameter = innerDiameter; WallThickness = wallThickness; }
             public double InnerLength { get; }
             public double InnerWidth { get; }
             public double InnerHeight { get; }
             public double InnerDiameter { get; }
+            public double WallThickness { get; }
             public int Count { get; set; }
         }
     }
