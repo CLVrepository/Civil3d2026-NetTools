@@ -172,6 +172,7 @@ namespace CLV_CivilTools.Ufls
             ed.WriteMessage("\n  No pipe, structure, Parts List, or catalog data was changed.");
             ed.WriteMessage("\n  Family + size combinations are grouped so the next phase can map once per legacy part identity.");
             ed.WriteMessage("\n  Structure physical dimensions are recorded separately so custom box dimensions are preserved.");
+            ed.WriteMessage("\n  Unresolvable legacy family/size names are retained as <invalid/unresolved> so one bad catalog reference does not abort the scan.");
             ed.WriteMessage("\n  This phase deliberately does not guess whether a dimension is standard or custom; that comparison belongs to target-family mapping.");
             ed.WriteMessage("\n");
         }
@@ -214,6 +215,12 @@ namespace CLV_CivilTools.Ufls
             }
         }
 
+        private static string GetPartIdentityProperty(object source, string propertyName)
+        {
+            string value = GetStringProperty(source, propertyName);
+            return string.IsNullOrWhiteSpace(value) ? "<invalid/unresolved>" : value;
+        }
+
         private static string FormatDimension(double value)
         {
             if (Math.Abs(value) < 1e-9)
@@ -235,9 +242,12 @@ namespace CLV_CivilTools.Ufls
             {
                 PipeInstances++;
 
+                string familyName = GetPartIdentityProperty(pipe, "PartFamilyName");
+                string sizeName = GetPartIdentityProperty(pipe, "PartSizeName");
+
                 var key = new PipeGroupKey(
-                    Normalize(pipe.PartFamilyName),
-                    Normalize(pipe.PartSizeName),
+                    Normalize(familyName),
+                    Normalize(sizeName),
                     Normalize(pipe.CrossSectionalShape.ToString()),
                     Round(pipe.InnerDiameterOrWidth),
                     Round(pipe.InnerHeight));
@@ -245,8 +255,8 @@ namespace CLV_CivilTools.Ufls
                 if (!PipeGroups.TryGetValue(key, out PipePartGroup? group))
                 {
                     group = new PipePartGroup(
-                        pipe.PartFamilyName,
-                        pipe.PartSizeName,
+                        familyName,
+                        sizeName,
                         pipe.CrossSectionalShape.ToString(),
                         pipe.InnerDiameterOrWidth,
                         pipe.InnerHeight);
@@ -261,15 +271,18 @@ namespace CLV_CivilTools.Ufls
             {
                 StructureInstances++;
 
+                string familyName = GetPartIdentityProperty(structure, "PartFamilyName");
+                string sizeName = GetPartIdentityProperty(structure, "PartSizeName");
+
                 var key = new StructureGroupKey(
-                    Normalize(structure.PartFamilyName),
-                    Normalize(structure.PartSizeName));
+                    Normalize(familyName),
+                    Normalize(sizeName));
 
                 if (!StructureGroups.TryGetValue(key, out StructurePartGroup? group))
                 {
                     group = new StructurePartGroup(
-                        structure.PartFamilyName,
-                        structure.PartSizeName);
+                        familyName,
+                        sizeName);
                     StructureGroups.Add(key, group);
                 }
 
