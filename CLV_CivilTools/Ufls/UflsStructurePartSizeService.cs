@@ -184,8 +184,6 @@ namespace CLV_CivilTools.Ufls
             if (!horizontalMatch) return false;
             if (wall <= 0.0) return true;
 
-            // If an existing size name exposes a wall value, require it to match.
-            // Unknown wall values are not accepted as an exact wall-preserving match.
             return !double.IsNaN(size.WallInches) && Math.Abs(size.WallInches - wall) <= 0.01;
         }
 
@@ -219,7 +217,7 @@ namespace CLV_CivilTools.Ufls
             wallInches = 0.0;
             var m = System.Text.RegularExpressions.Regex.Match(
                 text,
-                @"WALL(?:S)?\s*=\s*(?<wall>[0-9]+(?:\.[0-9]+)?)\s*(?:''|\"|INCH(?:ES)?)?",
+                @"WALL(?:S)?\s*=\s*(?<wall>[0-9]+(?:\.[0-9]+)?)\s*(?:''|""|INCH(?:ES)?)?",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             return m.Success &&
                    double.TryParse(m.Groups["wall"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out wallInches);
