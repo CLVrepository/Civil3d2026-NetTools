@@ -345,6 +345,7 @@ namespace CLV_CivilTools.Ufls
             var results = new List<PartCandidate>();
             double legacyDiameterInches = legacy.InnerDiameterOrWidth * 12.0;
             string legacyText = $"{legacy.FamilyName} {legacy.SizeName}";
+            string material = DetectPipeMaterial(legacyText);
 
             foreach (TargetPartFamilyInventory family in targetFamilies)
             {
@@ -360,8 +361,7 @@ namespace CLV_CivilTools.Ufls
                         reasons.Add("exact normalized size name");
                     }
 
-                    string material = DetectPipeMaterial(legacyText);
-                    if (!string.IsNullOrEmpty(material) && ContainsToken(targetText, material))
+                    if (!string.IsNullOrEmpty(material) && ContainsWholeToken(targetText, material))
                     {
                         score += 55;
                         reasons.Add($"material/type keyword {material}");
@@ -410,9 +410,14 @@ namespace CLV_CivilTools.Ufls
             var results = new List<PartCandidate>();
             string legacyText = $"{legacy.FamilyName} {legacy.SizeName}";
             string expectedShape = legacy.Variants.Values.Any(v => v.InnerLength > 0.0) ? "Box" : "Cylinder";
+            string kind = DetectStructureKind(legacyText);
+            bool legacySddi = ContainsWholeToken(legacyText, "SDDI");
 
             foreach (TargetPartFamilyInventory family in targetFamilies)
             {
+                if (IsSeparatorFamily(family))
+                    continue;
+
                 foreach (TargetPartSizeInventory size in family.Sizes)
                 {
                     int score = 0;
@@ -438,16 +443,33 @@ namespace CLV_CivilTools.Ufls
                     }
                     else if (!string.IsNullOrWhiteSpace(family.Shape))
                     {
-                        score -= 30;
+                        score -= 40;
                     }
 
                     score += TokenOverlapScore(legacyText, targetText, 9, 63, reasons);
 
-                    string kind = DetectStructureKind(legacyText);
-                    if (!string.IsNullOrEmpty(kind) && ContainsToken(targetText, kind))
+                    if (!string.IsNullOrEmpty(kind) && ContainsWholeToken(targetText, kind))
                     {
                         score += 35;
                         reasons.Add($"structure type keyword {kind}");
+                    }
+
+                    if (kind == "JUNCTION" && NamesEqual(family.Name, "GENERAL JUNCTION STRUCTURE"))
+                    {
+                        score += 85;
+                        reasons.Add("legacy generic junction favors GENERAL JUNCTION STRUCTURE");
+                    }
+
+                    if (legacySddi && NamesEqual(family.Name, "GENERAL INLET"))
+                    {
+                        score += 85;
+                        reasons.Add("legacy SDDI favors GENERAL INLET");
+                    }
+
+                    if (kind == "JUNCTION" && ContainsWholeToken(targetText, "MANHOLE") &&
+                        !ContainsWholeToken(targetText, "JUNCTION"))
+                    {
+                        score -= 35;
                     }
 
                     if (score > 0)
@@ -461,6 +483,18 @@ namespace CLV_CivilTools.Ufls
                 .ThenBy(c => c.SizeName, StringComparer.OrdinalIgnoreCase)
                 .Take(5)
                 .ToList();
+        }
+
+        private static bool IsSeparatorFamily(TargetPartFamilyInventory family)
+        {
+            string name = NormalizeName(family.Name);
+            if (family.Sizes.Count == 0)
+                return true;
+
+            if (name.StartsWith("-----", StringComparison.Ordinal))
+                return true;
+
+            return family.Sizes.Count == 1 && NamesEqual(family.Name, family.Sizes[0].Name) && name.Contains("-----");
         }
 
         private static int TokenOverlapScore(
@@ -495,31 +529,38 @@ namespace CLV_CivilTools.Ufls
         private static string DetectPipeMaterial(string text)
         {
             string n = NormalizeName(text);
-            if (n.Contains("HERCP")) return "HERCP";
-            if (n.Contains("RCP")) return "RCP";
-            if (n.Contains("RCB")) return "RCB";
-            if (n.Contains("C900")) return "C900";
-            if (n.Contains("PVC")) return "PVC";
-            if (n.Contains("HDPE")) return "HDPE";
-            if (n.Contains("ACP")) return "ACP";
-            if (n.Contains("ABANDON")) return "ABANDONED";
-            if (n.Contains("UNKNOWN")) return "UNKNOWN";
+            if (ContainsWholeToken(n, "HERCP")) return "HERCP";
+            if (ContainsWholeToken(n, "RCP")) return "RCP";
+            if (ContainsWholeToken(n, "RCB")) return "RCB";
+            if (ContainsWholeToken(n, "C900")) return "C900";
+            if (ContainsWholeToken(n, "PVC")) return "PVC";
+            if (ContainsWholeToken(n, "HDPE")) return "HDPE";
+            if (ContainsWholeToken(n, "ACP")) return "ACP";
+            if (n.Contains("ABANDON", StringComparison.OrdinalIgnoreCase)) return "ABANDONED";
+            if (ContainsWholeToken(n, "UNKNOWN")) return "UNKNOWN";
             return string.Empty;
         }
 
         private static string DetectStructureKind(string text)
         {
             string n = NormalizeName(text);
-            if (n.Contains("MANHOLE")) return "MANHOLE";
-            if (n.Contains("DROP INLET")) return "INLET";
-            if (n.Contains("INLET")) return "INLET";
-            if (n.Contains("JUNCTION")) return "JUNCTION";
-            if (n.Contains("ACCESS")) return "ACCESS";
+            if (n.Contains("DROP INLET", StringComparison.OrdinalIgnoreCase)) return "INLET";
+            if (ContainsWholeToken(n, "JUNCTION")) return "JUNCTION";
+            if (ContainsWholeToken(n, "MANHOLE")) return "MANHOLE";
+            if (ContainsWholeToken(n, "INLET")) return "INLET";
+            if (ContainsWholeToken(n, "ACCESS")) return "ACCESS";
             return string.Empty;
         }
 
-        private static bool ContainsToken(string text, string token)
-            => NormalizeName(text).Contains(NormalizeName(token), StringComparison.OrdinalIgnoreCase);
+        private static bool ContainsWholeToken(string text, string token)
+        {
+            if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(token))
+                return false;
+
+            string normalizedText = Regex.Replace(NormalizeName(text), "[^A-Z0-9]+", " ");
+            string normalizedToken = Regex.Replace(NormalizeName(token), "[^A-Z0-9]+", " ").Trim();
+            return Regex.IsMatch(normalizedText, $@"(?:^|\s){Regex.Escape(normalizedToken)}(?:\s|$)", RegexOptions.IgnoreCase);
+        }
 
         private static bool ShapesCompatible(string legacyShape, string targetShape)
         {
@@ -531,8 +572,8 @@ namespace CLV_CivilTools.Ufls
             if (a == b)
                 return true;
 
-            return (a.Contains("CIRC") || a.Contains("CYL")) &&
-                   (b.Contains("CIRC") || b.Contains("CYL"));
+            return (a.Contains("CIRC", StringComparison.OrdinalIgnoreCase) || a.Contains("CYL", StringComparison.OrdinalIgnoreCase)) &&
+                   (b.Contains("CIRC", StringComparison.OrdinalIgnoreCase) || b.Contains("CYL", StringComparison.OrdinalIgnoreCase));
         }
 
         private static double? ExtractPrimaryInches(string value)
