@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 using Autodesk.AutoCAD.ApplicationServices;
@@ -14,12 +15,13 @@ using Autodesk.Civil.DatabaseServices;
 using Autodesk.Civil.DatabaseServices.Styles;
 
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
+using AcEntity = Autodesk.AutoCAD.DatabaseServices.Entity;
 
 namespace CLV_CivilTools.Ufls
 {
     /// <summary>
-    /// Dialog-based development version of the pipe catalog migration workflow.
-    /// One grid row represents one legacy family/size group, not one placed part.
+    /// Dialog-based pipe catalog migration workflow.
+    /// One grid row represents one legacy family/size/physical-size group.
     /// </summary>
     public static class UflsPipeCatalogMigrationUiCommands
     {
@@ -62,7 +64,7 @@ namespace CLV_CivilTools.Ufls
 
                     if (MessageBox.Show(
                             $"Apply the selected automatic swaps to '{target.Name}'?\n\n" +
-                            "Rows marked MANUAL REPLACEMENT will be left untouched.",
+                            "Rows requiring manual work will be left unswapped and highlighted RED in the drawing.",
                             "CLV Pipe Catalog Migration",
                             MessageBoxButtons.YesNo,
                             MessageBoxIcon.Warning) != DialogResult.Yes)
@@ -80,7 +82,8 @@ namespace CLV_CivilTools.Ufls
                     {
                         if (!row.Include)
                         {
-                            skipped++;
+                            if (RequiresManualAttention(row.Status)) manual++;
+                            else skipped++;
                             continue;
                         }
 
@@ -137,6 +140,7 @@ namespace CLV_CivilTools.Ufls
                                 catch (System.Exception ex)
                                 {
                                     failed++;
+                                    row.Status = "FAILED";
                                     ed.WriteMessage($"\n  FAILED {row.Id} object {objectId.Handle}: {ex.Message}");
                                 }
                             }
@@ -148,6 +152,9 @@ namespace CLV_CivilTools.Ufls
                             ed.WriteMessage($"\n  FAILED {row.Id}: {ex.Message}");
                         }
                     }
+
+                    // Make every unresolved/manual row easy to locate in plan view.
+                    int redHighlighted = HighlightManualRowsRed(tr, rows);
 
                     if (swapped > 0)
                     {
@@ -163,10 +170,11 @@ namespace CLV_CivilTools.Ufls
                     ed.WriteMessage("\n\nPIPE CATALOG MIGRATION RESULT");
                     ed.WriteMessage($"\n  Swapped parts: {swapped}");
                     ed.WriteMessage($"\n  Manual-review/replacement rows: {manual}");
+                    ed.WriteMessage($"\n  Manual parts highlighted red: {redHighlighted}");
                     ed.WriteMessage($"\n  Skipped rows: {skipped}");
                     ed.WriteMessage($"\n  Failures: {failed}");
                     ed.WriteMessage($"\n  Target Parts List: {target.Name}");
-                    ed.WriteMessage("\n  Review the network before saving the drawing.");
+                    ed.WriteMessage("\n  Red parts require manual review/replacement before finalizing the drawing.");
                 }
             }
             catch (System.Exception ex)
@@ -189,6 +197,8 @@ namespace CLV_CivilTools.Ufls
             }
 
             choices = choices.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            if (choices.Count == 0) return ObjectId.Null;
+
             ed.WriteMessage("\n\nSELECT TARGET PARTS LIST");
             for (int i = 0; i < choices.Count; i++)
                 ed.WriteMessage($"\n  [{i + 1}] {choices[i].Name}");
@@ -226,7 +236,10 @@ namespace CLV_CivilTools.Ufls
                     string name = SafeString(family, "Name");
                     if (string.IsNullOrWhiteSpace(name) || name.StartsWith("-----", StringComparison.Ordinal)) continue;
 
-                    var item = new TargetFamily(id, name, domain == DomainType.Pipe ? "Pipe" : "Structure",
+                    var item = new TargetFamily(
+                        id,
+                        name,
+                        domain == DomainType.Pipe ? "Pipe" : "Structure",
                         SafeString(family, "PartType"),
                         domain == DomainType.Pipe ? SafeString(family, "SweptShape") : SafeString(family, "BoundingShape"));
 
@@ -260,6 +273,7 @@ namespace CLV_CivilTools.Ufls
                     string type = SafePartIdentity(pipe, "PartType");
                     double diameterFt = SafeDouble(pipe, "InnerDiameterOrWidth");
                     string key = $"{family}|{size}|{type}|{diameterFt:0.######}";
+
                     if (!pipeGroups.TryGetValue(key, out MigrationRow? row))
                     {
                         row = new MigrationRow
@@ -285,8 +299,14 @@ namespace CLV_CivilTools.Ufls
                     double length = SafeDouble(structure, "InnerLength");
                     double width = SafeDouble(structure, "InnerDiameterOrWidth");
                     double height = SafeDouble(structure, "Height");
+                    double wall = SafeDouble(structure, "WallThickness");
+
+                    if (wall <= 0.0 && TryExtractWallInches(size, out double parsedWallInches))
+                        wall = parsedWallInches / 12.0;
+
                     double diameter = length <= 0.0 ? width : 0.0;
-                    string key = $"{family}|{size}|{type}|{length:0.######}|{width:0.######}|{diameter:0.######}";
+                    string key = $"{family}|{size}|{type}|{length:0.######}|{width:0.######}|{diameter:0.######}|{wall:0.######}";
+
                     if (!structureGroups.TryGetValue(key, out MigrationRow? row))
                     {
                         row = new MigrationRow
@@ -299,9 +319,10 @@ namespace CLV_CivilTools.Ufls
                             WidthFeet = width,
                             DiameterFeet = diameter,
                             HeightFeet = height,
+                            WallThicknessFeet = wall,
                             Dimensions = length > 0.0
-                                ? $"L {length * 12.0:0.##}\" x W {width * 12.0:0.##}\" | H {height:0.##}'"
-                                : $"Dia {diameter * 12.0:0.##}\" | H {height:0.##}'"
+                                ? $"L {length * 12.0:0.##}\" x W {width * 12.0:0.##}\" | Wall {wall * 12.0:0.##}\" | H {height:0.##}'"
+                                : $"Dia {diameter * 12.0:0.##}\" | Wall {wall * 12.0:0.##}\" | H {height:0.##}'"
                         };
                         structureGroups.Add(key, row);
                     }
@@ -324,6 +345,7 @@ namespace CLV_CivilTools.Ufls
                 AutoMapStructure(row, target);
                 rows.Add(row);
             }
+
             return rows;
         }
 
@@ -346,6 +368,7 @@ namespace CLV_CivilTools.Ufls
             }
             else
             {
+                row.Include = false;
                 row.Status = candidates.Count > 1 ? "REVIEW MATCH" : "NO MATCH";
             }
         }
@@ -361,28 +384,26 @@ namespace CLV_CivilTools.Ufls
 
             TargetFamily? exactFamily = target.StructureFamilies.FirstOrDefault(f =>
                 string.Equals(Normalize(f.Name), Normalize(row.LegacyFamily), StringComparison.OrdinalIgnoreCase));
-            if (exactFamily != null)
-            {
-                row.SelectedFamilyName = exactFamily.Name;
-                row.Include = PartTypesCompatible(row.LegacyPartType, exactFamily.PartType);
-                row.Status = row.Include ? "FAMILY MATCH" : "MANUAL REPLACEMENT";
-                TargetSize? exactSize = exactFamily.Sizes.FirstOrDefault(s =>
-                    string.Equals(Normalize(s.Name), Normalize(row.LegacySize), StringComparison.OrdinalIgnoreCase));
-                row.TargetSizeName = exactSize?.Name ?? "Match/add physical size on Apply";
-            }
-            else
+
+            if (exactFamily == null)
             {
                 row.Status = "CHOOSE TARGET FAMILY";
                 row.Include = false;
+                return;
             }
+
+            row.SelectedFamilyName = exactFamily.Name;
+            row.Include = PartTypesCompatible(row.LegacyPartType, exactFamily.PartType);
+            row.Status = row.Include ? "FAMILY MATCH" : "MANUAL REPLACEMENT";
+            row.TargetSizeName = row.LengthFeet > 0.0
+                ? "Match/add L x W x Wall on Apply"
+                : exactFamily.Sizes.FirstOrDefault(s => string.Equals(Normalize(s.Name), Normalize(row.LegacySize), StringComparison.OrdinalIgnoreCase))?.Name
+                    ?? "Manual cylindrical size review";
         }
 
         private static ObjectId ResolveStructureTargetSize(Transaction tr, Editor ed, TargetFamily family, MigrationRow row)
         {
-            TargetSize? exactName = family.Sizes.FirstOrDefault(s =>
-                string.Equals(Normalize(s.Name), Normalize(row.LegacySize), StringComparison.OrdinalIgnoreCase));
-            if (exactName != null) return exactName.Id;
-
+            // Box structures always resolve from physical dimensions so L/W/WALL are all preserved.
             if (row.LengthFeet > 0.0 && row.WidthFeet > 0.0)
             {
                 if (tr.GetObject(family.Id, OpenMode.ForWrite, false) is not PartFamily civilFamily)
@@ -393,23 +414,28 @@ namespace CLV_CivilTools.Ufls
                     civilFamily,
                     row.WidthFeet * 12.0,
                     row.LengthFeet * 12.0,
+                    row.WallThicknessFeet * 12.0,
                     ed);
             }
 
             // Cylindrical structures are only auto-swapped when an exact named target size exists.
-            return ObjectId.Null;
+            TargetSize? exactName = family.Sizes.FirstOrDefault(s =>
+                string.Equals(Normalize(s.Name), Normalize(row.LegacySize), StringComparison.OrdinalIgnoreCase));
+            return exactName?.Id ?? ObjectId.Null;
         }
 
         private static TargetSize? FindPipeTargetSize(TargetFamily family, MigrationRow row)
         {
             if (!string.IsNullOrWhiteSpace(row.TargetSizeName))
             {
-                TargetSize? named = family.Sizes.FirstOrDefault(s => string.Equals(s.Name, row.TargetSizeName, StringComparison.OrdinalIgnoreCase));
+                TargetSize? named = family.Sizes.FirstOrDefault(s =>
+                    string.Equals(s.Name, row.TargetSizeName, StringComparison.OrdinalIgnoreCase));
                 if (named != null) return named;
             }
 
             double inches = row.DiameterFeet * 12.0;
-            return family.Sizes.FirstOrDefault(s => ExtractFirstInches(s.Name) is double d && Math.Abs(d - inches) < 0.11);
+            return family.Sizes.FirstOrDefault(s =>
+                ExtractFirstInches(s.Name) is double d && Math.Abs(d - inches) < 0.11);
         }
 
         private static bool PartTypesCompatible(string a, string b)
@@ -431,14 +457,28 @@ namespace CLV_CivilTools.Ufls
 
         private static double? ExtractFirstInches(string text)
         {
-            var m = System.Text.RegularExpressions.Regex.Match(text,
+            Match m = Regex.Match(
+                text,
                 @"(?<![0-9.])([0-9]+(?:\.[0-9]+)?)\s*(?:INCH|IN\b|''|"")",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            return m.Success && double.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double d) ? d : null;
+                RegexOptions.IgnoreCase);
+            return m.Success && double.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double d)
+                ? d
+                : null;
+        }
+
+        private static bool TryExtractWallInches(string text, out double wallInches)
+        {
+            wallInches = 0.0;
+            Match m = Regex.Match(
+                text,
+                @"WALL(?:S)?\s*=\s*(?<wall>[0-9]+(?:\.[0-9]+)?)\s*(?:''|"")?\s*(?:INCH(?:ES)?)?",
+                RegexOptions.IgnoreCase);
+            return m.Success &&
+                   double.TryParse(m.Groups["wall"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out wallInches);
         }
 
         private static string Normalize(string value)
-            => System.Text.RegularExpressions.Regex.Replace((value ?? string.Empty).Trim().ToUpperInvariant(), @"\s+", " ");
+            => Regex.Replace((value ?? string.Empty).Trim().ToUpperInvariant(), @"\s+", " ");
 
         private static string SafePartIdentity(object source, string prop)
         {
@@ -458,6 +498,41 @@ namespace CLV_CivilTools.Ufls
             catch { return 0.0; }
         }
 
+        private static bool RequiresManualAttention(string status)
+        {
+            string value = Normalize(status);
+            return value.Contains("NO MATCH", StringComparison.Ordinal) ||
+                   value.Contains("CHOOSE", StringComparison.Ordinal) ||
+                   value.Contains("MANUAL", StringComparison.Ordinal) ||
+                   value.Contains("FAILED", StringComparison.Ordinal) ||
+                   value.Contains("NO TARGET SIZE", StringComparison.Ordinal);
+        }
+
+        private static int HighlightManualRowsRed(Transaction tr, IEnumerable<MigrationRow> rows)
+        {
+            int highlighted = 0;
+            foreach (MigrationRow row in rows.Where(r => RequiresManualAttention(r.Status)))
+            {
+                foreach (ObjectId id in row.ObjectIds)
+                {
+                    try
+                    {
+                        if (tr.GetObject(id, OpenMode.ForWrite, false) is AcEntity ent)
+                        {
+                            ent.ColorIndex = 1;
+                            ent.RecordGraphicsModified(true);
+                            highlighted++;
+                        }
+                    }
+                    catch
+                    {
+                        // Do not abort migration because one object could not be highlighted.
+                    }
+                }
+            }
+            return highlighted;
+        }
+
         private sealed class MigrationReviewForm : Form
         {
             private readonly DataGridView _grid = new();
@@ -468,20 +543,21 @@ namespace CLV_CivilTools.Ufls
             {
                 _rows = rows;
                 _target = target;
+
                 Text = $"CLV Pipe Catalog Migration - {targetName}";
-                Width = 1450;
-                Height = 760;
+                Width = 1500;
+                Height = 780;
                 StartPosition = FormStartPosition.CenterScreen;
                 MinimizeBox = false;
 
-                var info = new Label
+                var info = new System.Windows.Forms.Label
                 {
                     Dock = DockStyle.Top,
-                    Height = 52,
+                    Height = 58,
                     Padding = new Padding(10, 8, 10, 4),
-                    Text = "Review one row per legacy family/size group. Auto-matched pipes are checked. " +
-                           "Old unresolved structures intentionally start unchecked: choose the current family from the plans. " +
-                           "Different Civil 3D PartTypes remain manual replacements."
+                    Text = "Review one row per legacy part group. Red rows require manual attention. " +
+                           "For box structures, physical L/W/WALL will be matched or added to the selected target family on Apply. " +
+                           "Old unresolved structures remain unchecked until classified from the plans."
                 };
 
                 ConfigureGrid();
@@ -491,9 +567,10 @@ namespace CLV_CivilTools.Ufls
                 {
                     Dock = DockStyle.Bottom,
                     Height = 48,
-                    FlowDirection = FlowDirection.RightToLeft,
+                    FlowDirection = System.Windows.Forms.FlowDirection.RightToLeft,
                     Padding = new Padding(8)
                 };
+
                 var apply = new Button { Text = "Apply Selected", Width = 110, DialogResult = DialogResult.OK };
                 var cancel = new Button { Text = "Cancel", Width = 90, DialogResult = DialogResult.Cancel };
                 buttons.Controls.Add(apply);
@@ -519,23 +596,24 @@ namespace CLV_CivilTools.Ufls
                 _grid.Columns.Add(TextColumn("Id", "ID", 48));
                 _grid.Columns.Add(TextColumn("Domain", "Type", 65));
                 _grid.Columns.Add(TextColumn("Count", "Count", 55));
-                _grid.Columns.Add(TextColumn("LegacyFamily", "Legacy Family", 210));
-                _grid.Columns.Add(TextColumn("LegacySize", "Legacy Size", 285));
-                _grid.Columns.Add(TextColumn("Dimensions", "Physical Size", 160));
+                _grid.Columns.Add(TextColumn("LegacyFamily", "Legacy Family", 205));
+                _grid.Columns.Add(TextColumn("LegacySize", "Legacy Size", 280));
+                _grid.Columns.Add(TextColumn("Dimensions", "Physical Size", 245));
                 _grid.Columns.Add(new DataGridViewComboBoxColumn
                 {
                     Name = "TargetFamily",
                     HeaderText = "Target Family",
-                    Width = 240,
+                    Width = 235,
                     FlatStyle = FlatStyle.Flat
                 });
-                _grid.Columns.Add(TextColumn("TargetSize", "Target Size", 230));
-                _grid.Columns.Add(TextColumn("Status", "Status", 150));
+                _grid.Columns.Add(TextColumn("TargetSize", "Target Size", 225));
+                _grid.Columns.Add(TextColumn("Status", "Status", 155));
 
                 _grid.CellValueChanged += GridCellValueChanged;
                 _grid.CurrentCellDirtyStateChanged += (_, _) =>
                 {
-                    if (_grid.IsCurrentCellDirty) _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+                    if (_grid.IsCurrentCellDirty)
+                        _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
                 };
             }
 
@@ -564,30 +642,36 @@ namespace CLV_CivilTools.Ufls
                         IEnumerable<string> names = item.Domain == "Pipe"
                             ? _target.PipeFamilies.Select(f => f.Name)
                             : _target.StructureFamilies.Select(f => f.Name);
+
                         combo.Items.Add(string.Empty);
                         combo.Items.AddRange(names.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Cast<object>().ToArray());
                         combo.Value = combo.Items.Contains(item.SelectedFamilyName) ? item.SelectedFamilyName : string.Empty;
                     }
+
+                    ApplyAttentionStyle(row, item);
                 }
             }
 
             private void GridCellValueChanged(object? sender, DataGridViewCellEventArgs e)
             {
-                if (e.RowIndex < 0) return;
+                if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
                 DataGridViewRow gridRow = _grid.Rows[e.RowIndex];
                 if (gridRow.Tag is not MigrationRow item) return;
 
-                if (_grid.Columns[e.ColumnIndex].Name == "Include")
+                string columnName = _grid.Columns[e.ColumnIndex].Name;
+                if (columnName == "Include")
                     item.Include = Convert.ToBoolean(gridRow.Cells["Include"].Value ?? false);
 
-                if (_grid.Columns[e.ColumnIndex].Name == "TargetFamily")
+                if (columnName == "TargetFamily")
                 {
                     item.SelectedFamilyName = Convert.ToString(gridRow.Cells["TargetFamily"].Value) ?? string.Empty;
                     TargetFamily? family = _target.FindFamily(item.Domain, item.SelectedFamilyName);
+
                     if (family == null)
                     {
                         item.Include = false;
                         item.Status = "CHOOSE TARGET FAMILY";
+                        item.TargetSizeName = string.Empty;
                     }
                     else if (!PartTypesCompatible(item.LegacyPartType, family.PartType))
                     {
@@ -601,12 +685,30 @@ namespace CLV_CivilTools.Ufls
                         item.Status = item.Domain == "Pipe" ? "READY" : "MATCH/ADD SIZE ON APPLY";
                         item.TargetSizeName = item.Domain == "Pipe"
                             ? FindPipeTargetSize(family, item)?.Name ?? "No matching diameter"
-                            : "Match/add physical size on Apply";
+                            : item.LengthFeet > 0.0
+                                ? "Match/add L x W x Wall on Apply"
+                                : "Exact cylindrical size required";
                     }
 
                     gridRow.Cells["Include"].Value = item.Include;
                     gridRow.Cells["TargetSize"].Value = item.TargetSizeName;
                     gridRow.Cells["Status"].Value = item.Status;
+                }
+
+                ApplyAttentionStyle(gridRow, item);
+            }
+
+            private static void ApplyAttentionStyle(DataGridViewRow row, MigrationRow item)
+            {
+                if (RequiresManualAttention(item.Status))
+                {
+                    row.DefaultCellStyle.BackColor = Color.MistyRose;
+                    row.DefaultCellStyle.ForeColor = Color.DarkRed;
+                }
+                else
+                {
+                    row.DefaultCellStyle.BackColor = SystemColors.Window;
+                    row.DefaultCellStyle.ForeColor = SystemColors.ControlText;
                 }
             }
         }
@@ -627,16 +729,23 @@ namespace CLV_CivilTools.Ufls
             public double WidthFeet { get; set; }
             public double DiameterFeet { get; set; }
             public double HeightFeet { get; set; }
+            public double WallThicknessFeet { get; set; }
             public List<ObjectId> ObjectIds { get; } = new();
         }
 
         private sealed class TargetInventory
         {
-            public TargetInventory(ObjectId id, string name) { Id = id; Name = name; }
+            public TargetInventory(ObjectId id, string name)
+            {
+                Id = id;
+                Name = name;
+            }
+
             public ObjectId Id { get; }
             public string Name { get; }
             public List<TargetFamily> PipeFamilies { get; } = new();
             public List<TargetFamily> StructureFamilies { get; } = new();
+
             public TargetFamily? FindFamily(string domain, string name)
             {
                 IEnumerable<TargetFamily> source = domain == "Pipe" ? PipeFamilies : StructureFamilies;
@@ -647,7 +756,14 @@ namespace CLV_CivilTools.Ufls
         private sealed class TargetFamily
         {
             public TargetFamily(ObjectId id, string name, string domain, string partType, string shape)
-            { Id = id; Name = name; Domain = domain; PartType = partType; Shape = shape; }
+            {
+                Id = id;
+                Name = name;
+                Domain = domain;
+                PartType = partType;
+                Shape = shape;
+            }
+
             public ObjectId Id { get; }
             public string Name { get; }
             public string Domain { get; }
