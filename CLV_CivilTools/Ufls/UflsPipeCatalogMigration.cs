@@ -278,7 +278,7 @@ namespace CLV_CivilTools.Ufls
                 group.AddVariant(
                     structure.InnerLength,
                     structure.InnerDiameterOrWidth,
-                    structure.InnerHeight,
+                    structure.Height,
                     structure.InnerDiameterOrWidth > 0.0 ? 0.0 : structure.DiameterOrWidth);
             }
 
