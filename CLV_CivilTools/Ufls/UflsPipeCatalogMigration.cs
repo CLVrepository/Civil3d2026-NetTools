@@ -173,6 +173,7 @@ namespace CLV_CivilTools.Ufls
             ed.WriteMessage("\n  Family + size combinations are grouped so the next phase can map once per legacy part identity.");
             ed.WriteMessage("\n  Structure physical dimensions are recorded separately so custom box dimensions are preserved.");
             ed.WriteMessage("\n  Unresolvable legacy family/size names are retained as <invalid/unresolved> so one bad catalog reference does not abort the scan.");
+            ed.WriteMessage("\n  Shape-specific structure dimensions that Civil 3D does not expose for a given structure are left blank instead of aborting the scan.");
             ed.WriteMessage("\n  This phase deliberately does not guess whether a dimension is standard or custom; that comparison belongs to target-family mapping.");
             ed.WriteMessage("\n");
         }
@@ -212,6 +213,19 @@ namespace CLV_CivilTools.Ufls
             catch
             {
                 return string.Empty;
+            }
+        }
+
+        private static double GetDoubleProperty(object source, string propertyName)
+        {
+            try
+            {
+                object? value = source.GetType().GetProperty(propertyName)?.GetValue(source);
+                return value is double number ? number : 0.0;
+            }
+            catch
+            {
+                return 0.0;
             }
         }
 
@@ -288,11 +302,20 @@ namespace CLV_CivilTools.Ufls
 
                 group.Count++;
                 group.NetworkNames.Add(networkName);
+
+                double innerLength = GetDoubleProperty(structure, "InnerLength");
+                double innerWidth = GetDoubleProperty(structure, "InnerDiameterOrWidth");
+                double height = GetDoubleProperty(structure, "Height");
+                double outerDiameterOrWidth = GetDoubleProperty(structure, "DiameterOrWidth");
+                double innerDiameter = innerWidth > 0.0 && innerLength <= 0.0
+                    ? innerWidth
+                    : (innerWidth > 0.0 ? 0.0 : outerDiameterOrWidth);
+
                 group.AddVariant(
-                    structure.InnerLength,
-                    structure.InnerDiameterOrWidth,
-                    structure.Height,
-                    structure.InnerDiameterOrWidth > 0.0 ? 0.0 : structure.DiameterOrWidth);
+                    innerLength,
+                    innerWidth,
+                    height,
+                    innerDiameter);
             }
 
             private static string Normalize(string value)
