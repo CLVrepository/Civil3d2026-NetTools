@@ -22,13 +22,17 @@ namespace CLV_CivilTools.Ufls
             PartFamily family,
             double targetWidthInches,
             double targetLengthInches,
+            double targetWallInches,
             Editor ed)
         {
             targetWidthInches = Math.Round(targetWidthInches, MidpointRounding.AwayFromZero);
             targetLengthInches = Math.Round(targetLengthInches, MidpointRounding.AwayFromZero);
+            targetWallInches = targetWallInches > 0.0
+                ? Math.Round(targetWallInches, MidpointRounding.AwayFromZero)
+                : 0.0;
 
             List<PartSizeInfo> sizesBefore = GetFamilyPartSizes(tr, family);
-            if (TryFindExactSize(sizesBefore, targetWidthInches, targetLengthInches, out PartSizeInfo existing))
+            if (TryFindExactSize(sizesBefore, targetWidthInches, targetLengthInches, targetWallInches, out PartSizeInfo existing))
                 return existing.Id;
 
             Assembly civilAsm = typeof(PartFamily).Assembly;
@@ -68,7 +72,31 @@ namespace CLV_CivilTools.Ufls
                 SetSizeFilterFieldValue(widthField, finalWidth);
                 SetSizeFilterFieldValue(lengthField, finalLength);
 
-                ed.WriteMessage($"\nPIPE CATALOG MIGRATION: adding target size W={finalWidth:0.##}\" L={finalLength:0.##}\" to '{family.Name}'.");
+                double finalWall = targetWallInches;
+                if (targetWallInches > 0.0)
+                {
+                    object? wallContext = ResolveNamedContext(partContextType, "WallThickness");
+                    if (wallContext == null)
+                        throw new InvalidOperationException("Could not resolve the WallThickness context for the selected family.");
+
+                    object wallField = getParam.Invoke(sizeFilterRecord, new[] { wallContext, (object)0 })
+                        ?? throw new InvalidOperationException("Could not access the wall-thickness field for the selected family.");
+
+                    finalWall = ResolveNearestAllowedValue(wallField, targetWallInches);
+                    if (Math.Abs(finalWall - targetWallInches) > 0.01)
+                    {
+                        throw new InvalidOperationException(
+                            $"The selected family does not allow the legacy wall thickness {targetWallInches:0.##}\". " +
+                            $"Nearest allowed wall thickness is {finalWall:0.##}\".");
+                    }
+
+                    SetSizeFilterFieldValue(wallField, finalWall);
+                }
+
+                ed.WriteMessage(
+                    $"\nPIPE CATALOG MIGRATION: adding target size W={finalWidth:0.##}\" L={finalLength:0.##}\"" +
+                    (finalWall > 0.0 ? $" WALL={finalWall:0.##}\"" : string.Empty) +
+                    $" to '{family.Name}'.");
 
                 MethodInfo addMethod = typeof(PartFamily).GetMethod("AddPartSize", BindingFlags.Instance | BindingFlags.Public)
                     ?? throw new InvalidOperationException("PartFamily.AddPartSize(...) was not found.");
@@ -79,11 +107,11 @@ namespace CLV_CivilTools.Ufls
                 List<PartSizeInfo> sizesAfter = GetFamilyPartSizes(tr, family);
                 foreach (PartSizeInfo size in sizesAfter)
                 {
-                    if (!sizesBefore.Any(s => s.Id == size.Id) && SizeMatches(size, targetWidthInches, targetLengthInches))
+                    if (!sizesBefore.Any(s => s.Id == size.Id) && SizeMatches(size, targetWidthInches, targetLengthInches, targetWallInches))
                         return size.Id;
                 }
 
-                if (TryFindExactSize(sizesAfter, targetWidthInches, targetLengthInches, out PartSizeInfo afterMatch))
+                if (TryFindExactSize(sizesAfter, targetWidthInches, targetLengthInches, targetWallInches, out PartSizeInfo afterMatch))
                     return afterMatch.Id;
 
                 throw new InvalidOperationException("AddPartSize completed but a matching size could not be resolved afterwards.");
@@ -95,6 +123,15 @@ namespace CLV_CivilTools.Ufls
             }
         }
 
+        // Backward-compatible overload for callers that do not care about wall thickness.
+        internal static ObjectId EnsureMatchingBoxSize(
+            Transaction tr,
+            PartFamily family,
+            double targetWidthInches,
+            double targetLengthInches,
+            Editor ed)
+            => EnsureMatchingBoxSize(tr, family, targetWidthInches, targetLengthInches, 0.0, ed);
+
         private static List<PartSizeInfo> GetFamilyPartSizes(Transaction tr, PartFamily family)
         {
             var result = new List<PartSizeInfo>();
@@ -103,28 +140,53 @@ namespace CLV_CivilTools.Ufls
                 ObjectId sizeId = family[i];
                 if (sizeId.IsNull) continue;
                 string name = GetPartSizeName(tr, sizeId);
-                result.Add(TryParseLengthWidth(name, out double length, out double width)
-                    ? new PartSizeInfo(sizeId, name, width, length)
-                    : new PartSizeInfo(sizeId, name, double.NaN, double.NaN));
+
+                if (TryParseLengthWidth(name, out double length, out double width))
+                {
+                    double wall = TryParseWall(name, out double parsedWall) ? parsedWall : double.NaN;
+                    result.Add(new PartSizeInfo(sizeId, name, width, length, wall));
+                }
+                else
+                {
+                    result.Add(new PartSizeInfo(sizeId, name, double.NaN, double.NaN, double.NaN));
+                }
             }
             return result;
         }
 
-        private static bool TryFindExactSize(IEnumerable<PartSizeInfo> sizes, double width, double length, out PartSizeInfo best)
+        private static bool TryFindExactSize(
+            IEnumerable<PartSizeInfo> sizes,
+            double width,
+            double length,
+            double wall,
+            out PartSizeInfo best)
         {
             foreach (PartSizeInfo size in sizes)
             {
-                if (SizeMatches(size, width, length)) { best = size; return true; }
+                if (SizeMatches(size, width, length, wall))
+                {
+                    best = size;
+                    return true;
+                }
             }
             best = default;
             return false;
         }
 
-        private static bool SizeMatches(PartSizeInfo size, double width, double length)
+        private static bool SizeMatches(PartSizeInfo size, double width, double length, double wall)
         {
             if (double.IsNaN(size.WidthInches) || double.IsNaN(size.LengthInches)) return false;
-            return (Math.Abs(size.WidthInches - width) <= 0.01 && Math.Abs(size.LengthInches - length) <= 0.01) ||
-                   (Math.Abs(size.WidthInches - length) <= 0.01 && Math.Abs(size.LengthInches - width) <= 0.01);
+
+            bool horizontalMatch =
+                (Math.Abs(size.WidthInches - width) <= 0.01 && Math.Abs(size.LengthInches - length) <= 0.01) ||
+                (Math.Abs(size.WidthInches - length) <= 0.01 && Math.Abs(size.LengthInches - width) <= 0.01);
+
+            if (!horizontalMatch) return false;
+            if (wall <= 0.0) return true;
+
+            // If an existing size name exposes a wall value, require it to match.
+            // Unknown wall values are not accepted as an exact wall-preserving match.
+            return !double.IsNaN(size.WallInches) && Math.Abs(size.WallInches - wall) <= 0.01;
         }
 
         private static string GetPartSizeName(Transaction tr, ObjectId sizeId)
@@ -141,13 +203,26 @@ namespace CLV_CivilTools.Ufls
 
         private static bool TryParseLengthWidth(string text, out double lengthInches, out double widthInches)
         {
-            lengthInches = 0.0; widthInches = 0.0;
-            var m = System.Text.RegularExpressions.Regex.Match(text,
+            lengthInches = 0.0;
+            widthInches = 0.0;
+            var m = System.Text.RegularExpressions.Regex.Match(
+                text,
                 @"L\s*=\s*(?<len>[0-9]+(?:\.[0-9]+)?)\s*''\s*x\s*W\s*=\s*(?<wid>[0-9]+(?:\.[0-9]+)?)\s*''",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             return m.Success &&
                    double.TryParse(m.Groups["len"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out lengthInches) &&
                    double.TryParse(m.Groups["wid"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out widthInches);
+        }
+
+        private static bool TryParseWall(string text, out double wallInches)
+        {
+            wallInches = 0.0;
+            var m = System.Text.RegularExpressions.Regex.Match(
+                text,
+                @"WALL(?:S)?\s*=\s*(?<wall>[0-9]+(?:\.[0-9]+)?)\s*(?:''|\"|INCH(?:ES)?)?",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return m.Success &&
+                   double.TryParse(m.Groups["wall"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out wallInches);
         }
 
         private static Type? FindTypeByName(Assembly asm, string typeName)
@@ -167,6 +242,13 @@ namespace CLV_CivilTools.Ufls
                 ? n.Contains("Width", StringComparison.OrdinalIgnoreCase) && (n.Contains("Inner", StringComparison.OrdinalIgnoreCase) || n.Contains("Struct", StringComparison.OrdinalIgnoreCase))
                 : n.Contains("Length", StringComparison.OrdinalIgnoreCase) && (n.Contains("Inner", StringComparison.OrdinalIgnoreCase) || n.Contains("Struct", StringComparison.OrdinalIgnoreCase)));
             return fallback == null ? null : Enum.Parse(enumType, fallback, true);
+        }
+
+        private static object? ResolveNamedContext(Type enumType, string name)
+        {
+            string? match = Enum.GetNames(enumType)
+                .FirstOrDefault(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+            return match == null ? null : Enum.Parse(enumType, match, true);
         }
 
         private static double ResolveNearestAllowedValue(object field, double target)
@@ -194,7 +276,8 @@ namespace CLV_CivilTools.Ufls
         private static void SetSizeFilterFieldValue(object field, double value)
         {
             PropertyInfo? pi = field.GetType().GetProperty("Value", BindingFlags.Instance | BindingFlags.Public);
-            if (pi == null || !pi.CanWrite) throw new InvalidOperationException("The size filter field does not expose a writable Value property.");
+            if (pi == null || !pi.CanWrite)
+                throw new InvalidOperationException("The size filter field does not expose a writable Value property.");
             pi.SetValue(field, Convert.ChangeType(value, pi.PropertyType, CultureInfo.InvariantCulture));
         }
 
@@ -203,10 +286,24 @@ namespace CLV_CivilTools.Ufls
 
         private static bool TryConvertToDouble(object? value, out double result)
         {
-            try { if (value == null) throw new InvalidCastException(); result = Convert.ToDouble(value, CultureInfo.InvariantCulture); return true; }
-            catch { result = 0.0; return false; }
+            try
+            {
+                if (value == null) throw new InvalidCastException();
+                result = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+                return true;
+            }
+            catch
+            {
+                result = 0.0;
+                return false;
+            }
         }
 
-        private readonly record struct PartSizeInfo(ObjectId Id, string Name, double WidthInches, double LengthInches);
+        private readonly record struct PartSizeInfo(
+            ObjectId Id,
+            string Name,
+            double WidthInches,
+            double LengthInches,
+            double WallInches);
     }
 }
