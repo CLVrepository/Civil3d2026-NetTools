@@ -8,7 +8,9 @@ using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
+using Autodesk.Civil.ApplicationServices;
 using Autodesk.Civil.DatabaseServices;
+using Autodesk.Civil.DatabaseServices.Styles;
 
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using AcEntity = Autodesk.AutoCAD.DatabaseServices.Entity;
@@ -18,8 +20,8 @@ namespace CLV_CivilTools.Ufls
     /// <summary>
     /// Post-command notifier for pipe-catalog migration review items.
     /// The migration command already sets unresolved/failed parts to ACI red.
-    /// This notifier adds a visible red model-space review marker because
-    /// Civil 3D structure styles can override the placed entity color.
+    /// This notifier applies an existing REDLINE structure style when available
+    /// and adds a visible red model-space review marker as a fallback/locator.
     /// </summary>
     public sealed class UflsPipeCatalogMigrationFailureNotifier : IExtensionApplication
     {
@@ -66,7 +68,13 @@ namespace CLV_CivilTools.Ufls
                 using (Transaction tr = doc.Database.TransactionManager.StartTransaction())
                 {
                     ObjectId reviewLayerId = EnsureReviewLayer(tr, doc.Database);
+                    ObjectId redlineStructureStyleId = FindRedlineStructureStyle(tr);
+                    string redlineStyleName = redlineStructureStyleId.IsNull
+                        ? string.Empty
+                        : GetStyleName(tr, redlineStructureStyleId);
+
                     var problemParts = new List<(ObjectId Id, string Name, Point3d Location)>();
+                    int structuresRestyled = 0;
 
                     foreach (ObjectId id in GetCurrentSpaceEntityIds(tr, doc.Database))
                     {
@@ -75,6 +83,21 @@ namespace CLV_CivilTools.Ufls
 
                         if (ent is Structure structure)
                         {
+                            if (!redlineStructureStyleId.IsNull)
+                            {
+                                try
+                                {
+                                    structure.UpgradeOpen();
+                                    structure.StyleId = redlineStructureStyleId;
+                                    structure.RecordGraphicsModified(true);
+                                    structuresRestyled++;
+                                }
+                                catch
+                                {
+                                    // Keep the entity-color/review-circle fallback if the style cannot be assigned.
+                                }
+                            }
+
                             Point3d p = structure.Location;
                             problemParts.Add((id, SafeName(structure), p));
                         }
@@ -85,12 +108,10 @@ namespace CLV_CivilTools.Ufls
                         }
                     }
 
-                    int markersAdded = 0;
                     foreach (var item in problemParts)
                     {
                         if (HasNearbyMarker(tr, doc.Database, item.Location)) continue;
                         AddReviewMarker(tr, doc.Database, reviewLayerId, item.Location);
-                        markersAdded++;
                     }
 
                     tr.Commit();
@@ -102,9 +123,16 @@ namespace CLV_CivilTools.Ufls
                         if (problemParts.Count > 12)
                             detail += Environment.NewLine + $"...and {problemParts.Count - 12} more.";
 
+                        string styleText = structuresRestyled > 0
+                            ? $"\n{structuresRestyled} structure(s) were changed to REDLINE style '{redlineStyleName}'."
+                            : redlineStructureStyleId.IsNull
+                                ? "\nNo structure style containing 'REDLINE' was found; red color/review circles were used instead."
+                                : string.Empty;
+
                         MessageBox.Show(
                             $"Migration completed with {problemParts.Count} part(s) requiring manual review.\n\n" +
-                            "Those parts are marked RED in model space with a red review circle.\n\n" +
+                            "Those parts are marked RED in model space with a red review circle." +
+                            styleText + "\n\n" +
                             detail,
                             "CLV Pipe Catalog Migration - Review Required",
                             MessageBoxButtons.OK,
@@ -115,6 +143,45 @@ namespace CLV_CivilTools.Ufls
             catch
             {
                 // Never allow the notifier to interfere with command completion.
+            }
+        }
+
+        private static ObjectId FindRedlineStructureStyle(Transaction tr)
+        {
+            try
+            {
+                CivilDocument civilDoc = CivilApplication.ActiveDocument;
+                ObjectId fallback = ObjectId.Null;
+
+                foreach (ObjectId styleId in civilDoc.Styles.StructureStyles)
+                {
+                    if (tr.GetObject(styleId, OpenMode.ForRead, false) is not StructureStyle style) continue;
+                    string name = style.Name ?? string.Empty;
+                    if (name.Equals("REDLINE", StringComparison.OrdinalIgnoreCase))
+                        return styleId;
+                    if (fallback.IsNull && name.Contains("REDLINE", StringComparison.OrdinalIgnoreCase))
+                        fallback = styleId;
+                }
+
+                return fallback;
+            }
+            catch
+            {
+                return ObjectId.Null;
+            }
+        }
+
+        private static string GetStyleName(Transaction tr, ObjectId styleId)
+        {
+            try
+            {
+                return tr.GetObject(styleId, OpenMode.ForRead, false) is StructureStyle style
+                    ? style.Name
+                    : string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
             }
         }
 
