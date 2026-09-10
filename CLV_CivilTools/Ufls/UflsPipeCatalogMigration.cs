@@ -9,6 +9,7 @@ using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.Civil.ApplicationServices;
 using Autodesk.Civil.DatabaseServices;
+using Autodesk.Civil.DatabaseServices.Styles;
 
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using AcDbObject = Autodesk.AutoCAD.DatabaseServices.DBObject;
@@ -18,8 +19,9 @@ namespace CLV_CivilTools.Ufls
     /// <summary>
     /// Non-destructive inventory used as the first phase of Pipe Network catalog migration.
     /// It inventories the parts actually present in the current drawing, grouped by
-    /// family/size and, for structures, by actual physical dimensions. No drawing data
-    /// or Parts List is modified by this command.
+    /// family/size and, for structures, by actual physical dimensions. It also inventories
+    /// a user-selected target Parts List so later phases can map legacy parts only to parts
+    /// explicitly allowed by that target list. No drawing data or Parts List is modified.
     /// </summary>
     public static class UflsPipeCatalogMigrationCommands
     {
@@ -48,6 +50,14 @@ namespace CLV_CivilTools.Ufls
                         return;
                     }
 
+                    ObjectId targetPartsListId = SelectTargetPartsList(ed, civilDoc, tr);
+                    if (targetPartsListId.IsNull)
+                    {
+                        ed.WriteMessage("\nPIPE CATALOG ANALYZE: target Parts List selection cancelled.");
+                        return;
+                    }
+
+                    TargetPartsListInventory targetInventory = BuildTargetPartsListInventory(tr, targetPartsListId);
                     var report = new PipeCatalogMigrationInventory();
 
                     foreach (ObjectId networkId in networkIds)
@@ -79,7 +89,7 @@ namespace CLV_CivilTools.Ufls
                         }
                     }
 
-                    WriteReport(ed, report);
+                    WriteReport(ed, report, targetInventory);
                     tr.Commit();
                 }
             }
@@ -89,7 +99,122 @@ namespace CLV_CivilTools.Ufls
             }
         }
 
-        private static void WriteReport(Editor ed, PipeCatalogMigrationInventory report)
+        private static ObjectId SelectTargetPartsList(Editor ed, CivilDocument civilDoc, Transaction tr)
+        {
+            PartsListCollection collection = civilDoc.Styles.PartsListSet;
+            var choices = new List<(ObjectId Id, string Name)>();
+
+            foreach (ObjectId id in collection)
+            {
+                try
+                {
+                    if (tr.GetObject(id, OpenMode.ForRead, false) is PartsList partsList)
+                        choices.Add((id, partsList.Name));
+                }
+                catch
+                {
+                    // Ignore an unreadable/stale Parts List entry rather than aborting selection.
+                }
+            }
+
+            choices = choices
+                .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (choices.Count == 0)
+            {
+                ed.WriteMessage("\nPIPE CATALOG ANALYZE: no usable Parts Lists were found in the drawing.");
+                return ObjectId.Null;
+            }
+
+            ed.WriteMessage("\n\nSELECT TARGET PARTS LIST");
+            ed.WriteMessage("\nThe selected list is the authority for migration candidates; the full catalog is not searched.");
+
+            for (int i = 0; i < choices.Count; i++)
+                ed.WriteMessage($"\n  [{i + 1}] {choices[i].Name}");
+
+            var options = new PromptIntegerOptions("\nEnter target Parts List number: ")
+            {
+                AllowNone = false,
+                AllowNegative = false,
+                AllowZero = false,
+                LowerLimit = 1,
+                UpperLimit = choices.Count
+            };
+
+            PromptIntegerResult result = ed.GetInteger(options);
+            if (result.Status != PromptStatus.OK)
+                return ObjectId.Null;
+
+            return choices[result.Value - 1].Id;
+        }
+
+        private static TargetPartsListInventory BuildTargetPartsListInventory(Transaction tr, ObjectId partsListId)
+        {
+            if (tr.GetObject(partsListId, OpenMode.ForRead, false) is not PartsList partsList)
+                throw new InvalidOperationException("Selected target Parts List could not be opened.");
+
+            var inventory = new TargetPartsListInventory(partsListId, partsList.Name);
+            AddTargetFamilies(tr, partsList, DomainType.Pipe, inventory.PipeFamilies);
+            AddTargetFamilies(tr, partsList, DomainType.Structure, inventory.StructureFamilies);
+            return inventory;
+        }
+
+        private static void AddTargetFamilies(
+            Transaction tr,
+            PartsList partsList,
+            DomainType domain,
+            List<TargetPartFamilyInventory> destination)
+        {
+            ObjectIdCollection familyIds = partsList.GetPartFamilyIdsByDomain(domain);
+
+            foreach (ObjectId familyId in familyIds)
+            {
+                try
+                {
+                    if (tr.GetObject(familyId, OpenMode.ForRead, false) is not PartFamily family)
+                        continue;
+
+                    var familyInventory = new TargetPartFamilyInventory(
+                        familyId,
+                        GetPartIdentityProperty(family, "Name"),
+                        domain.ToString(),
+                        domain == DomainType.Pipe
+                            ? GetStringProperty(family, "SweptShape")
+                            : GetStringProperty(family, "BoundingShape"));
+
+                    for (int i = 0; i < family.PartSizeCount; i++)
+                    {
+                        try
+                        {
+                            ObjectId sizeId = family[i];
+                            if (tr.GetObject(sizeId, OpenMode.ForRead, false) is PartSize size)
+                            {
+                                familyInventory.Sizes.Add(new TargetPartSizeInventory(
+                                    sizeId,
+                                    GetPartIdentityProperty(size, "Name"),
+                                    GetStringProperty(size, "Description")));
+                            }
+                        }
+                        catch
+                        {
+                            // Keep inventorying other sizes if one target size is unreadable.
+                        }
+                    }
+
+                    destination.Add(familyInventory);
+                }
+                catch
+                {
+                    // Keep inventorying other families if one target family is unreadable.
+                }
+            }
+        }
+
+        private static void WriteReport(
+            Editor ed,
+            PipeCatalogMigrationInventory report,
+            TargetPartsListInventory target)
         {
             ed.WriteMessage("\n");
             ed.WriteMessage("\n============================================================");
@@ -108,8 +233,7 @@ namespace CLV_CivilTools.Ufls
                     ? "<unable to resolve>"
                     : network.PartsListName;
 
-                ed.WriteMessage(
-                    $"\n  {network.Name} | Parts List: {partsList}");
+                ed.WriteMessage($"\n  {network.Name} | Parts List: {partsList}");
             }
 
             ed.WriteMessage("\n\nPIPE PART GROUPS");
@@ -168,14 +292,62 @@ namespace CLV_CivilTools.Ufls
                 }
             }
 
+            WriteTargetPartsListReport(ed, target);
+
             ed.WriteMessage("\n\nANALYSIS STATUS");
             ed.WriteMessage("\n  No pipe, structure, Parts List, or catalog data was changed.");
+            ed.WriteMessage("\n  The target Parts List was selected interactively and is the authority for future migration candidates.");
             ed.WriteMessage("\n  Family + size combinations are grouped so the next phase can map once per legacy part identity.");
             ed.WriteMessage("\n  Structure physical dimensions are recorded separately so custom box dimensions are preserved.");
             ed.WriteMessage("\n  Unresolvable legacy family/size names are retained as <invalid/unresolved> so one bad catalog reference does not abort the scan.");
             ed.WriteMessage("\n  Shape-specific structure dimensions that Civil 3D does not expose for a given structure are left blank instead of aborting the scan.");
-            ed.WriteMessage("\n  This phase deliberately does not guess whether a dimension is standard or custom; that comparison belongs to target-family mapping.");
+            ed.WriteMessage("\n  This phase deliberately does not change parts or guess ambiguous mappings.");
             ed.WriteMessage("\n");
+        }
+
+        private static void WriteTargetPartsListReport(Editor ed, TargetPartsListInventory target)
+        {
+            int pipeSizeCount = target.PipeFamilies.Sum(f => f.Sizes.Count);
+            int structureSizeCount = target.StructureFamilies.Sum(f => f.Sizes.Count);
+
+            ed.WriteMessage("\n\nTARGET PARTS LIST INVENTORY");
+            ed.WriteMessage($"\n  Target: {target.Name}");
+            ed.WriteMessage($"\n  Pipe families: {target.PipeFamilies.Count} | Pipe sizes: {pipeSizeCount}");
+            ed.WriteMessage($"\n  Structure families: {target.StructureFamilies.Count} | Structure sizes: {structureSizeCount}");
+
+            ed.WriteMessage("\n\n  TARGET PIPE FAMILIES / SIZES");
+            WriteTargetFamilies(ed, target.PipeFamilies);
+
+            ed.WriteMessage("\n\n  TARGET STRUCTURE FAMILIES / SIZES");
+            WriteTargetFamilies(ed, target.StructureFamilies);
+        }
+
+        private static void WriteTargetFamilies(Editor ed, IEnumerable<TargetPartFamilyInventory> families)
+        {
+            var ordered = families
+                .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (ordered.Count == 0)
+            {
+                ed.WriteMessage("\n    <none>");
+                return;
+            }
+
+            foreach (TargetPartFamilyInventory family in ordered)
+            {
+                string shape = string.IsNullOrWhiteSpace(family.Shape)
+                    ? string.Empty
+                    : $" | Shape={family.Shape}";
+
+                ed.WriteMessage($"\n    Family='{family.Name}' | Sizes={family.Sizes.Count}{shape}");
+
+                foreach (TargetPartSizeInventory size in family.Sizes
+                             .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    ed.WriteMessage($"\n      - {size.Name}");
+                }
+            }
         }
 
         private static string ResolvePartsListName(Transaction tr, Network network)
@@ -305,9 +477,7 @@ namespace CLV_CivilTools.Ufls
 
                 if (!StructureGroups.TryGetValue(key, out StructurePartGroup? group))
                 {
-                    group = new StructurePartGroup(
-                        familyName,
-                        sizeName);
+                    group = new StructurePartGroup(familyName, sizeName);
                     StructureGroups.Add(key, group);
                 }
 
@@ -322,11 +492,7 @@ namespace CLV_CivilTools.Ufls
                     ? innerWidth
                     : (innerWidth > 0.0 ? 0.0 : outerDiameterOrWidth);
 
-                group.AddVariant(
-                    innerLength,
-                    innerWidth,
-                    height,
-                    innerDiameter);
+                group.AddVariant(innerLength, innerWidth, height, innerDiameter);
             }
 
             private static string Normalize(string value)
@@ -336,6 +502,38 @@ namespace CLV_CivilTools.Ufls
                 => Math.Round(value, 6, MidpointRounding.AwayFromZero);
         }
 
+        private sealed class TargetPartsListInventory
+        {
+            public TargetPartsListInventory(ObjectId id, string name)
+            {
+                Id = id;
+                Name = name;
+            }
+
+            public ObjectId Id { get; }
+            public string Name { get; }
+            public List<TargetPartFamilyInventory> PipeFamilies { get; } = new();
+            public List<TargetPartFamilyInventory> StructureFamilies { get; } = new();
+        }
+
+        private sealed class TargetPartFamilyInventory
+        {
+            public TargetPartFamilyInventory(ObjectId id, string name, string domain, string shape)
+            {
+                Id = id;
+                Name = name;
+                Domain = domain;
+                Shape = shape;
+            }
+
+            public ObjectId Id { get; }
+            public string Name { get; }
+            public string Domain { get; }
+            public string Shape { get; }
+            public List<TargetPartSizeInventory> Sizes { get; } = new();
+        }
+
+        private sealed record TargetPartSizeInventory(ObjectId Id, string Name, string Description);
         private sealed record NetworkInventory(ObjectId Id, string Name, string PartsListName);
 
         private readonly record struct PipeGroupKey(
@@ -370,9 +568,7 @@ namespace CLV_CivilTools.Ufls
             public HashSet<string> NetworkNames { get; } = new(StringComparer.OrdinalIgnoreCase);
         }
 
-        private readonly record struct StructureGroupKey(
-            string FamilyName,
-            string SizeName);
+        private readonly record struct StructureGroupKey(string FamilyName, string SizeName);
 
         private sealed class StructurePartGroup
         {
@@ -388,11 +584,7 @@ namespace CLV_CivilTools.Ufls
             public HashSet<string> NetworkNames { get; } = new(StringComparer.OrdinalIgnoreCase);
             public Dictionary<StructurePhysicalKey, StructurePhysicalVariant> Variants { get; } = new();
 
-            public void AddVariant(
-                double innerLength,
-                double innerWidth,
-                double innerHeight,
-                double innerDiameter)
+            public void AddVariant(double innerLength, double innerWidth, double innerHeight, double innerDiameter)
             {
                 var key = new StructurePhysicalKey(
                     Round(innerLength),
