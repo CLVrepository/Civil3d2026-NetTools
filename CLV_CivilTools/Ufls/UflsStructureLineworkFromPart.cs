@@ -49,8 +49,9 @@ namespace CLV_CivilTools.Ufls
             try
             {
                 using (doc.LockDocument())
-                using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
+                    using Transaction tr = db.TransactionManager.StartTransaction();
+
                     if (tr.GetObject(per.ObjectId, OpenMode.ForRead, false) is not Structure structure)
                     {
                         ed.WriteMessage("\nUFLS-STRC-2D-FROM-PART: selected object is not a Civil 3D structure.");
@@ -92,11 +93,10 @@ namespace CLV_CivilTools.Ufls
                             return;
                         }
 
-                        // Civil 3D reports the rectangular structure orientation on the
-                        // opposite box axis from the L/W footprint convention used here.
-                        // Do not infer orientation from connected pipes; they may enter at
-                        // arbitrary angles. Apply the observed 90 degree axis correction to
-                        // the structure's own rotation.
+                        // Start with the structure's own rotation plus the observed 90-degree
+                        // axis correction. Different rectangular catalog parts may use the
+                        // opposite L/W convention, so the user can visually confirm and flip
+                        // the newly created footprint another 90 degrees if needed.
                         double structureRotation = SafeDouble(structure, "Rotation");
                         if (Math.Abs(structureRotation) < 1e-12)
                             structureRotation = SafeDouble(structure, "RotationAngle");
@@ -107,19 +107,34 @@ namespace CLV_CivilTools.Ufls
                         inner.Layer = LayerInner;
                         ms.AppendEntity(inner);
                         tr.AddNewlyCreatedDBObject(inner, true);
+                        ObjectId innerId = inner.ObjectId;
 
                         Polyline outer = BuildCenteredRectangle(center, outerLength, outerWidth, rectangleRotation);
                         outer.Layer = LayerOuter;
                         ms.AppendEntity(outer);
                         tr.AddNewlyCreatedDBObject(outer, true);
+                        ObjectId outerId = outer.ObjectId;
 
                         tr.Commit();
+                        ed.Regen();
+
+                        bool rotated = PromptAndRotateIfNeeded(
+                            ed,
+                            db,
+                            new Point3d(location.X, location.Y, 0.0),
+                            innerId,
+                            outerId);
+
+                        double finalRotation = rotated
+                            ? NormalizeAngle(rectangleRotation + Math.PI / 2.0)
+                            : rectangleRotation;
+
                         ed.WriteMessage(
                             $"\nUFLS-STRC-2D-FROM-PART: box footprint created. " +
                             $"Inner L={innerLength:0.###}' W={innerWidth:0.###}'; " +
                             $"Outer L={outerLength:0.###}' W={outerWidth:0.###}'. " +
-                            $"Structure rotation={RadiansToDegrees(structureRotation):0.###}°; " +
-                            $"footprint rotation={RadiansToDegrees(rectangleRotation):0.###}° (+90° axis correction).");
+                            $"Final footprint rotation={RadiansToDegrees(finalRotation):0.###}°" +
+                            (rotated ? " (user rotated +90°)." : "."));
                         return;
                     }
 
@@ -164,6 +179,46 @@ namespace CLV_CivilTools.Ufls
             {
                 ed.WriteMessage($"\nUFLS-STRC-2D-FROM-PART error: {ex.Message}");
             }
+        }
+
+        private static bool PromptAndRotateIfNeeded(
+            Editor ed,
+            Database db,
+            Point3d center,
+            ObjectId innerId,
+            ObjectId outerId)
+        {
+            var options = new PromptKeywordOptions("\nOrientation Correct? [Yes/No] <Yes>: ")
+            {
+                AllowNone = true
+            };
+            options.Keywords.Add("Yes");
+            options.Keywords.Add("No");
+            options.Keywords.Default = "Yes";
+
+            PromptResult result = ed.GetKeywords(options);
+            if (result.Status != PromptStatus.OK && result.Status != PromptStatus.None)
+                return false;
+
+            string choice = string.IsNullOrWhiteSpace(result.StringResult)
+                ? "Yes"
+                : result.StringResult;
+
+            if (!string.Equals(choice, "No", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            using Transaction rotateTr = db.TransactionManager.StartTransaction();
+            Matrix3d rotate90 = Matrix3d.Rotation(Math.PI / 2.0, Vector3d.ZAxis, center);
+
+            if (rotateTr.GetObject(innerId, OpenMode.ForWrite, false) is Entity innerEntity)
+                innerEntity.TransformBy(rotate90);
+
+            if (rotateTr.GetObject(outerId, OpenMode.ForWrite, false) is Entity outerEntity)
+                outerEntity.TransformBy(rotate90);
+
+            rotateTr.Commit();
+            ed.Regen();
+            return true;
         }
 
         private static Polyline BuildCenteredRectangle(Point2d center, double length, double width, double rotation)
