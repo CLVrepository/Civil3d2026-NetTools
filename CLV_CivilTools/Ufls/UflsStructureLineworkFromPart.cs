@@ -277,7 +277,7 @@ namespace CLV_CivilTools.Ufls
             feet = 0.0;
             Match m = Regex.Match(
                 text ?? string.Empty,
-                @"WALL(?:S)?\s*=\s*(?<wall>[0-9]+(?:\.[0-9]+)?)\s*(?<unit>''|\"|INCH(?:ES)?)?",
+                @"WALL(?:S)?\s*=\s*(?<wall>[0-9]+(?:\.[0-9]+)?)\s*(?<unit>''|""|INCH(?:ES)?)?",
                 RegexOptions.IgnoreCase);
             if (!m.Success || !double.TryParse(m.Groups["wall"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
                 return false;
