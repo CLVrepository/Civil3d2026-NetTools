@@ -13,6 +13,7 @@ using Autodesk.Civil.DatabaseServices;
 
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using AcColor = Autodesk.AutoCAD.Colors.Color;
+using AcEntity = Autodesk.AutoCAD.DatabaseServices.Entity;
 
 namespace CLV_CivilTools.Ufls
 {
@@ -93,10 +94,6 @@ namespace CLV_CivilTools.Ufls
                             return;
                         }
 
-                        // Start with the structure's own rotation plus the observed 90-degree
-                        // axis correction. Different rectangular catalog parts may use the
-                        // opposite L/W convention, so the user can visually confirm and flip
-                        // the newly created footprint another 90 degrees if needed.
                         double structureRotation = SafeDouble(structure, "Rotation");
                         if (Math.Abs(structureRotation) < 1e-12)
                             structureRotation = SafeDouble(structure, "RotationAngle");
@@ -210,10 +207,10 @@ namespace CLV_CivilTools.Ufls
             using Transaction rotateTr = db.TransactionManager.StartTransaction();
             Matrix3d rotate90 = Matrix3d.Rotation(Math.PI / 2.0, Vector3d.ZAxis, center);
 
-            if (rotateTr.GetObject(innerId, OpenMode.ForWrite, false) is Entity innerEntity)
+            if (rotateTr.GetObject(innerId, OpenMode.ForWrite, false) is AcEntity innerEntity)
                 innerEntity.TransformBy(rotate90);
 
-            if (rotateTr.GetObject(outerId, OpenMode.ForWrite, false) is Entity outerEntity)
+            if (rotateTr.GetObject(outerId, OpenMode.ForWrite, false) is AcEntity outerEntity)
                 outerEntity.TransformBy(rotate90);
 
             rotateTr.Commit();
