@@ -180,12 +180,23 @@ namespace CLV_CivilTools.Ufls
 
         private static string ResolvePartsListName(Transaction tr, Network network)
         {
+            string directName = GetStringProperty(network, "PartsListName");
+            if (!string.IsNullOrWhiteSpace(directName))
+                return directName;
+
             ObjectId partsListId = GetObjectIdProperty(network, "PartsListId");
             if (partsListId.IsNull)
                 return string.Empty;
 
-            if (tr.GetObject(partsListId, OpenMode.ForRead, false) is AcDbObject partsListObject)
-                return GetStringProperty(partsListObject, "Name");
+            try
+            {
+                if (tr.GetObject(partsListId, OpenMode.ForRead, false) is AcDbObject partsListObject)
+                    return GetStringProperty(partsListObject, "Name");
+            }
+            catch
+            {
+                // Older drawings can retain a stale or invalid PartsListId.
+            }
 
             return string.Empty;
         }
