@@ -73,8 +73,6 @@ namespace CLV_CivilTools.Ufls
                         return;
                     }
 
-                    // Make the selected target list active on the network BEFORE swapping.
-                    // This is important for very old/orphaned catalog parts whose old family reference is invalid.
                     foreach (ObjectId networkId in networkIds)
                     {
                         if (tr.GetObject(networkId, OpenMode.ForWrite, false) is Network network)
@@ -201,9 +199,7 @@ namespace CLV_CivilTools.Ufls
                         }
                     }
 
-                    // Make every unresolved/manual/failed row easy to locate in plan view.
                     int redHighlighted = HighlightManualRowsRed(tr, rows);
-
                     tr.Commit();
 
                     ed.WriteMessage("\n\nPIPE CATALOG MIGRATION RESULT");
@@ -479,7 +475,7 @@ namespace CLV_CivilTools.Ufls
         {
             try
             {
-                if (tr.GetObject(sizeId, OpenMode.ForRead, false) is DBObject obj)
+                if (tr.GetObject(sizeId, OpenMode.ForRead, false) is Autodesk.AutoCAD.DatabaseServices.DBObject obj)
                 {
                     string name = SafeString(obj, "Name");
                     if (!string.IsNullOrWhiteSpace(name)) return name;
@@ -503,8 +499,6 @@ namespace CLV_CivilTools.Ufls
                 !string.Equals(Normalize(actualSize), Normalize(expectedSizeName), StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            // If Civil 3D exposes either family or size after the swap and neither contradicts the target,
-            // treat it as verified. Very old parts may still throw on one of these getters.
             return !actualFamilyId.IsNull || !string.IsNullOrWhiteSpace(actualSize);
         }
 
