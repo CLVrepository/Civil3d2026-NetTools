@@ -63,20 +63,18 @@ namespace CLV_CivilTools.Survey
                 DockEnabled = DockSides.Left | DockSides.Right | DockSides.Top | DockSides.Bottom
             };
 
-
             _paletteSet.Add("PHOTO REVIEW", _control);
             PalettePositionHelper.ConfigureSize(
                 _paletteSet,
                 new Size(1080, 760),
                 new Size(760, 520));
-
         }
     }
 
     internal sealed class SurveyPhotoReviewControl : UserControl
     {
         private readonly Button _loadButton;
-                private readonly Button _openImageButton;
+        private readonly Button _openImageButton;
         private readonly Button _openMapButton;
         private readonly Button _zoomCadButton;
         private readonly Label _statusLabel;
@@ -226,7 +224,6 @@ namespace CLV_CivilTools.Survey
             ShowPlaceholder();
         }
 
-
         private void InitializeSplitLayout()
         {
             if (_mainSplit.IsDisposed)
@@ -254,7 +251,6 @@ namespace CLV_CivilTools.Survey
             int target = Math.Max(minPanelWidth, Math.Min(availableWidth - minPanelWidth - splitterWidth, availableWidth / 2));
             if (_mainSplit.SplitterDistance != target)
                 _mainSplit.SplitterDistance = target;
-
         }
 
         public void BeginInteractiveLoad()
@@ -335,12 +331,8 @@ namespace CLV_CivilTools.Survey
 
             PhotoGeoInfo? geoInfo = PhotoExifReader.TryReadGeoInfo(imagePath);
             _currentImageBytes = File.ReadAllBytes(imagePath);
-            using (var ms = new MemoryStream(_currentImageBytes))
-            using (var image = DrawingImage.FromStream(ms))
-            {
-                _pictureBox.Image?.Dispose();
-                _pictureBox.Image = new Bitmap(image);
-            }
+            _pictureBox.Image?.Dispose();
+            _pictureBox.Image = CreateOrientedBitmap(_currentImageBytes);
 
             _currentEntityId = entityId;
             _currentImagePath = imagePath;
@@ -351,6 +343,60 @@ namespace CLV_CivilTools.Survey
             UpdateDetails(entityType);
             SetStatus($"Loaded: {Path.GetFileName(imagePath)}");
             RefreshButtonState();
+        }
+
+        private static Bitmap CreateOrientedBitmap(byte[] imageBytes)
+        {
+            using var ms = new MemoryStream(imageBytes);
+            using var image = DrawingImage.FromStream(ms);
+
+            int orientation = TryGetExifOrientation(image);
+            var bitmap = new Bitmap(image);
+
+            switch (orientation)
+            {
+                case 2:
+                    bitmap.RotateFlip(RotateFlipType.RotateNoneFlipX);
+                    break;
+                case 3:
+                    bitmap.RotateFlip(RotateFlipType.Rotate180FlipNone);
+                    break;
+                case 4:
+                    bitmap.RotateFlip(RotateFlipType.RotateNoneFlipY);
+                    break;
+                case 5:
+                    bitmap.RotateFlip(RotateFlipType.Rotate90FlipX);
+                    break;
+                case 6:
+                    bitmap.RotateFlip(RotateFlipType.Rotate90FlipNone);
+                    break;
+                case 7:
+                    bitmap.RotateFlip(RotateFlipType.Rotate270FlipX);
+                    break;
+                case 8:
+                    bitmap.RotateFlip(RotateFlipType.Rotate270FlipNone);
+                    break;
+            }
+
+            return bitmap;
+        }
+
+        private static int TryGetExifOrientation(DrawingImage image)
+        {
+            const int propertyIdOrientation = 0x0112;
+
+            try
+            {
+                PropertyItem? item = image.GetPropertyItem(propertyIdOrientation);
+                if (item?.Value == null || item.Value.Length < 2)
+                    return 1;
+
+                return BitConverter.ToUInt16(item.Value, 0);
+            }
+            catch
+            {
+                return 1;
+            }
         }
 
         private static string? TryGetHyperlinkPath(Entity entity)
@@ -575,7 +621,6 @@ namespace CLV_CivilTools.Survey
             bool hasImagePath = !string.IsNullOrWhiteSpace(_currentImagePath) && File.Exists(_currentImagePath);
             bool hasGeo = _currentGeoInfo != null;
             bool hasMarker = _currentMarkerPoint.HasValue;
-            bool hasCurrent = !_currentEntityId.IsNull;
 
             _openImageButton.Enabled = hasImagePath;
             _openMapButton.Enabled = hasGeo;
