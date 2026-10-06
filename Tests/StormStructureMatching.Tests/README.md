@@ -18,8 +18,37 @@ dotnet run --project Tests/StormStructureMatching.Tests/StormStructureMatching.T
 
 Exit code is 0 only when every test passes. No NuGet package dependencies are used.
 Tests cover centered access/box pairs, standalone structures, DI evidence, unknown
-and conflicting roles, duplicate identities, duplicate entity IDs, offset pairs,
-candidate ties, mutual uniqueness, radius limits, invalid data, enumeration-order
-independence, and repeatable non-mutating planning. Repeatability here does not
+and conflicting roles, duplicate identities, duplicate entity IDs, eccentric pairs
+associated by exact unique base name while independently matching their own
+role-specific geometry, candidate ties, mutual uniqueness, invalid data,
+enumeration-order independence, and repeatable non-mutating planning. DI/access
+and targets without a footprint retain 0.10 XY matching. Junction footprints use
+inside/on-polygon containment with numerical boundary slack of 1e-8 and the
+legacy 25-unit center search radius. Tests cover skew/concave polygons, off-center
+sources, boundary/outside cases, overlapping footprints, competing sources, invalid
+footprints, survey coordinates, and prevention of relaxed DI/access matching.
+Nested-outline tests also cover skew/offset inners, partly outside inners,
+concave-boundary edge and vertex crossings, identical boundaries, and invalid rings.
+Explicit non-graphic pipe-end tests cover only the verified `UFLS-Null Structure`
+description with a nonempty identity ending in `-STUB` (case/outer-whitespace
+insensitive). Valid entries appear in `PreservedPipeEndSourceIds` and never demand
+or consume geometry. Conflicts, duplicate IDs/names, missing OD and nonfinite
+coordinates remain review issues. A source with the verified SDDI name and NDOT
+TYPE 2 description is tested for DI classification only, with no geometry mapping
+inferred from its name.
+Existing DI/box outline tests exercise the explicit `IsExistingOutline` opt-in:
+an unbound outline is one physical target shared by both source roles, while a
+known role binds it to that OD category. Containment uses the 25-unit radius and
+never reclassifies a DI source as a box. Tests cover cross-role competition, bound
+roles, invalid flags/footprints, overlapping outlines, duplicate physical IDs and
+unchanged centered-DI/access behavior. Merely supplying a footprint does not opt
+an ordinary DI target into this path.
+Completion-ownership planning tests cover one logical completed source reserving
+all of its outputs, secondary-output overlap, duplicate source/output claims,
+case-insensitive collisions, malformed claims, disjoint valid claims, order
+independence, and immutable snapshots of accepted output IDs. The host must remove
+every accepted output from ordinary candidates before adding its one logical
+completed target; rejected claims reserve nothing and remain review-only.
+Repeatability here does not
 claim drawing-level rerun safety: persistent output ownership, OD copy/readback,
 rollback, actual block centers, and Civil 3D integration require host tests.

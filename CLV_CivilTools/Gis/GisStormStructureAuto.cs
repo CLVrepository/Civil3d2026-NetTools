@@ -75,6 +75,7 @@ namespace CLV_CivilTools.Gis
             var invalidCompletions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int converted = 0;
             int alreadyVerified = 0;
+            var preservedPipeEndNotices = new List<string>();
             try
             {
                 using (doc.LockDocument())
@@ -123,39 +124,61 @@ namespace CLV_CivilTools.Gis
                                 var role = kind == "DI" ? StormStructureRole.DropInlet : StormStructureRole.Access;
                                 targets.Add(key, new TargetInfo(id, new StormStructureTarget(key, role, center.X, center.Y), false));
                             }
-                            else if (ent is AcPolyline pl && IsRectangle(pl) && IsOuterLayer(pl.Layer))
+                            else if (ent is AcPolyline pl && IsStructureOutline(pl) && IsOuterLayer(pl.Layer))
                             {
-                                // Existing prepared polygons need box OD proof. A DI rectangle
-                                // on the same final layer is not automatically box geometry.
-                                if (string.Equals(pl.Layer, TargetOuterLayer, StringComparison.OrdinalIgnoreCase))
+                                // Only genuinely OD-empty survey outlines are unbound.
+                                // Any existing native identity binds their role; conflicts stay review-only.
+                                var odState = GisImportCommands.InspectOutlineObjectData(id, out string existingName,
+                                    out string existingPart, out string existingDetail);
+                                if (odState == GisImportCommands.OutlineObjectDataState.ReadFailed)
+                                    throw new InvalidOperationException($"Read-only OD preflight stopped at outline {key}: {existingDetail}");
+                                if (odState == GisImportCommands.OutlineObjectDataState.Review)
                                 {
-                                    bool existingRead = GisImportCommands.TryReadStructuresIdentity(id, out string existingName,
-                                        out string existingPart, out string existingDetail, out bool nativeReadFailure);
-                                    if (nativeReadFailure)
-                                        throw new InvalidOperationException($"Read-only OD preflight stopped at outline {key}: {existingDetail}");
-                                    if (!existingRead || StormStructureMatching.Classify(existingName, existingPart) != StormStructureRole.JunctionBox)
-                                        continue;
+                                    reviews.Add($"outline {key}: {existingDetail}");
+                                    continue;
+                                }
+                                StormStructureRole outlineRole = odState == GisImportCommands.OutlineObjectDataState.Identified
+                                    ? StormStructureMatching.Classify(existingName, existingPart) : StormStructureRole.Unknown;
+                                if (odState == GisImportCommands.OutlineObjectDataState.Identified &&
+                                    outlineRole != StormStructureRole.DropInlet && outlineRole != StormStructureRole.JunctionBox)
+                                {
+                                    reviews.Add($"outline {key}: existing OD role requires review, Name='{existingName}', PartSizeName='{existingPart}'; retained unchanged");
+                                    continue;
+                                }
+                                if (odState == GisImportCommands.OutlineObjectDataState.Empty &&
+                                    string.Equals(pl.Layer, TargetOuterLayer, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    reviews.Add($"outline {key}: final-layer outline has no OD; retained for review rather than reassigned");
+                                    continue;
                                 }
                                 Point3d center = GetEntityCenter(pl);
-                                targets.Add(key, new TargetInfo(id, new StormStructureTarget(key, StormStructureRole.JunctionBox, center.X, center.Y), false));
+                                targets.Add(key, new TargetInfo(id, new StormStructureTarget(key, outlineRole, center.X, center.Y, GetStructureFootprint(pl), IsExistingOutline: true), false));
                             }
                         }
-                        // Reruns use persistent soft-pointer links, not another nearest-entity search.
-                        foreach (SourceInfo source in sources.Values.Where(s => s.Outputs.Count > 0))
+                        // Every persisted output belongs to one logical completed structure.
+                        // Check all primary/secondary claims before hiding any ordinary candidate.
+                        StormStructureCompletionPlan completions = StormStructureMatching.PlanCompletions(
+                            sources.Values.Where(source => source.Outputs.Count > 0).Select(source =>
+                                new StormStructureCompletion(source.Data.Id, source.Outputs.Select(id =>
+                                    ((Entity)tr.GetObject(id, OpenMode.ForRead)).Handle.ToString()).ToArray())));
+                        foreach (string sourceId in completions.ConflictedSourceIds)
+                            invalidCompletions.Add(sourceId);
+                        reviews.AddRange(completions.Issues.Select(issue => DescribeIssue(issue, sources)));
+                        foreach (StormStructureCompletion completion in completions.Accepted)
                         {
+                            SourceInfo source = sources[completion.SourceId];
+                            // Secondary DI outer footprints must not reappear as fresh targets.
+                            foreach (string outputHandle in completion.OutputIds)
+                                targets.Remove(outputHandle);
                             ObjectId outerId = source.Outputs[0];
                             var outer = (Entity)tr.GetObject(outerId, OpenMode.ForRead);
                             string key = outer.Handle.ToString();
-                            Point3d center = new Point3d(source.Data.X, source.Data.Y, 0.0);
                             var role = StormStructureMatching.Classify(source.Data.Name, source.Data.PartSizeName);
-                            if (targets.TryGetValue(key, out TargetInfo? previous) && previous.CompletedSource != null)
-                            {
-                                invalidCompletions.Add(source.Data.Id);
-                                invalidCompletions.Add(previous.CompletedSource);
-                                reviews.Add($"output {key}: more than one source claims this destination");
-                                continue;
-                            }
-                            targets[key] = new TargetInfo(outerId, new StormStructureTarget(key, role, center.X, center.Y), true)
+                            Point3d center = role == StormStructureRole.JunctionBox ? GetEntityCenter(outer)
+                                : new Point3d(source.Data.X, source.Data.Y, 0.0);
+                            IReadOnlyList<StormStructureVertex>? footprint = role == StormStructureRole.JunctionBox && outer is AcPolyline box
+                                ? GetStructureFootprint(box) : null;
+                            targets[key] = new TargetInfo(outerId, new StormStructureTarget(key, role, center.X, center.Y, footprint), true)
                             { CompletedSource = source.Data.Id };
                         }
                         tr.Commit();
@@ -163,11 +186,16 @@ namespace CLV_CivilTools.Gis
 
                     StormStructureMatchResult plan = StormStructureMatching.Match(
                         sources.Values.Select(s => s.Data), targets.Values.Select(t => t.Data));
-                    reviews.AddRange(plan.Issues.Select(i => $"{i.Code}: sources=[{string.Join(",", i.SourceIds)}], targets=[{string.Join(",", i.TargetIds)}]: {i.Message}"));
+                    reviews.AddRange(plan.Issues.Select(issue => DescribeIssue(issue, sources)));
+                    foreach (string sourceId in plan.PreservedPipeEndSourceIds)
+                    {
+                        if (!invalidCompletions.Contains(sourceId))
+                            preservedPipeEndNotices.Add(DescribeSource(sources[sourceId]));
+                    }
                     LayerStandards.EnsureGisLayers(db, ed);
                     var reserved = new HashSet<ObjectId>();
-                    // Boxes are resolved while access/DI geometry remains inside its original blocks.
-                    foreach (StormStructureMatch match in plan.Matches.OrderBy(m => m.Role == StormStructureRole.JunctionBox ? 0 : 1))
+                    // Resolve existing DI/box outlines while access/DI blocks remain intact.
+                    foreach (StormStructureMatch match in plan.Matches.OrderBy(m => targets[m.TargetId].Data.IsExistingOutline ? 0 : 1))
                     {
                         SourceInfo source = sources[match.SourceId];
                         TargetInfo target = targets[match.TargetId];
@@ -205,14 +233,21 @@ namespace CLV_CivilTools.Gis
                             reviews.Add($"point {source.Data.Id} ({source.Data.Name}) -> {target.Data.Id}: {failure}");
                     }
                 }
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06-R2: converted/OD verified={converted}, already verified={alreadyVerified}, review items={reviews.Count}. All {sources.Count} Structures source points retained; no broad cleanup run.");
+                if (converted > 0 || alreadyVerified > 0)
+                {
+                    try { ed.Regen(); }
+                    catch (System.Exception ex) { ed.WriteMessage($"\nStorm GIS display refresh failed: {ex.Message}. Run REGEN to refresh the view."); }
+                }
+                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06-R3: converted/OD verified={converted}, already verified={alreadyVerified}, review items={reviews.Count}, intentionally retained null pipe ends={preservedPipeEndNotices.Count}. All {sources.Count} Structures source points retained; no broad cleanup run. Planned targets: total={targets.Count}, existing outlines={targets.Values.Count(t => t.Data.IsExistingOutline)}.");
+                foreach (string preserved in preservedPipeEndNotices)
+                    ed.WriteMessage("\n  PRESERVED NULL PIPE END (no geometry expected): " + preserved);
                 foreach (string review in reviews.Distinct(StringComparer.Ordinal))
                     ed.WriteMessage("\n  REVIEW: " + review);
                 return reviews.Count == 0 && sources.Count > 0;
             }
             catch (System.Exception ex)
             {
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06-R2 stopped: {ex.Message}. Unverified source geometry and all imported source points are retained. No downstream cleanup was queued.");
+                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06-R3 stopped: {ex.Message}. Unverified source geometry and all imported source points are retained. No downstream cleanup was queued.");
                 return false;
             }
         }
@@ -238,23 +273,28 @@ namespace CLV_CivilTools.Gis
                 var outputs = new List<ObjectId>();
                 ObjectId innerId = ObjectId.Null;
                 var center = new Point3d(source.Data.X, source.Data.Y, 0.0);
-                if (target.Data.Role == StormStructureRole.JunctionBox)
+                if (target.Data.IsExistingOutline)
                 {
-                    var outer = (AcPolyline)original;
+                    if (original is not AcPolyline outer || !IsStructureOutline(outer))
+                    {
+                        detail = "expected a closed straight existing structure outline";
+                        return false;
+                    }
+                    if (!GisImportCommands.CanReplaceOutlineObjectData(source.Id, target.Id, out detail))
+                        return false;
                     // Ambiguous nested linework is reviewed instead of choosing by enumeration order.
                     var inners = new List<ObjectId>();
                     foreach (ObjectId id in space)
                     {
                         if (id == target.Id || reserved.Contains(id)) continue;
                         if (tr.GetObject(id, OpenMode.ForRead, false) is AcPolyline pl && !pl.IsErased &&
-                            IsRectangle(pl) && IsInnerLayer(pl.Layer) &&
-                            Distance2d(GetEntityCenter(pl), center) <= StormStructureMatching.MatchTolerance &&
-                            Math.Abs(pl.Area) < Math.Abs(outer.Area) && IsInsideRectangle(outer, pl))
+                            IsStructureOutline(pl) && IsInnerLayer(pl.Layer) &&
+                            Math.Abs(pl.Area) < Math.Abs(outer.Area) && IsInsideStructureOutline(outer, pl))
                             inners.Add(id);
                     }
                     if (inners.Count > 1)
                     {
-                        detail = "multiple inner box outlines; review required";
+                        detail = "multiple nested inner structure outlines; review required";
                         return false;
                     }
                     if (inners.Count == 1) innerId = inners[0];
@@ -554,38 +594,29 @@ namespace CLV_CivilTools.Gis
         private static bool IsInnerLayer(string layer) =>
             MatchesAnyToken(layer, SourceInnerLayerTokens) || string.Equals(layer, TargetInnerLayer, StringComparison.OrdinalIgnoreCase);
 
-        private static bool IsRectangle(AcPolyline pl)
+        private static bool IsStructureOutline(AcPolyline pl)
         {
-            if (!pl.Closed || pl.NumberOfVertices != 4 || Math.Abs(pl.Area) <= 1e-8) return false;
-            for (int i = 0; i < 4; i++)
-            {
+            // Surveyed structure walls are not necessarily perfectly orthogonal.
+            // Keep the trusted layer/role checks and require closed, straight, nonzero geometry.
+            if (!pl.Closed || pl.NumberOfVertices < 3 || Math.Abs(pl.Area) <= 1e-8) return false;
+            for (int i = 0; i < pl.NumberOfVertices; i++)
                 if (Math.Abs(pl.GetBulgeAt(i)) > 1e-8) return false;
-                Vector2d a = pl.GetPoint2dAt((i + 1) % 4) - pl.GetPoint2dAt(i);
-                Vector2d b = pl.GetPoint2dAt((i + 2) % 4) - pl.GetPoint2dAt((i + 1) % 4);
-                if (a.Length <= 1e-8 || b.Length <= 1e-8 || Math.Abs(a.DotProduct(b) / (a.Length * b.Length)) > 1e-5) return false;
-            }
             return true;
         }
 
-        private static bool IsInsideRectangle(AcPolyline outer, AcPolyline inner)
+        private static IReadOnlyList<StormStructureVertex> GetStructureFootprint(AcPolyline pl)
         {
-            for (int i = 0; i < inner.NumberOfVertices; i++)
+            var vertices = new List<StormStructureVertex>();
+            for (int i = 0; i < pl.NumberOfVertices; i++)
             {
-                Point2d point = inner.GetPoint2dAt(i);
-                double? sign = null;
-                for (int j = 0; j < 4; j++)
-                {
-                    Point2d a = outer.GetPoint2dAt(j);
-                    Point2d b = outer.GetPoint2dAt((j + 1) % 4);
-                    double cross = (b.X - a.X) * (point.Y - a.Y) - (b.Y - a.Y) * (point.X - a.X);
-                    if (Math.Abs(cross) <= 1e-8) continue;
-                    double current = Math.Sign(cross);
-                    if (sign.HasValue && sign.Value != current) return false;
-                    sign = current;
-                }
+                Point3d point = pl.GetPoint3dAt(i);
+                vertices.Add(new StormStructureVertex(point.X, point.Y));
             }
-            return true;
+            return vertices;
         }
+
+        private static bool IsInsideStructureOutline(AcPolyline outer, AcPolyline inner)
+            => StormStructureMatching.ContainsOutline(GetStructureFootprint(outer), GetStructureFootprint(inner));
 
         private static bool IsRoleOutline(Entity ent, StormStructureRole role)
         {
@@ -601,13 +632,17 @@ namespace CLV_CivilTools.Gis
                 }
                 return false;
             }
-            if (role == StormStructureRole.JunctionBox) return ent is AcPolyline box && IsRectangle(box);
+            if (role == StormStructureRole.JunctionBox) return ent is AcPolyline box && IsStructureOutline(box);
             if (role == StormStructureRole.DropInlet) return ent is AcPolyline inlet && inlet.Closed && Math.Abs(inlet.Area) > 1e-8;
             return false;
         }
 
         private static bool OutlineMatchesAnchor(Entity ent, StormStructureRole role, Point3d anchor)
         {
+            if (role == StormStructureRole.JunctionBox)
+                return ent is AcPolyline box &&
+                    Distance2d(GetEntityCenter(box), anchor) <= StormStructureMatching.JunctionSearchRadius &&
+                    StormStructureMatching.ContainsFootprint(GetStructureFootprint(box), anchor.X, anchor.Y);
             if (role != StormStructureRole.DropInlet)
                 return Distance2d(GetEntityCenter(ent), anchor) <= StormStructureMatching.MatchTolerance;
             if (ent is not AcPolyline pl || !pl.Closed) return false;
@@ -639,6 +674,12 @@ namespace CLV_CivilTools.Gis
             double dy = a.Y - b.Y;
             return Math.Sqrt(dx * dx + dy * dy);
         }
+
+        private static string DescribeIssue(StormStructureIssue issue, IReadOnlyDictionary<string, SourceInfo> sources)
+            => $"{issue.Code}: sources=[{string.Join("; ", issue.SourceIds.Select(id => sources.TryGetValue(id, out SourceInfo? source) ? DescribeSource(source) : id))}], targets=[{string.Join(",", issue.TargetIds)}]: {issue.Message}";
+
+        private static string DescribeSource(SourceInfo source)
+            => FormattableString.Invariant($"{source.Data.Id} Name='{source.Data.Name}' PartSizeName='{source.Data.PartSizeName}' XY=({source.Data.X:R},{source.Data.Y:R})");
 
         private sealed class SourceInfo
         {

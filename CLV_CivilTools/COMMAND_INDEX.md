@@ -1,3 +1,6 @@
+## 2026-10-06 - Storm GIS PREP pairing R3
+- `CLV-GIS-STRM-AUTO` / `CLV-GIS-STORM-GIS`: revision `2026.10.06-R3` permits eccentric access/box pairs, using each source's own geometry location. Also handles existing NDOT/grate inlet outlines while preserving DI identity, and explicitly lists retained valid UFLS null/STUB pipe ends without requiring geometry for them. Regenerates the view after committed structure work. No new commands or prompts.
+
 ## 2026-10-06 - Storm GIS PREP native reader R2
 - `CLV-GIS-STRM-AUTO` / `CLV-GIS-STORM-GIS`: revision `2026.10.06-R2` corrects native OD collection ownership and point-value access. A native preflight error now stops immediately with a diagnostic instead of continuing to unrelated match errors. No new commands or prompts; retry native trials only in a fresh Civil 3D session and disposable drawing copy.
 

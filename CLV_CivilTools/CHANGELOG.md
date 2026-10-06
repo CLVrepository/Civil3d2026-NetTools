@@ -1,3 +1,13 @@
+## 2026-10-06 - Storm GIS access/box pairing R3
+- Corrected access/box association: a unique exact base-name pair may be physically eccentric. Each source still matches its own role-specific geometry; DI/access retain the 0.10 center limit and duplicate identity/destination ambiguity protections remain.
+- Restored bounded junction footprint matching for surveyed closed straight polylines on recognized structure outer layers. Box source points may lie inside the footprint rather than exactly at its bounding-box center; the original 25-unit bound and mutual one-to-one ambiguity checks remain. Perfect right angles are no longer required. Inner outlines must be uniquely nested.
+- Added a display regeneration after committed structure work so new outer linework appears without closing/reopening Civil 3D. The successful DI geometry/layer/OD conversion is unchanged.
+- Existing NDOT/grate inlet outlines use the bounded outer/inner containment pathway without reclassifying the SDDI source as a junction box. One unbound physical outline participates once in the DI/box candidate graph; cross-role competition remains unresolved instead of stealing geometry. Existing OD binds prepared outlines to their known role.
+- Explicit `UFLS-Null Structure` records with a nonempty `-STUB` identity are retained and listed as intentional non-graphic pipe ends. Only valid, unique, nonconflicting records are exempted from geometry matching; generic unknown/missing structures still require review.
+- Before replacing an OD-bearing original outline, a read-only check requires all existing records to match the source; unreadable/conflicting native data is never treated as an unbound outline.
+- Reruns reserve every completion-owned outer output and represent a completed multi-output inlet once. Overlapping ownership claims remain review-only.
+- Updated matcher regression tests for eccentric pairs, existing inlet outlines, pipe-end preservation, completion ownership and unchanged block-center tolerance.
+
 ## 2026-10-06 - Storm GIS native OD reader R2
 - Corrected use of the host-owned cached `ActiveProject.ODTables` wrapper: it is borrowed and no longer disposed after each point. Installed Autodesk 2026 metadata confirms the cached wrapper uses `AutoDelete=false`; individual table wrappers remain disposed normally.
 - Identity reads now query only `Structures`; complete transfers enumerate OD records attached to the selected entity instead of every table in the project, which can include attached drawings. Empty record collections are handled before enumeration.

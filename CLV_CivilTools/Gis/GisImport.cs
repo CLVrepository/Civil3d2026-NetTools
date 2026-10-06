@@ -32,6 +32,14 @@ namespace CLV_CivilTools.Gis
             VerifyFailed
         }
 
+        internal enum OutlineObjectDataState
+        {
+            Empty,
+            Identified,
+            Review,
+            ReadFailed
+        }
+
         private const string SourceCoordinateSystem = "NAD_1983_StatePlane_Nevada_East_FIPS_2701_Feet";
         private const string TempBoundaryLayer = "GIS-TEMP-BOUNDARY";
         private const string ManagedMapApiAssemblyName = "ManagedMapApi";
@@ -167,6 +175,81 @@ namespace CLV_CivilTools.Gis
                 partSizeName = string.Empty;
                 nativeReadFailure = true;
                 detail = "Structures native OD read failed: " + OdErrorMessage(ex);
+                return false;
+            }
+        }
+
+        // Read-only eligibility check. An outline is unbound only when it truly has
+        // no native OD; unreadable/conflicting metadata must never mean "shared".
+        internal static OutlineObjectDataState InspectOutlineObjectData(ObjectId id,
+            out string name, out string partSizeName, out string detail)
+        {
+            name = string.Empty;
+            partSizeName = string.Empty;
+            try
+            {
+                RequireActiveOdEntity(id);
+                List<VerifiedOdRecord> allRecords = ReadVerifiedOdRecords(id);
+                if (allRecords.Count == 0)
+                {
+                    detail = "No native Object Data is attached.";
+                    return OutlineObjectDataState.Empty;
+                }
+                List<VerifiedOdRecord> structures = allRecords
+                    .Where(r => string.Equals(r.TableName, "Structures", StringComparison.OrdinalIgnoreCase)).ToList();
+                if (structures.Count == 0)
+                    throw new VerifiedOdIdentityException("Outline has native OD but no Structures identity; existing data retained.");
+                VerifiedOdRecord first = structures[0];
+                if (structures.Any(r => !string.Equals(r.Key, first.Key, StringComparison.Ordinal)))
+                    throw new VerifiedOdIdentityException("Outline has conflicting Structures records; existing data retained.");
+                name = ReadVerifiedOdIdentityField(first, "Name");
+                partSizeName = ReadVerifiedOdIdentityField(first, "PartSizeName");
+                detail = "Existing outline Structures identity read without changes.";
+                return OutlineObjectDataState.Identified;
+            }
+            catch (VerifiedOdIdentityException ex)
+            {
+                name = string.Empty;
+                partSizeName = string.Empty;
+                detail = ex.Message;
+                return OutlineObjectDataState.Review;
+            }
+            catch (System.Exception ex)
+            {
+                name = string.Empty;
+                partSizeName = string.Empty;
+                detail = OdErrorMessage(ex);
+                return OutlineObjectDataState.ReadFailed;
+            }
+        }
+
+        // Cloning behavior is not evidence that the original has no OD. Before an
+        // existing outline can be retired, its complete native records must either
+        // be absent or already equal the source. This function never attaches data.
+        internal static bool CanReplaceOutlineObjectData(ObjectId sourceId, ObjectId outlineId, out string detail)
+        {
+            try
+            {
+                RequireActiveOdEntity(sourceId);
+                RequireActiveOdEntity(outlineId);
+                List<VerifiedOdRecord> existing = ReadVerifiedOdRecords(outlineId);
+                if (existing.Count == 0)
+                {
+                    detail = "Original outline has no native OD to overwrite.";
+                    return true;
+                }
+                List<VerifiedOdRecord> source = ReadVerifiedOdRecords(sourceId);
+                if (source.Count > 0 && SameVerifiedOdRecords(source, existing))
+                {
+                    detail = "Original outline already has the same complete typed OD.";
+                    return true;
+                }
+                detail = "Original outline has different native OD; geometry and records retained unchanged.";
+                return false;
+            }
+            catch (System.Exception ex)
+            {
+                detail = "Original outline OD could not be verified without changes: " + OdErrorMessage(ex);
                 return false;
             }
         }

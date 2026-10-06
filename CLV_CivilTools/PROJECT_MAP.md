@@ -1,3 +1,11 @@
+## 2026-10-06 - Independent access/box centers R3
+- `Gis/StormStructureMatching.cs`: removes the cross-role source-to-source distance gate. Exact unique base names establish the association. DI/access keep independent 0.10 center matching; box targets use tested footprint containment within the original 25-unit bound. Closed straight survey polylines no longer need mathematically perfect right angles. `GisStormStructureAuto.cs` refreshes display after committed batch work; no layer visibility changes or DI conversion rewrite.
+
+- `IsExistingOutline` marks one physical survey outline as unbound DI/box geometry, or binds it to an existing native OD role. The shared candidate graph enforces cross-role mutual uniqueness; `Match.Role` always remains the source role. Host conversion dispatches by physical outline/block pathway rather than coercing source identity.
+- Explicit null pipe ends are reported in `PreservedPipeEndSourceIds` after normal duplicate/coordinate validation; the host retains those points and prints their identity without adding a false missing-geometry review.
+
+- `PlanCompletions` validates all output ownership before host target aggregation, including secondary DI outer footprints; accepted disjoint cohorts reserve every output and expose one logical target. Read-only outline OD inspection distinguishes empty metadata from invalid data and verifies the original records before replacement.
+
 ## 2026-10-06 - Storm OD adapter R2 ownership and scope
 - `Gis/GisImport.cs`: borrows the Map project's cached ODTables collection without disposing it; retains disposal of owned table/record/value wrappers. Structures identity uses table-specific records, while full typed copy uses entity-scoped `Tables.GetObjectRecords`. The fourth native Boolean is `skipSubObj`; it is not a record-creation flag. Installed MapValue exposes `Point`.
 - `Gis/GisStormStructureAuto.cs`: distinguishes identity-data problems from native reader failures and stops before geometry planning/mutation on the first native failure; revision stamp `2026.10.06-R2`. Diagnostics preserve native code, operation, handle/table/field and full exception chain. The first-trial Git ref is retained as `backup/storm-gis-prep-2026-10-06-first-trial`.
