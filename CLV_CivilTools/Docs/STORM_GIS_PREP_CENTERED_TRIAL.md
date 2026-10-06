@@ -1,6 +1,18 @@
 # Storm GIS PREP-ALL: centered trial
 
-Revision: 2026.10.06. Use a disposable copy of the test drawing first.
+Revision: 2026.10.06-R2. Use a disposable copy of the test drawing first.
+
+## R2 native-reader correction
+
+The first native trial of 2026.10.06 reported a MapException on the first point, then null-reference errors on the remaining points, with zero conversions. The safety gate retained all source points and did not start pipe offset or cleanup.
+
+Installed Autodesk 2026 API inspection establishes that `ProjectModel.ODTables` returns a cached wrapper constructed with `AutoDelete=false`, while the table indexer creates owned table wrappers. R2 no longer disposes the borrowed cached ODTables wrapper. It keeps normal owned-wrapper disposal. The installed point getter is `MapValue.Point`, not `Point3dValue`; this is also corrected. The first exception's precise native cause was not recorded by the old diagnostics, so it must not be represented as conclusively reproduced or solved solely by compilation.
+
+R2 reads identity from Structures only. Full OD copy uses only records attached to the entity; it does not scan all project table names. Autodesk documents that the table-name collection can include attached drawings: https://blog.autodesk.io/want-to-know-which-object-data-tables-are-in-the-current-drawing-file/ . Native record-call fourth parameters are `skipSubObj` (false includes subobjects), not creation flags. Empty record collections are returned before enumerating.
+
+Any native preflight failure now stops before geometry matching and reports the failing operation, handle/table/field, active/working database agreement, native ErrorCode/HResult and original exception chain/stack. Missing or conflicting identity data remains a normal review item. Use F2 to copy the full diagnostic if a native failure remains.
+
+Restart Civil 3D before trying R2 on a disposable drawing copy: the previous DLL may already have disposed a cached Map wrapper in its session. Do not keep trying within that same potentially invalid session. Native OD reads, copy/readback on uncommitted destination entities, repeated runs and rollback still require an actual hosted smoke test.
 
 ## Scope
 
@@ -43,7 +55,7 @@ These tests cover classification, exact base pairing, duplicate/ambiguous assign
 ## Disposable-drawing trial checklist
 
 1. Make a separate DWG copy. Keep the original supplied drawing untouched. NETLOAD the newly built development DLL into a fresh Civil 3D 2026 session so an old loaded assembly cannot mask the result.
-2. Run `CLV-GIS-STRM-AUTO` first. Confirm the `2026.10.06` revision stamp, converted/OD-verified count, retained-point count, and any REVIEW source/destination handles.
+2. Run `CLV-GIS-STRM-AUTO` first. Confirm the `2026.10.06-R2` revision stamp, converted/OD-verified count, retained-point count, and any REVIEW source/destination handles.
 3. At SDMH-08 verify two distinct outer assets: circular access with the unsuffixed access OD, and rectangular box with the `-JS` box OD. Inspect every field on each target, not just Name. Confirm the DI retains its existing intended outline and OD and excludes embedded curb/reference geometry.
 4. Confirm all original imported source points still exist with unchanged native OD. For unknown/conflicting/missing/offset sources, confirm the source block/box geometry also remains untouched.
 5. Run again. Confirm no duplicate geometry and an already-verified result. In a separate copy, move a completed source or change a target OD field; rerun must report review without creating a second output.

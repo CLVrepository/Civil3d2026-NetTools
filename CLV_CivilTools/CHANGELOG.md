@@ -1,3 +1,10 @@
+## 2026-10-06 - Storm GIS native OD reader R2
+- Corrected use of the host-owned cached `ActiveProject.ODTables` wrapper: it is borrowed and no longer disposed after each point. Installed Autodesk 2026 metadata confirms the cached wrapper uses `AutoDelete=false`; individual table wrappers remain disposed normally.
+- Identity reads now query only `Structures`; complete transfers enumerate OD records attached to the selected entity instead of every table in the project, which can include attached drawings. Empty record collections are handled before enumeration.
+- Corrected the installed Map API point-field getter to `MapValue.Point`.
+- Native OD failures stop read-only preflight at the first affected handle, with operation, table/field context, native error code and the original exception chain/stack. They no longer cascade into misleading unknown-role/unmatched-geometry reports. Same-record identity, one-to-one matching, full readback verification and point preservation remain required.
+- The original trial's first `MapException` was not localized by its old diagnostic output. These corrections and improved diagnostics require a fresh Civil 3D session; successful compilation alone does not prove the native trial passes.
+
 ## 2026-10-06 - Storm GIS PREP-ALL role-safe centered trial
 - Separates coincident access and `-JS` junction-box Object Data using verified Structures records before geometry conversion; generic MANHOLE/SDMH text no longer routes a box to the access block.
 - Enforces one source per destination and one destination per source, with duplicate/ambiguous/offset sources retained for review. Junction linework is processed while DI and access blocks remain intact.

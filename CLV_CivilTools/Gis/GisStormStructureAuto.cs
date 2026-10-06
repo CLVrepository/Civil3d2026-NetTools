@@ -90,7 +90,9 @@ namespace CLV_CivilTools.Gis
                             string key = ent.Handle.ToString();
                             if (ent is DBPoint point && string.Equals(ent.Layer, StructuresPointLayer, StringComparison.OrdinalIgnoreCase))
                             {
-                                bool read = GisImportCommands.TryReadStructuresIdentity(id, out string name, out string part, out string detail);
+                                bool read = GisImportCommands.TryReadStructuresIdentity(id, out string name, out string part, out string detail, out bool nativeReadFailure);
+                                if (nativeReadFailure)
+                                    throw new InvalidOperationException($"Read-only OD preflight stopped at point {key}: {detail}");
                                 if (!read) { name = string.Empty; part = string.Empty; }
                                 var source = new SourceInfo(id, new StormStructureSource(key, name, part, point.Position.X, point.Position.Y));
                                 sources.Add(key, source);
@@ -125,10 +127,15 @@ namespace CLV_CivilTools.Gis
                             {
                                 // Existing prepared polygons need box OD proof. A DI rectangle
                                 // on the same final layer is not automatically box geometry.
-                                if (string.Equals(pl.Layer, TargetOuterLayer, StringComparison.OrdinalIgnoreCase) &&
-                                    (!GisImportCommands.TryReadStructuresIdentity(id, out string existingName, out string existingPart, out _) ||
-                                     StormStructureMatching.Classify(existingName, existingPart) != StormStructureRole.JunctionBox))
-                                    continue;
+                                if (string.Equals(pl.Layer, TargetOuterLayer, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    bool existingRead = GisImportCommands.TryReadStructuresIdentity(id, out string existingName,
+                                        out string existingPart, out string existingDetail, out bool nativeReadFailure);
+                                    if (nativeReadFailure)
+                                        throw new InvalidOperationException($"Read-only OD preflight stopped at outline {key}: {existingDetail}");
+                                    if (!existingRead || StormStructureMatching.Classify(existingName, existingPart) != StormStructureRole.JunctionBox)
+                                        continue;
+                                }
                                 Point3d center = GetEntityCenter(pl);
                                 targets.Add(key, new TargetInfo(id, new StormStructureTarget(key, StormStructureRole.JunctionBox, center.X, center.Y), false));
                             }
@@ -198,14 +205,14 @@ namespace CLV_CivilTools.Gis
                             reviews.Add($"point {source.Data.Id} ({source.Data.Name}) -> {target.Data.Id}: {failure}");
                     }
                 }
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06: converted/OD verified={converted}, already verified={alreadyVerified}, review items={reviews.Count}. All {sources.Count} Structures source points retained; no broad cleanup run.");
+                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06-R2: converted/OD verified={converted}, already verified={alreadyVerified}, review items={reviews.Count}. All {sources.Count} Structures source points retained; no broad cleanup run.");
                 foreach (string review in reviews.Distinct(StringComparer.Ordinal))
                     ed.WriteMessage("\n  REVIEW: " + review);
                 return reviews.Count == 0 && sources.Count > 0;
             }
             catch (System.Exception ex)
             {
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO stopped: {ex.Message}. Unverified source geometry and all imported source points are retained. No downstream cleanup was queued.");
+                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06-R2 stopped: {ex.Message}. Unverified source geometry and all imported source points are retained. No downstream cleanup was queued.");
                 return false;
             }
         }
@@ -344,6 +351,7 @@ namespace CLV_CivilTools.Gis
             if (source.ExtensionDictionary.IsNull) return false;
             var dictionary = (DBDictionary)tr.GetObject(source.ExtensionDictionary, OpenMode.ForRead);
             if (!dictionary.Contains(CompletionKey)) return false;
+            bool nativeReadFailure = false;
             try
             {
                 var record = (Xrecord)tr.GetObject(dictionary.GetAt(CompletionKey), OpenMode.ForRead);
@@ -365,14 +373,17 @@ namespace CLV_CivilTools.Gis
                         !IsRoleOutline(ent, StormStructureMatching.Classify(name, part)) ||
                         !OutlineMatchesAnchor(ent, StormStructureMatching.Classify(name, part), anchor))
                         throw new InvalidOperationException("completed output is missing or changed");
-                    if (!GisImportCommands.TryReadStructuresIdentity(id, out string outputName, out string outputPart, out string readDetail) ||
-                        !string.Equals(outputName, name, StringComparison.Ordinal) || !string.Equals(outputPart, part, StringComparison.Ordinal))
+                    bool outputRead = GisImportCommands.TryReadStructuresIdentity(id, out string outputName,
+                        out string outputPart, out string readDetail, out nativeReadFailure);
+                    if (nativeReadFailure)
+                        throw new InvalidOperationException($"Read-only OD preflight stopped at completed output {ent.Handle}: {readDetail}");
+                    if (!outputRead || !string.Equals(outputName, name, StringComparison.Ordinal) || !string.Equals(outputPart, part, StringComparison.Ordinal))
                         throw new InvalidOperationException("completed output OD changed: " + readDetail);
                     outputs.Add(id);
                 }
                 return true;
             }
-            catch (System.Exception ex)
+            catch (System.Exception ex) when (!nativeReadFailure)
             {
                 outputs.Clear();
                 detail = ex.Message;

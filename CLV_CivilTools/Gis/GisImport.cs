@@ -128,31 +128,45 @@ namespace CLV_CivilTools.Gis
         /// The caller must hold the active document lock while planning/applying work.
         /// </summary>
         internal static bool TryReadStructuresIdentity(ObjectId entityId, out string name, out string partSizeName, out string detail)
+            => TryReadStructuresIdentity(entityId, out name, out partSizeName, out detail, out _);
+
+        internal static bool TryReadStructuresIdentity(ObjectId entityId, out string name, out string partSizeName,
+            out string detail, out bool nativeReadFailure)
         {
             name = string.Empty;
             partSizeName = string.Empty;
+            nativeReadFailure = false;
             try
             {
                 RequireActiveOdEntity(entityId);
-                List<VerifiedOdRecord> records = ReadVerifiedOdRecords(entityId)
-                    .Where(r => string.Equals(r.TableName, "Structures", StringComparison.OrdinalIgnoreCase)).ToList();
+                // GetTableNames includes attached-drawing tables. Identity must read only
+                // the verified Structures table, never every table in the Map project.
+                List<VerifiedOdRecord> records = ReadVerifiedOdRecords(entityId, "Structures");
                 if (records.Count == 0)
-                    throw new InvalidOperationException("No Structures Object Data record is attached.");
+                    throw new VerifiedOdIdentityException("No Structures Object Data record is attached.");
 
                 VerifiedOdRecord first = records[0];
                 if (records.Any(r => !string.Equals(r.Key, first.Key, StringComparison.Ordinal)))
-                    throw new InvalidOperationException("Conflicting Structures records are attached; no identity was selected.");
+                    throw new VerifiedOdIdentityException("Conflicting Structures records are attached; no identity was selected.");
 
                 name = ReadVerifiedOdIdentityField(first, "Name");
                 partSizeName = ReadVerifiedOdIdentityField(first, "PartSizeName");
                 detail = $"Structures identity verified from {records.Count} record(s).";
                 return true;
             }
+            catch (VerifiedOdIdentityException ex)
+            {
+                name = string.Empty;
+                partSizeName = string.Empty;
+                detail = ex.Message;
+                return false;
+            }
             catch (System.Exception ex)
             {
                 name = string.Empty;
                 partSizeName = string.Empty;
-                detail = "Structures identity unavailable: " + OdErrorMessage(ex);
+                nativeReadFailure = true;
+                detail = "Structures native OD read failed: " + OdErrorMessage(ex);
                 return false;
             }
         }
@@ -270,7 +284,7 @@ namespace CLV_CivilTools.Gis
                     DisposeVerifiedOd(item.Record);
                     DisposeVerifiedOd(item.Table);
                 }
-                DisposeVerifiedOd(tables);
+                // ActiveProject.ODTables is borrowed from the host; never dispose it here.
             }
 
             try
@@ -294,6 +308,8 @@ namespace CLV_CivilTools.Gis
             Document? doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null || id.IsNull || !id.IsValid || id.IsErased || id.Database != doc.Database)
                 throw new InvalidOperationException("OD operations require a valid entity in the active drawing.");
+            if (HostApplicationServices.WorkingDatabase != doc.Database)
+                throw new InvalidOperationException("Active document and host WorkingDatabase differ; native OD access was stopped.");
         }
 
         private static object GetVerifiedOdTables()
@@ -302,52 +318,87 @@ namespace CLV_CivilTools.Gis
             object application = host.GetProperty("Application", BindingFlags.Public | BindingFlags.Static)?.GetValue(null)
                 ?? throw new InvalidOperationException("Map application is unavailable.");
             object project = GetVerifiedOdProperty(application, "ActiveProject");
+            // ProjectModel caches this wrapper (AutoDelete=false in the installed API).
+            // The caller borrows it; disposing the wrapper poisons later project reads.
             return GetVerifiedOdProperty(project, "ODTables");
         }
 
-        private static List<VerifiedOdRecord> ReadVerifiedOdRecords(ObjectId id)
+        private static List<VerifiedOdRecord> ReadVerifiedOdRecords(ObjectId id, string? onlyTable = null)
         {
             var result = new List<VerifiedOdRecord>();
+            // This collection belongs to the active Map project. Disposing it after a
+            // point can invalidate later access to the same host-owned collection.
             object tables = GetVerifiedOdTables();
+            object? table = null;
+            object? records = null;
+            string stage = "resolve OD table/records";
             try
             {
-                object names = InvokeVerifiedOd(tables, "GetTableNames")
-                    ?? throw new InvalidOperationException("OD table names are unavailable.");
-                if (names is not IEnumerable tableNames)
-                    throw new InvalidOperationException("OD table-name collection is not enumerable.");
-                foreach (object nameValue in tableNames)
+                Type modeType = tables.GetType().Assembly.GetType("Autodesk.Gis.Map.Constants.OpenMode", throwOnError: true)!;
+                object readMode = Enum.Parse(modeType, "OpenForRead", ignoreCase: false);
+                if (onlyTable != null)
                 {
-                    string tableName = nameValue as string
-                        ?? throw new InvalidOperationException("OD table name is not text.");
-                    object table = InvokeVerifiedOd(tables, "get_Item", tableName)
-                        ?? throw new InvalidOperationException("OD table is unavailable: " + tableName);
-                    object? records = null;
+                    stage = "test Structures table existence";
+                    object? defined = InvokeVerifiedOd(tables, "IsTableDefined", onlyTable);
+                    if (defined is not bool exists)
+                        throw new InvalidOperationException("IsTableDefined did not return a Boolean.");
+                    if (!exists) return result;
+                    table = InvokeVerifiedOd(tables, "get_Item", onlyTable)
+                        ?? throw new InvalidOperationException("Structures table is unavailable.");
+                    stage = "open Structures records for read";
+                    // The fourth native parameter is skipSubObj, not createIfMissing.
+                    records = InvokeVerifiedOd(table, "GetObjectTableRecords", 0u, id, readMode, false);
+                }
+                else
+                {
+                    // Enumerate only records attached to this entity. Tables from unrelated
+                    // attached drawings must not be queried using a current-DWG ObjectId.
+                    stage = "open entity-attached OD records for read";
+                    records = InvokeVerifiedOd(tables, "GetObjectRecords", 0u, id, readMode, false);
+                }
+                if (records == null)
+                    throw new InvalidOperationException("OD record collection is unavailable.");
+                stage = "read OD record count";
+                int expectedCount = GetVerifiedOdCount(records);
+                if (expectedCount == 0) return result;
+                if (records is not IEnumerable enumerable)
+                    throw new InvalidOperationException("OD record collection is not enumerable.");
+                int count = 0;
+                foreach (object record in enumerable)
+                {
+                    object? recordTable = null;
                     try
                     {
-                        Type modeType = table.GetType().Assembly.GetType("Autodesk.Gis.Map.Constants.OpenMode", throwOnError: true)!;
-                        object readMode = Enum.Parse(modeType, "OpenForRead", ignoreCase: false);
-                        records = InvokeVerifiedOd(table, "GetObjectTableRecords", 0u, id, readMode, false)
-                            ?? throw new InvalidOperationException("OD records are unavailable for " + tableName);
-                        if (records is not IEnumerable enumerable)
-                            throw new InvalidOperationException("OD record collection is not enumerable.");
-                        int count = 0;
-                        foreach (object record in enumerable)
-                        {
-                            try { result.Add(ReadVerifiedOdRecord(table, record, tableName)); }
-                            finally { DisposeVerifiedOd(record); }
-                            count++;
-                        }
-                        if (count != GetVerifiedOdCount(records))
-                            throw new InvalidOperationException("OD record enumeration was incomplete.");
+                        string tableName = onlyTable ?? (GetVerifiedOdProperty(record, "TableName") as string
+                            ?? throw new InvalidOperationException("OD record table name is not text."));
+                        stage = $"read record {count + 1} in {tableName}";
+                        recordTable = table ?? InvokeVerifiedOd(tables, "get_Item", tableName)
+                            ?? throw new InvalidOperationException("OD record table is unavailable: " + tableName);
+                        result.Add(ReadVerifiedOdRecord(recordTable, record, tableName));
                     }
                     finally
                     {
-                        DisposeVerifiedOd(records);
-                        DisposeVerifiedOd(table);
+                        DisposeVerifiedOd(record);
+                        if (table == null) DisposeVerifiedOd(recordTable);
                     }
+                    count++;
                 }
+                stage = "verify OD record count";
+                if (count != expectedCount)
+                    throw new InvalidOperationException("OD record enumeration was incomplete.");
             }
-            finally { DisposeVerifiedOd(tables); }
+            catch (System.Exception ex)
+            {
+                bool activeMatches = id.Database == AcadApp.DocumentManager.MdiActiveDocument?.Database;
+                bool workingMatches = id.Database == HostApplicationServices.WorkingDatabase;
+                throw new InvalidOperationException($"Entity {id.Handle}, table {onlyTable ?? "<attached>"}, stage {stage}, activeDatabaseMatches={activeMatches}, workingDatabaseMatches={workingMatches}.", ex);
+            }
+            finally
+            {
+                DisposeVerifiedOd(records);
+                DisposeVerifiedOd(table);
+                // Do not dispose tables: borrowed ActiveProject.ODTables.
+            }
             return result;
         }
 
@@ -377,7 +428,7 @@ namespace CLV_CivilTools.Gis
                             "Character" => GetVerifiedOdProperty(mapValue, "StrValue"),
                             "Integer" => GetVerifiedOdProperty(mapValue, "Int32Value"),
                             "Real" => GetVerifiedOdProperty(mapValue, "DoubleValue"),
-                            "Point" => GetVerifiedOdProperty(mapValue, "Point3dValue"),
+                            "Point" => GetVerifiedOdProperty(mapValue, "Point"),
                             _ => throw new InvalidOperationException("Unsupported OD field type: " + kind)
                         };
                         if ((kind == "Character" && value is not string) ||
@@ -386,6 +437,10 @@ namespace CLV_CivilTools.Gis
                             (kind == "Point" && (value is not Point3d point || !double.IsFinite(point.X) || !double.IsFinite(point.Y) || !double.IsFinite(point.Z))))
                             throw new InvalidOperationException("Unexpected typed OD value for " + name);
                         fields.Add(new VerifiedOdField(name, kind, value));
+                    }
+                    catch (System.Exception ex)
+                    {
+                        throw new InvalidOperationException($"Read table {tableName}, field index {i}.", ex);
                     }
                     finally
                     {
@@ -402,7 +457,7 @@ namespace CLV_CivilTools.Gis
         {
             List<VerifiedOdField> fields = record.Fields.Where(f => string.Equals(f.Name, fieldName, StringComparison.OrdinalIgnoreCase)).ToList();
             if (fields.Count != 1 || fields[0].Kind != "Character" || fields[0].Value is not string text || string.IsNullOrWhiteSpace(text))
-                throw new InvalidOperationException("Structures must have one nonblank Character field named " + fieldName + ".");
+                throw new VerifiedOdIdentityException("Structures must have one nonblank Character field named " + fieldName + ".");
             return text.Trim();
         }
 
@@ -411,8 +466,17 @@ namespace CLV_CivilTools.Gis
                 .SequenceEqual(b.Select(r => r.Key).OrderBy(k => k, StringComparer.Ordinal), StringComparer.Ordinal);
 
         private static object GetVerifiedOdProperty(object target, string name)
-            => target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance)?.GetValue(target)
-                ?? throw new MissingMemberException(target.GetType().FullName, name);
+        {
+            try
+            {
+                return target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance)?.GetValue(target)
+                    ?? throw new MissingMemberException(target.GetType().FullName, name);
+            }
+            catch (System.Exception ex)
+            {
+                throw new InvalidOperationException($"Read property {target.GetType().FullName}.{name}.", ex);
+            }
+        }
 
         private static int GetVerifiedOdCount(object target)
             => Convert.ToInt32(GetVerifiedOdProperty(target, "Count"), CultureInfo.InvariantCulture);
@@ -464,8 +528,13 @@ namespace CLV_CivilTools.Gis
             }
             if (matches.Count != 1)
                 throw new InvalidOperationException($"Expected one supported Map OD method {name}; found {matches.Count}.");
-            object? result = matches[0].Method.Invoke(target, matches[0].Args);
-            if (result is bool success && !success)
+            object? result;
+            try { result = matches[0].Method.Invoke(target, matches[0].Args); }
+            catch (System.Exception ex)
+            {
+                throw new InvalidOperationException($"Invoke {target.GetType().FullName}.{name}({string.Join(", ", matches[0].Method.GetParameters().Select(p => p.ParameterType.Name))}).", ex);
+            }
+            if (result is bool success && !success && name != "IsTableDefined")
                 throw new InvalidOperationException("Map OD method returned failure: " + name);
             return result;
         }
@@ -478,7 +547,47 @@ namespace CLV_CivilTools.Gis
         }
 
         private static string OdErrorMessage(System.Exception ex)
-            => (ex is TargetInvocationException invocation && invocation.InnerException != null ? invocation.InnerException : ex).Message;
+        {
+            var details = new List<string>();
+            var seen = new HashSet<System.Exception>();
+            for (System.Exception? current = ex; current != null && seen.Add(current); current = current.InnerException)
+            {
+                if (current is TargetInvocationException && current.InnerException != null) continue;
+                string code = string.Empty;
+                foreach (string property in new[] { "ErrorCode", "ErrorStatus" })
+                {
+                    try
+                    {
+                        object? value = current.GetType().GetProperty(property)?.GetValue(current);
+                        if (value != null)
+                        {
+                            code += $", {property}={value}";
+                            if (property == "ErrorCode")
+                            {
+                                Type? enumType = current.GetType().Assembly.GetType("Autodesk.Gis.Map.Constants.ErrorCode", throwOnError: false);
+                                if (enumType?.IsEnum == true)
+                                {
+                                    object enumValue = Enum.ToObject(enumType, value);
+                                    code += $" ({enumValue})";
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+                details.Add($"{current.GetType().FullName}: {current.Message}{code}, HResult=0x{current.HResult:X8}");
+                if (current.InnerException == null && !string.IsNullOrWhiteSpace(current.StackTrace))
+                    details.Add("Stack: " + string.Join(" | ", current.StackTrace.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Take(8).Select(line => line.Trim())));
+            }
+            // Full original exception chain/stack is retained for a diagnostic trial;
+            // the concise prefix above includes native error codes and exact operations.
+            return string.Join(" -> ", details) + Environment.NewLine + ex.ToString();
+        }
+
+        private sealed class VerifiedOdIdentityException : InvalidOperationException
+        {
+            internal VerifiedOdIdentityException(string message) : base(message) { }
+        }
 
         private sealed class VerifiedOdField
         {

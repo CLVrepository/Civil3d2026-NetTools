@@ -1,3 +1,6 @@
+## 2026-10-06 - Storm GIS PREP native reader R2
+- `CLV-GIS-STRM-AUTO` / `CLV-GIS-STORM-GIS`: revision `2026.10.06-R2` corrects native OD collection ownership and point-value access. A native preflight error now stops immediately with a diagnostic instead of continuing to unrelated match errors. No new commands or prompts; retry native trials only in a fresh Civil 3D session and disposable drawing copy.
+
 ## 2026-10-06 - Storm GIS PREP-ALL centered trial
 - `CLV-GIS-STORM-GIS` (existing storm GIS PREP-ALL routing): synchronously runs role-aware structure preparation. Queues existing pipe offset ALL only when all structure sources/destinations are resolved and OD verified; broad managed cleanup is omitted so retained imported points remain available.
 - `CLV-GIS-STRM-AUTO`: reads same-record Structures Name/PartSizeName, separates DI/access/junction-box roles, accepts only unambiguous center matches within 0.10 drawing units, verifies native OD before geometry replacement, and reports review handles. All imported source points remain; reruns verify linked outputs without re-exploding completed structures.
