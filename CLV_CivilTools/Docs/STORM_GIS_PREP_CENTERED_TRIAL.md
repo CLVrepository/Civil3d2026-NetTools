@@ -1,6 +1,16 @@
 # Storm GIS PREP-ALL: role-safe trial
 
-Revision: 2026.10.06-R3. Use a disposable copy of the test drawing first.
+Revision: 2026.10.06-R4. Use a disposable copy of the test drawing first.
+
+## R4 evaluated access visibility and graphics registration
+
+The R3 native trial reported 13 verified conversions, one explicitly preserved null pipe end, and eight access reviews. All access blocks matched their source, but each produced three candidate outer circles and was rolled back. The observed block `D5DE6` uses evaluated record `*U481` and `Visibility1 = 60" MANHOLE`: the 2.5-radius inner and 3.0-radius outer are visible, while the 48/72-inch variants are hidden.
+
+R4 materializes only visible simple geometry from the current evaluated block record, using its actual block transforms. Visibility is checked before descending into nested blocks; a hidden ancestor suppresses the whole branch. No largest-circle selection, part-text size inference or forced visibility is used. Active unsupported complex geometry and external references stop conversion for review. Exactly one centered outer access outline and full OD readback are still required. DI block processing is unchanged.
+
+R3 also showed that the outer geometry appeared after changing from model space to paper space and back, while REGEN and REGENALL alone did not display it. Layers were on and thawed. R4 explicitly marks surviving created/touched entities graphics-modified and queues the changes while their transaction is active, then regenerates/updates the screen after commit. It does not change entity visibility flags, layer state, or the active space. The native cause of the delayed display is not yet proven; this graphics path needs a fresh disposable-drawing trial.
+
+For that trial, check all eight access blocks, especially nondefault 60/72-inch states: only the selected inner/outer pair should remain, with access OD on the single outer. Verify immediate outer display before any space switch, and rerun to verify completion ownership/OD. Pipes should start only when the structure summary has no genuine reviews; inspect the external helper's own completion output separately.
 
 ## R3 access/box association and display correction
 
@@ -67,7 +77,7 @@ These tests cover classification, exact base pairing with independent centers, d
 ## Disposable-drawing trial checklist
 
 1. Make a separate DWG copy. Keep the original supplied drawing untouched. NETLOAD the newly built development DLL into a fresh Civil 3D 2026 session so an old loaded assembly cannot mask the result.
-2. Run `CLV-GIS-STRM-AUTO` first. Confirm the `2026.10.06-R3` revision stamp, converted/OD-verified count, retained-point count, and any REVIEW source/destination handles.
+2. Run `CLV-GIS-STRM-AUTO` first. Confirm the `2026.10.06-R4` revision stamp, converted/OD-verified count, retained-point count, and any REVIEW source/destination handles.
 3. At SDMH-08 verify two distinct outer assets: circular access with the unsuffixed access OD, and rectangular box with the `-JS` box OD. Inspect every field on each target, not just Name. Confirm the DI retains its existing intended outline and OD and excludes embedded curb/reference geometry.
 4. Confirm all original imported source points still exist with unchanged native OD. For unknown/conflicting/missing/offset sources, confirm the source block/box geometry also remains untouched.
 5. Run again. Confirm no duplicate geometry and an already-verified result. In a separate copy, move a completed source or change a target OD field; rerun must report review without creating a second output.
@@ -78,4 +88,4 @@ These tests cover classification, exact base pairing with independent centers, d
 
 ## Rollback
 
-The pre-edit Git backup is `backup/storm-gis-prep-2026-10-06`, pointing to `45f1316361d1946ec14e35beb7a4cf69a221dcfc`. The first trial is also retained at `backup/storm-gis-prep-2026-10-06-first-trial` (`e71058d0ca8fec6e93ea44ef60afe42d0e8f1fd0`), and the pre-R3 R2 trial at `backup/storm-gis-prep-2026-10-06-r2-trial` (`5878c320c5ebbad5af91833fefad36bc6cf18d0d`). Use a new branch or a normal revert to restore code; do not force-reset shared branches. Retain the pre-trial drawing copy separately. No new shared LISP file, production deployment, or drawing save is part of this source change.
+The pre-edit Git backup is `backup/storm-gis-prep-2026-10-06`, pointing to `45f1316361d1946ec14e35beb7a4cf69a221dcfc`. The first trial is also retained at `backup/storm-gis-prep-2026-10-06-first-trial` (`e71058d0ca8fec6e93ea44ef60afe42d0e8f1fd0`), and the pre-R3 R2 trial at `backup/storm-gis-prep-2026-10-06-r2-trial` (`5878c320c5ebbad5af91833fefad36bc6cf18d0d`). The pre-R4 R3 trial is retained at `backup/storm-gis-prep-2026-10-06-r3-trial` (`33be9261e55a885333237fc0b3ed3694d3c67f17`). Use a new branch or a normal revert to restore code; do not force-reset shared branches. Retain the pre-trial drawing copy separately. No new shared LISP file, production deployment, or drawing save is part of this source change.

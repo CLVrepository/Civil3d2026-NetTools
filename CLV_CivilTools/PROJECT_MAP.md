@@ -1,3 +1,8 @@
+## 2026-10-06 - Evaluated access geometry and graphics R4
+- `Gis/GisStormStructureAuto.cs`: access-only materialization reads the reference's evaluated `BlockTableRecord`, not its authoring `DynamicBlockTableRecord`, and clones simple visible leaves using the accumulated parent/child `BlockTransform`. It suppresses hidden branches and rejects active unsupported complex geometry or external references. The existing DI `ExplodeRecursive` path remains unchanged.
+- `Gis/StormStructureVisibility.cs`: pure visibility-first traversal shared by the actual host path and unit tests; hidden ancestors are not traversed, callbacks propagate failures, and nesting is bounded. The existing exactly-one outer access validator and native OD transaction gates remain.
+- Verified new geometry and completion-linked rerun outputs receive `RecordGraphicsModified(true)` and `QueueForGraphicsFlush` while transaction-resident. A batch `Regen`/`UpdateScreen` follows commit. This is a graphics-registration correction for trial, not a claim of verified native display behavior.
+
 ## 2026-10-06 - Independent access/box centers R3
 - `Gis/StormStructureMatching.cs`: removes the cross-role source-to-source distance gate. Exact unique base names establish the association. DI/access keep independent 0.10 center matching; box targets use tested footprint containment within the original 25-unit bound. Closed straight survey polylines no longer need mathematically perfect right angles. `GisStormStructureAuto.cs` refreshes display after committed batch work; no layer visibility changes or DI conversion rewrite.
 

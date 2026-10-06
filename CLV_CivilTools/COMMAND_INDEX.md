@@ -1,3 +1,6 @@
+## 2026-10-06 - Storm GIS access visibility R4
+- `CLV-GIS-STRM-AUTO` / `CLV-GIS-STORM-GIS`: revision `2026.10.06-R4` uses only the current evaluated visibility state for access-block geometry and explicitly queues verified geometry for graphics update. DI conversion, source-role matching and pipe gating remain. No new commands or prompts.
+
 ## 2026-10-06 - Storm GIS PREP pairing R3
 - `CLV-GIS-STRM-AUTO` / `CLV-GIS-STORM-GIS`: revision `2026.10.06-R3` permits eccentric access/box pairs, using each source's own geometry location. Also handles existing NDOT/grate inlet outlines while preserving DI identity, and explicitly lists retained valid UFLS null/STUB pipe ends without requiring geometry for them. Regenerates the view after committed structure work. No new commands or prompts.
 

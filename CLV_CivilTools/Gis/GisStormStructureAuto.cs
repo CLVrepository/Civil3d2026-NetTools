@@ -224,7 +224,21 @@ namespace CLV_CivilTools.Gis
                                 }
                             }
                             if (verified)
+                            {
+                                try
+                                {
+                                    using Transaction graphics = db.TransactionManager.StartTransaction();
+                                    QueueEntityGraphics(graphics, source.Outputs);
+                                    graphics.Commit();
+                                }
+                                catch (System.Exception ex)
+                                {
+                                    // A graphics-only write may be denied on a locked layer.
+                                    // Keep verified data success; never override the user's lock.
+                                    ed.WriteMessage($"\nDISPLAY WARNING: point {source.Data.Id} output OD is verified, but its graphics refresh was not applied: {ex.Message}");
+                                }
                                 alreadyVerified++;
+                            }
                             continue;
                         }
                         if (TryConvert(doc, source, target, reserved, out string failure))
@@ -235,10 +249,10 @@ namespace CLV_CivilTools.Gis
                 }
                 if (converted > 0 || alreadyVerified > 0)
                 {
-                    try { ed.Regen(); }
-                    catch (System.Exception ex) { ed.WriteMessage($"\nStorm GIS display refresh failed: {ex.Message}. Run REGEN to refresh the view."); }
+                    try { ed.Regen(); ed.UpdateScreen(); }
+                    catch (System.Exception ex) { ed.WriteMessage($"\nStorm GIS display refresh failed: {ex.Message}. Verified geometry remains in the drawing; inspect it after changing space or reopening the test copy."); }
                 }
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06-R3: converted/OD verified={converted}, already verified={alreadyVerified}, review items={reviews.Count}, intentionally retained null pipe ends={preservedPipeEndNotices.Count}. All {sources.Count} Structures source points retained; no broad cleanup run. Planned targets: total={targets.Count}, existing outlines={targets.Values.Count(t => t.Data.IsExistingOutline)}.");
+                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06-R4: converted/OD verified={converted}, already verified={alreadyVerified}, review items={reviews.Count}, intentionally retained null pipe ends={preservedPipeEndNotices.Count}. All {sources.Count} Structures source points retained; no broad cleanup run. Planned targets: total={targets.Count}, existing outlines={targets.Values.Count(t => t.Data.IsExistingOutline)}.");
                 foreach (string preserved in preservedPipeEndNotices)
                     ed.WriteMessage("\n  PRESERVED NULL PIPE END (no geometry expected): " + preserved);
                 foreach (string review in reviews.Distinct(StringComparer.Ordinal))
@@ -247,7 +261,7 @@ namespace CLV_CivilTools.Gis
             }
             catch (System.Exception ex)
             {
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06-R3 stopped: {ex.Message}. Unverified source geometry and all imported source points are retained. No downstream cleanup was queued.");
+                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06-R4 stopped: {ex.Message}. Unverified source geometry and all imported source points are retained. No downstream cleanup was queued.");
                 return false;
             }
         }
@@ -313,7 +327,10 @@ namespace CLV_CivilTools.Gis
                         return false;
                     }
                     int count = 0;
-                    ExplodeRecursive(block, space, tr, created, ref count);
+                    if (target.Data.Role == StormStructureRole.Access)
+                        MaterializeVisibleAccessGeometry(block, space, tr, created);
+                    else
+                        ExplodeRecursive(block, space, tr, created, ref count);
                     foreach (ObjectId id in created)
                     {
                         if (tr.GetObject(id, OpenMode.ForWrite, false) is not Entity ent || ent.IsErased) continue;
@@ -327,7 +344,7 @@ namespace CLV_CivilTools.Gis
                     }
                     if (outputs.Count == 0 || (target.Data.Role == StormStructureRole.Access && outputs.Count != 1))
                     {
-                        detail = $"expected verified role-specific outer outline(s), one for access; found {outputs.Count}";
+                        detail = $"expected verified role-specific outer outline(s), one visible evaluated outline for access; found {outputs.Count}";
                         return false;
                     }
                 }
@@ -347,6 +364,10 @@ namespace CLV_CivilTools.Gis
                 if (!innerId.IsNull)
                     ((Entity)tr.GetObject(innerId, OpenMode.ForWrite)).Layer = TargetInnerLayer;
                 WriteCompletion(tr, source, outputs);
+                // Native OD can touch newly appended entities before their first close.
+                // Explicitly register surviving geometry while it is transaction-resident;
+                // a later REGEN alone did not display new outer outlines in the R3 trial.
+                QueueEntityGraphics(tr, innerId.IsNull ? created : created.Append(innerId));
                 tr.Commit();
                 reserved.Add(target.Id);
                 if (!innerId.IsNull) reserved.Add(innerId);
@@ -362,6 +383,17 @@ namespace CLV_CivilTools.Gis
         private static bool IsVerified(GisImportCommands.ObjectDataCopyStatus status) =>
             status == GisImportCommands.ObjectDataCopyStatus.CopiedVerified ||
             status == GisImportCommands.ObjectDataCopyStatus.AlreadyEquivalent;
+
+        private static void QueueEntityGraphics(Transaction tr, IEnumerable<ObjectId> ids)
+        {
+            foreach (ObjectId id in ids.Distinct())
+            {
+                if (id.IsNull || id.IsErased) continue;
+                if (tr.GetObject(id, OpenMode.ForWrite, false) is Entity entity && !entity.IsErased)
+                    entity.RecordGraphicsModified(true);
+            }
+            tr.TransactionManager.QueueForGraphicsFlush();
+        }
 
         private static void WriteCompletion(Transaction tr, SourceInfo source, List<ObjectId> outputs)
         {
@@ -539,6 +571,59 @@ namespace CLV_CivilTools.Gis
             createdIds.Add(clone.ObjectId);
             createdCount++;
         }
+
+        private static void MaterializeVisibleAccessGeometry(BlockReference block, BlockTableRecord space,
+            Transaction tr, List<ObjectId> createdIds)
+        {
+            // BlockTableRecord is the evaluated reference (*U... for this dynamic block).
+            // DynamicBlockTableRecord is the authoring definition and includes all sizes.
+            // Read the evaluated visibility before cloning; do not ask Explode to resolve
+            // dynamic states and do not turn hidden size variants visible.
+            StormStructureVisibility.VisitVisible(
+                new AccessGeometryNode(block, Matrix3d.Identity),
+                node => !node.Entity.IsErased && node.Entity.Visible,
+                node =>
+                {
+                    if (node.Entity is not BlockReference nested) return null;
+                    var definition = (BlockTableRecord)tr.GetObject(nested.BlockTableRecord, OpenMode.ForRead);
+                    if (definition.IsFromExternalReference)
+                        throw new InvalidOperationException("access block contains an external reference; review required");
+                    Matrix3d transform = node.ToWorld * nested.BlockTransform;
+                    var children = new List<AccessGeometryNode>();
+                    foreach (ObjectId id in definition)
+                        if (tr.GetObject(id, OpenMode.ForRead, false) is Entity child)
+                            children.Add(new AccessGeometryNode(child, transform));
+                    return children;
+                },
+                node =>
+                {
+                    Entity original = node.Entity;
+                    // Keep the existing reference-text/curb cleanup policy. Small circles
+                    // are tested after their world transform by the normal conversion pass.
+                    if (original is AttributeDefinition || original is AttributeReference ||
+                        original is DBText || original is MText ||
+                        original.Layer.IndexOf("CURB", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        string.Equals(original.Layer, "C-DETL-MARK", StringComparison.OrdinalIgnoreCase))
+                        return;
+                    // These simple entities do not own child database objects. Avoid a
+                    // shallow clone of a complex entity (e.g. old-style Polyline2d).
+                    if (original is not Circle && original is not AcPolyline && original is not Line &&
+                        original is not Arc && original is not Ellipse)
+                        throw new InvalidOperationException($"unsupported visible access geometry {original.GetType().Name}; review required");
+                    Entity? clone = (Entity)original.Clone();
+                    try
+                    {
+                        clone.TransformBy(node.ToWorld);
+                        space.AppendEntity(clone);
+                        tr.AddNewlyCreatedDBObject(clone, true);
+                        createdIds.Add(clone.ObjectId);
+                        clone = null; // The transaction now owns the database-resident copy.
+                    }
+                    finally { clone?.Dispose(); }
+                });
+        }
+
+        private sealed record AccessGeometryNode(Entity Entity, Matrix3d ToWorld);
 
         private static bool ShouldEraseExplodedEntity(Entity ent)
         {

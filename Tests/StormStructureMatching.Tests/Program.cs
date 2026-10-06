@@ -82,6 +82,16 @@ internal static class Program
             ("Invalid claims still participate in ownership conflicts", InvalidCompletionOverlap),
             ("Empty completion planning is valid", EmptyCompletions),
             ("Accepted completion outputs are snapshots", CompletionOutputSnapshot),
+            ("Visibility manifest visits only the selected manhole pair", VisibilityManholeManifest),
+            ("Hidden ancestor suppresses all descendants", VisibilityHiddenParent),
+            ("Hidden root is never expanded", VisibilityHiddenRoot),
+            ("All hidden children produce no leaves", VisibilityAllHidden),
+            ("Empty container is not a geometry leaf", VisibilityEmptyContainer),
+            ("Visibility callback failures propagate unchanged", VisibilityCallbackFailures),
+            ("Visibility traversal bounds visible nesting", VisibilityDepthBound),
+            ("Visible traversal preserves depth-first entity order", VisibilityOrdering),
+            ("Null traversal callbacks fail before traversal", VisibilityNullCallbacks),
+            ("Null child collection identifies a leaf", VisibilityLeaf),
             ("Rejects nonfinite and missing source data", InvalidSources),
             ("Rejects unknown and invalid target roles", InvalidTargets),
             ("Returns issues for unmatched sources and targets", UnmatchedIssues),
@@ -684,6 +694,147 @@ internal static class Program
         outputs[1] = "CHANGED";
         Check(plan.Accepted[0].OutputIds.SequenceEqual(new[] { "PRIMARY", "SECONDARY" }));
     }
+
+    private sealed record VisibilityNode(string Name, bool Visible,
+        IReadOnlyList<VisibilityNode>? Children = null, double? Radius = null);
+
+    private static List<VisibilityNode> VisibleLeaves(VisibilityNode root)
+    {
+        var leaves = new List<VisibilityNode>();
+        StormStructureVisibility.VisitVisible(root, n => n.Visible, n => n.Children, leaves.Add);
+        return leaves;
+    }
+
+    private static void VisibilityManholeManifest()
+    {
+        // Read-only D5DE6 / evaluated *U481 evidence: Visibility1 = 60 MANHOLE.
+        var root = new VisibilityNode("*U481", true, new[]
+        {
+            new VisibilityNode("48-inner", false, Radius: 2.0),
+            new VisibilityNode("48-outer", false, Radius: 2.4167),
+            new VisibilityNode("60-inner", true, Radius: 2.5),
+            new VisibilityNode("60-outer", true, Radius: 3.0),
+            new VisibilityNode("72-inner", false, Radius: 3.0),
+            new VisibilityNode("72-outer", false, Radius: 3.5833)
+        });
+        List<VisibilityNode> leaves = VisibleLeaves(root);
+        Check(leaves.Select(n => n.Name).SequenceEqual(new[] { "60-inner", "60-outer" }));
+        Check(leaves.Select(n => n.Radius).SequenceEqual(new double?[] { 2.5, 3.0 }));
+
+        // These 48/72 cases model changing the visible-state flags using the same
+        // measured radii. Only the 60-inch state above was observed in the native
+        // D5DE6 probe; these variations are traversal tests, not native-state proof.
+        foreach ((int state, double innerRadius, double outerRadius) in new[]
+        {
+            (48, 2.0, 2.4167),
+            (72, 3.0, 3.5833)
+        })
+        {
+            VisibilityNode modeled = root with
+            {
+                Children = root.Children!.Select(n => n with
+                {
+                    Visible = n.Name.StartsWith(state + "-", StringComparison.Ordinal)
+                }).ToArray()
+            };
+            leaves = VisibleLeaves(modeled);
+            Check(leaves.Select(n => n.Name).SequenceEqual(new[] { state + "-inner", state + "-outer" }));
+            Check(leaves.Select(n => n.Radius).SequenceEqual(new double?[] { innerRadius, outerRadius }));
+        }
+    }
+    private static void VisibilityHiddenParent()
+    {
+        var hidden = new VisibilityNode("hidden-parent", false, new[] { new VisibilityNode("visible-child", true) });
+        var root = new VisibilityNode("root", true, new[] { hidden, new VisibilityNode("sibling", true) });
+        var checkedNames = new List<string>();
+        var leaves = new List<string>();
+        StormStructureVisibility.VisitVisible(root,
+            n => { checkedNames.Add(n.Name); return n.Visible; },
+            n => n.Name == "hidden-parent" ? throw new InvalidOperationException("Hidden parent was expanded") : n.Children,
+            n => leaves.Add(n.Name));
+        Check(!checkedNames.Contains("visible-child"));
+        Check(leaves.SequenceEqual(new[] { "sibling" }));
+    }
+    private static void VisibilityHiddenRoot()
+    {
+        var root = new VisibilityNode("hidden", false, new[] { new VisibilityNode("child", true) });
+        int leafCount = 0;
+        StormStructureVisibility.VisitVisible(root, n => n.Visible,
+            _ => throw new InvalidOperationException("Hidden root was expanded"), _ => leafCount++);
+        Check(leafCount == 0);
+    }
+    private static void VisibilityAllHidden()
+    {
+        var root = new VisibilityNode("root", true, new[]
+        {
+            new VisibilityNode("A", false), new VisibilityNode("B", false), new VisibilityNode("C", false)
+        });
+        Check(VisibleLeaves(root).Count == 0);
+    }
+    private static void VisibilityEmptyContainer()
+        => Check(VisibleLeaves(new VisibilityNode("empty", true, Array.Empty<VisibilityNode>())).Count == 0);
+    private static void VisibilityCallbackFailures()
+    {
+        var root = new VisibilityNode("leaf", true);
+        for (int stage = 0; stage < 3; stage++)
+        {
+            var expected = new InvalidOperationException("Callback " + stage);
+            Exception? caught = null;
+            try
+            {
+                StormStructureVisibility.VisitVisible(root,
+                    n => stage == 0 ? throw expected : n.Visible,
+                    n => stage == 1 ? throw expected : n.Children,
+                    _ => { if (stage == 2) throw expected; });
+            }
+            catch (Exception ex) { caught = ex; }
+            Check(ReferenceEquals(caught, expected), "Traversal swallowed or replaced callback failure");
+        }
+    }
+    private static void VisibilityDepthBound()
+    {
+        VisibilityNode root = new VisibilityNode("leaf", true);
+        for (int i = 1; i < StormStructureVisibility.MaximumDepth; i++)
+            root = new VisibilityNode("level-" + i, true, new[] { root });
+        Check(VisibleLeaves(root).Count == 1);
+        root = new VisibilityNode("one-too-deep", true, new[] { root });
+        bool threw = false;
+        try { VisibleLeaves(root); }
+        catch (InvalidOperationException) { threw = true; }
+        Check(threw, "Excessive nesting was not bounded");
+        threw = false;
+        try { StormStructureVisibility.VisitVisible(0, _ => true, n => new[] { n }, _ => { }); }
+        catch (InvalidOperationException) { threw = true; }
+        Check(threw, "A visible cycle was not bounded");
+    }
+    private static void VisibilityOrdering()
+    {
+        var root = new VisibilityNode("root", true, new[]
+        {
+            new VisibilityNode("A", true),
+            new VisibilityNode("branch", true, new[] { new VisibilityNode("B1", true), new VisibilityNode("B2", true) }),
+            new VisibilityNode("C", true)
+        });
+        Check(VisibleLeaves(root).Select(n => n.Name).SequenceEqual(new[] { "A", "B1", "B2", "C" }));
+    }
+    private static void VisibilityNullCallbacks()
+    {
+        var root = new VisibilityNode("leaf", true);
+        int callbacks = 0;
+        Func<VisibilityNode, bool> visible = _ => { callbacks++; return true; };
+        Func<VisibilityNode, IReadOnlyList<VisibilityNode>?> children = _ => { callbacks++; return null; };
+        Action<VisibilityNode> visit = _ => callbacks++;
+        int thrown = 0;
+        try { StormStructureVisibility.VisitVisible(root, null!, children, visit); }
+        catch (ArgumentNullException ex) { Check(ex.ParamName == "isVisible"); thrown++; }
+        try { StormStructureVisibility.VisitVisible(root, visible, null!, visit); }
+        catch (ArgumentNullException ex) { Check(ex.ParamName == "getChildren"); thrown++; }
+        try { StormStructureVisibility.VisitVisible(root, visible, children, null!); }
+        catch (ArgumentNullException ex) { Check(ex.ParamName == "visitLeaf"); thrown++; }
+        Check(thrown == 3 && callbacks == 0);
+    }
+    private static void VisibilityLeaf()
+        => Check(VisibleLeaves(new VisibilityNode("leaf", true)).Single().Name == "leaf");
     private static void InvalidSources()
     {
         foreach (StormStructureSource source in new[] { Access(""), Access("A", ""), Access("A", x: double.NaN), Access("A", y: double.PositiveInfinity), new StormStructureSource("A", "SD-1", "Manhole", 0, 0) })

@@ -3,6 +3,7 @@
 This zero-package console test runner compiles the actual production
 `CLV_CivilTools/Gis/StormStructureMatching.cs` file without Autodesk assemblies.
 It validates classification and conservative role-aware one-to-one planning.
+It also links the actual `StormStructureVisibility.cs` production traversal.
 
 Run from the repository root with an installed .NET 8 SDK:
 
@@ -49,6 +50,14 @@ case-insensitive collisions, malformed claims, disjoint valid claims, order
 independence, and immutable snapshots of accepted output IDs. The host must remove
 every accepted output from ordinary candidates before adding its one logical
 completed target; rejected claims reserve nothing and remain review-only.
+Visibility tests use the observed 48/60/72-inch evaluated-block manifest, selecting
+only the visible 60-inch inner/outer pair. Additional modeled 48/72 active-state
+variations assert exactly their matching inner/outer pair and correct radii; only
+the 60-inch state is supported by the native probe. They cover hidden ancestors/root,
+all-hidden contents, empty containers versus leaves, callback failure propagation,
+32-level nesting/cycle bounds, traversal order and null callback validation.
+Native evaluated-block lookup, transforms and resulting Civil geometry still
+require host validation; these tests exercise the production traversal itself.
 Repeatability here does not
 claim drawing-level rerun safety: persistent output ownership, OD copy/readback,
 rollback, actual block centers, and Civil 3D integration require host tests.
