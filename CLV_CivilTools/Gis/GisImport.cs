@@ -22,6 +22,16 @@ namespace CLV_CivilTools.Gis
 {
     public static class GisImportCommands
     {
+        internal enum ObjectDataCopyStatus
+        {
+            CopiedVerified,
+            AlreadyEquivalent,
+            Conflict,
+            ReadFailed,
+            WriteFailed,
+            VerifyFailed
+        }
+
         private const string SourceCoordinateSystem = "NAD_1983_StatePlane_Nevada_East_FIPS_2701_Feet";
         private const string TempBoundaryLayer = "GIS-TEMP-BOUNDARY";
         private const string ManagedMapApiAssemblyName = "ManagedMapApi";
@@ -111,6 +121,393 @@ namespace CLV_CivilTools.Gis
         {
             RunInteractive(fromPalette: true);
         }
+
+        /// <summary>
+        /// Reads both identity fields from the same Structures record. Unlike the legacy
+        /// field lookup, this never combines values from different tables or records.
+        /// The caller must hold the active document lock while planning/applying work.
+        /// </summary>
+        internal static bool TryReadStructuresIdentity(ObjectId entityId, out string name, out string partSizeName, out string detail)
+        {
+            name = string.Empty;
+            partSizeName = string.Empty;
+            try
+            {
+                RequireActiveOdEntity(entityId);
+                List<VerifiedOdRecord> records = ReadVerifiedOdRecords(entityId)
+                    .Where(r => string.Equals(r.TableName, "Structures", StringComparison.OrdinalIgnoreCase)).ToList();
+                if (records.Count == 0)
+                    throw new InvalidOperationException("No Structures Object Data record is attached.");
+
+                VerifiedOdRecord first = records[0];
+                if (records.Any(r => !string.Equals(r.Key, first.Key, StringComparison.Ordinal)))
+                    throw new InvalidOperationException("Conflicting Structures records are attached; no identity was selected.");
+
+                name = ReadVerifiedOdIdentityField(first, "Name");
+                partSizeName = ReadVerifiedOdIdentityField(first, "PartSizeName");
+                detail = $"Structures identity verified from {records.Count} record(s).";
+                return true;
+            }
+            catch (System.Exception ex)
+            {
+                name = string.Empty;
+                partSizeName = string.Empty;
+                detail = "Structures identity unavailable: " + OdErrorMessage(ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Copies every typed OD record synchronously, only to an empty OD destination.
+        /// Existing equivalent data is a no-op; differing existing data is never changed.
+        /// Caller must abort its geometry transaction on any non-success status and retain
+        /// the source. A host write/readback failure can leave partial OD on a destination;
+        /// this method deliberately never deletes native records to conceal that failure.
+        /// </summary>
+        internal static ObjectDataCopyStatus CopyObjectDataVerified(ObjectId sourceId, ObjectId destinationId, out string detail)
+        {
+            List<VerifiedOdRecord> source;
+            List<VerifiedOdRecord> existing;
+            try
+            {
+                RequireActiveOdEntity(sourceId);
+                RequireActiveOdEntity(destinationId);
+                source = ReadVerifiedOdRecords(sourceId);
+                existing = ReadVerifiedOdRecords(destinationId);
+                if (source.Count == 0)
+                    throw new InvalidOperationException("Source has no Object Data records.");
+            }
+            catch (System.Exception ex)
+            {
+                detail = "OD read failed before any write: " + OdErrorMessage(ex);
+                return ObjectDataCopyStatus.ReadFailed;
+            }
+
+            if (SameVerifiedOdRecords(source, existing))
+            {
+                detail = "Destination already contains the same typed Object Data; no write was made.";
+                return ObjectDataCopyStatus.AlreadyEquivalent;
+            }
+            if (existing.Count > 0)
+            {
+                detail = "Destination already has different Object Data; its native records were left unchanged.";
+                return ObjectDataCopyStatus.Conflict;
+            }
+
+            object? tables = null;
+            var prepared = new List<(object Table, object Record)>();
+            bool writeAttempted = false;
+            try
+            {
+                tables = GetVerifiedOdTables();
+                // Prepare and verify every field before the first attachment. An unsupported
+                // native type or incompatible schema must not result in a partial conversion.
+                foreach (VerifiedOdRecord expected in source)
+                {
+                    object table = InvokeVerifiedOd(tables, "get_Item", expected.TableName)
+                        ?? throw new InvalidOperationException("OD table was not found: " + expected.TableName);
+                    object? record = null;
+                    try
+                    {
+                        Type recordType = table.GetType().Assembly.GetType("Autodesk.Gis.Map.ObjectData.Record", throwOnError: true)!;
+                        MethodInfo create = recordType.GetMethod("Create", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null)
+                            ?? throw new MissingMethodException(recordType.FullName, "Create");
+                        record = create.Invoke(null, null) ?? throw new InvalidOperationException("OD Record.Create returned null.");
+                        InvokeVerifiedOd(table, "InitRecord", record);
+                        if (GetVerifiedOdCount(record) != expected.Fields.Count)
+                            throw new InvalidOperationException("OD field count changed before transfer.");
+
+                        for (int i = 0; i < expected.Fields.Count; i++)
+                        {
+                            object value = InvokeVerifiedOd(record, "get_Item", i)
+                                ?? throw new InvalidOperationException("OD field value is unavailable.");
+                            try
+                            {
+                                string kind = Convert.ToString(GetVerifiedOdProperty(value, "Type"), CultureInfo.InvariantCulture) ?? string.Empty;
+                                if (!string.Equals(kind, expected.Fields[i].Kind, StringComparison.Ordinal))
+                                    throw new InvalidOperationException("OD field type changed before transfer.");
+                                InvokeVerifiedOd(value, "Assign", expected.Fields[i].Value);
+                            }
+                            finally { DisposeVerifiedOd(value); }
+                        }
+
+                        VerifiedOdRecord assigned = ReadVerifiedOdRecord(table, record, expected.TableName);
+                        if (!string.Equals(assigned.Key, expected.Key, StringComparison.Ordinal))
+                            throw new InvalidOperationException("Prepared OD values did not match the source.");
+                        prepared.Add((table, record));
+                        record = null; // Ownership transferred to prepared.
+                    }
+                    catch
+                    {
+                        DisposeVerifiedOd(record);
+                        DisposeVerifiedOd(table);
+                        throw;
+                    }
+                }
+
+                // Fail if the destination changed between preflight and attachment.
+                if (ReadVerifiedOdRecords(destinationId).Count != 0)
+                {
+                    detail = "Destination Object Data changed during transfer preflight; no records were attached.";
+                    return ObjectDataCopyStatus.Conflict;
+                }
+                foreach (var item in prepared)
+                {
+                    writeAttempted = true;
+                    InvokeVerifiedOd(item.Table, "AddRecord", item.Record, destinationId);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                detail = "OD write failed: " + OdErrorMessage(ex)
+                    + (writeAttempted ? " Partial destination OD may exist; retain the source and review before retrying." : " No destination records were attached.");
+                return ObjectDataCopyStatus.WriteFailed;
+            }
+            finally
+            {
+                foreach (var item in prepared)
+                {
+                    DisposeVerifiedOd(item.Record);
+                    DisposeVerifiedOd(item.Table);
+                }
+                DisposeVerifiedOd(tables);
+            }
+
+            try
+            {
+                if (!SameVerifiedOdRecords(source, ReadVerifiedOdRecords(destinationId)) ||
+                    !SameVerifiedOdRecords(source, ReadVerifiedOdRecords(sourceId)))
+                    throw new InvalidOperationException("Source or destination typed OD differs from the preflight snapshot.");
+                detail = $"Copied and read back {source.Count} complete typed OD record(s).";
+                return ObjectDataCopyStatus.CopiedVerified;
+            }
+            catch (System.Exception ex)
+            {
+                detail = "OD readback verification failed: " + OdErrorMessage(ex)
+                    + " Retain the source and review the destination before retrying.";
+                return ObjectDataCopyStatus.VerifyFailed;
+            }
+        }
+
+        private static void RequireActiveOdEntity(ObjectId id)
+        {
+            Document? doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null || id.IsNull || !id.IsValid || id.IsErased || id.Database != doc.Database)
+                throw new InvalidOperationException("OD operations require a valid entity in the active drawing.");
+        }
+
+        private static object GetVerifiedOdTables()
+        {
+            Type host = LoadManagedMapApiAssembly().GetType("Autodesk.Gis.Map.HostMapApplicationServices", throwOnError: true)!;
+            object application = host.GetProperty("Application", BindingFlags.Public | BindingFlags.Static)?.GetValue(null)
+                ?? throw new InvalidOperationException("Map application is unavailable.");
+            object project = GetVerifiedOdProperty(application, "ActiveProject");
+            return GetVerifiedOdProperty(project, "ODTables");
+        }
+
+        private static List<VerifiedOdRecord> ReadVerifiedOdRecords(ObjectId id)
+        {
+            var result = new List<VerifiedOdRecord>();
+            object tables = GetVerifiedOdTables();
+            try
+            {
+                object names = InvokeVerifiedOd(tables, "GetTableNames")
+                    ?? throw new InvalidOperationException("OD table names are unavailable.");
+                if (names is not IEnumerable tableNames)
+                    throw new InvalidOperationException("OD table-name collection is not enumerable.");
+                foreach (object nameValue in tableNames)
+                {
+                    string tableName = nameValue as string
+                        ?? throw new InvalidOperationException("OD table name is not text.");
+                    object table = InvokeVerifiedOd(tables, "get_Item", tableName)
+                        ?? throw new InvalidOperationException("OD table is unavailable: " + tableName);
+                    object? records = null;
+                    try
+                    {
+                        Type modeType = table.GetType().Assembly.GetType("Autodesk.Gis.Map.Constants.OpenMode", throwOnError: true)!;
+                        object readMode = Enum.Parse(modeType, "OpenForRead", ignoreCase: false);
+                        records = InvokeVerifiedOd(table, "GetObjectTableRecords", 0u, id, readMode, false)
+                            ?? throw new InvalidOperationException("OD records are unavailable for " + tableName);
+                        if (records is not IEnumerable enumerable)
+                            throw new InvalidOperationException("OD record collection is not enumerable.");
+                        int count = 0;
+                        foreach (object record in enumerable)
+                        {
+                            try { result.Add(ReadVerifiedOdRecord(table, record, tableName)); }
+                            finally { DisposeVerifiedOd(record); }
+                            count++;
+                        }
+                        if (count != GetVerifiedOdCount(records))
+                            throw new InvalidOperationException("OD record enumeration was incomplete.");
+                    }
+                    finally
+                    {
+                        DisposeVerifiedOd(records);
+                        DisposeVerifiedOd(table);
+                    }
+                }
+            }
+            finally { DisposeVerifiedOd(tables); }
+            return result;
+        }
+
+        private static VerifiedOdRecord ReadVerifiedOdRecord(object table, object record, string tableName)
+        {
+            var fields = new List<VerifiedOdField>();
+            object definitions = GetVerifiedOdProperty(table, "FieldDefinitions");
+            try
+            {
+                int count = GetVerifiedOdCount(record);
+                if (count != GetVerifiedOdCount(definitions))
+                    throw new InvalidOperationException("OD record and schema field counts differ.");
+                for (int i = 0; i < count; i++)
+                {
+                    object definition = InvokeVerifiedOd(definitions, "get_Item", i)
+                        ?? throw new InvalidOperationException("OD field definition is unavailable.");
+                    object? mapValue = null;
+                    try
+                    {
+                        string name = GetVerifiedOdProperty(definition, "Name") as string
+                            ?? throw new InvalidOperationException("OD field name is not text.");
+                        mapValue = InvokeVerifiedOd(record, "get_Item", i)
+                            ?? throw new InvalidOperationException("OD field value is unavailable.");
+                        string kind = Convert.ToString(GetVerifiedOdProperty(mapValue, "Type"), CultureInfo.InvariantCulture) ?? string.Empty;
+                        object value = kind switch
+                        {
+                            "Character" => GetVerifiedOdProperty(mapValue, "StrValue"),
+                            "Integer" => GetVerifiedOdProperty(mapValue, "Int32Value"),
+                            "Real" => GetVerifiedOdProperty(mapValue, "DoubleValue"),
+                            "Point" => GetVerifiedOdProperty(mapValue, "Point3dValue"),
+                            _ => throw new InvalidOperationException("Unsupported OD field type: " + kind)
+                        };
+                        if ((kind == "Character" && value is not string) ||
+                            (kind == "Integer" && value is not int) ||
+                            (kind == "Real" && (value is not double real || !double.IsFinite(real))) ||
+                            (kind == "Point" && (value is not Point3d point || !double.IsFinite(point.X) || !double.IsFinite(point.Y) || !double.IsFinite(point.Z))))
+                            throw new InvalidOperationException("Unexpected typed OD value for " + name);
+                        fields.Add(new VerifiedOdField(name, kind, value));
+                    }
+                    finally
+                    {
+                        DisposeVerifiedOd(mapValue);
+                        DisposeVerifiedOd(definition);
+                    }
+                }
+            }
+            finally { DisposeVerifiedOd(definitions); }
+            return new VerifiedOdRecord(tableName, fields);
+        }
+
+        private static string ReadVerifiedOdIdentityField(VerifiedOdRecord record, string fieldName)
+        {
+            List<VerifiedOdField> fields = record.Fields.Where(f => string.Equals(f.Name, fieldName, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (fields.Count != 1 || fields[0].Kind != "Character" || fields[0].Value is not string text || string.IsNullOrWhiteSpace(text))
+                throw new InvalidOperationException("Structures must have one nonblank Character field named " + fieldName + ".");
+            return text.Trim();
+        }
+
+        private static bool SameVerifiedOdRecords(List<VerifiedOdRecord> a, List<VerifiedOdRecord> b)
+            => a.Select(r => r.Key).OrderBy(k => k, StringComparer.Ordinal)
+                .SequenceEqual(b.Select(r => r.Key).OrderBy(k => k, StringComparer.Ordinal), StringComparer.Ordinal);
+
+        private static object GetVerifiedOdProperty(object target, string name)
+            => target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance)?.GetValue(target)
+                ?? throw new MissingMemberException(target.GetType().FullName, name);
+
+        private static int GetVerifiedOdCount(object target)
+            => Convert.ToInt32(GetVerifiedOdProperty(target, "Count"), CultureInfo.InvariantCulture);
+
+        // Bind once and propagate invocation failures. In particular, never retry a mutating
+        // native call under another overload after an exception or coerce a bad value to zero.
+        private static object? InvokeVerifiedOd(object target, string name, params object[] args)
+        {
+            MethodInfo[] methods = target.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(m => m.Name == name && m.GetParameters().Length == args.Length).ToArray();
+            var matches = new List<(MethodInfo Method, object[] Args, int Score)>();
+            foreach (MethodInfo method in methods)
+            {
+                ParameterInfo[] parameters = method.GetParameters();
+                object[] converted = new object[args.Length];
+                bool compatible = true;
+                int score = 0;
+                for (int i = 0; i < args.Length; i++)
+                {
+                    Type type = parameters[i].ParameterType;
+                    if (type.IsInstanceOfType(args[i]))
+                    {
+                        converted[i] = args[i];
+                        if (type != args[i].GetType()) score++;
+                    }
+                    else if (args[i] is uint u && type == typeof(int) && u <= int.MaxValue)
+                    {
+                        converted[i] = (int)u;
+                        score += 2;
+                    }
+                    else if (args[i] is int n && type == typeof(uint) && n >= 0)
+                    {
+                        converted[i] = (uint)n;
+                        score += 2;
+                    }
+                    else
+                    {
+                        compatible = false;
+                        break;
+                    }
+                }
+                if (compatible)
+                    matches.Add((method, converted, score));
+            }
+            if (matches.Count > 0)
+            {
+                int bestScore = matches.Min(m => m.Score);
+                matches = matches.Where(m => m.Score == bestScore).ToList();
+            }
+            if (matches.Count != 1)
+                throw new InvalidOperationException($"Expected one supported Map OD method {name}; found {matches.Count}.");
+            object? result = matches[0].Method.Invoke(target, matches[0].Args);
+            if (result is bool success && !success)
+                throw new InvalidOperationException("Map OD method returned failure: " + name);
+            return result;
+        }
+
+        private static void DisposeVerifiedOd(object? value)
+        {
+            // A disposal error must not hide the original native operation/readback error.
+            try { if (value is IDisposable disposable) disposable.Dispose(); }
+            catch { }
+        }
+
+        private static string OdErrorMessage(System.Exception ex)
+            => (ex is TargetInvocationException invocation && invocation.InnerException != null ? invocation.InnerException : ex).Message;
+
+        private sealed class VerifiedOdField
+        {
+            internal VerifiedOdField(string name, string kind, object value) { Name = name; Kind = kind; Value = value; }
+            internal string Name { get; }
+            internal string Kind { get; }
+            internal object Value { get; }
+            internal string Key
+            {
+                get
+                {
+                    string text = Value is Point3d p
+                        ? string.Join(",", p.X.ToString("R", CultureInfo.InvariantCulture), p.Y.ToString("R", CultureInfo.InvariantCulture), p.Z.ToString("R", CultureInfo.InvariantCulture))
+                        : Value is double d ? d.ToString("R", CultureInfo.InvariantCulture)
+                        : Convert.ToString(Value, CultureInfo.InvariantCulture) ?? string.Empty;
+                    return OdKeyToken(Name.ToUpperInvariant()) + OdKeyToken(Kind) + OdKeyToken(text);
+                }
+            }
+        }
+
+        private sealed class VerifiedOdRecord
+        {
+            internal VerifiedOdRecord(string tableName, List<VerifiedOdField> fields) { TableName = tableName; Fields = fields; }
+            internal string TableName { get; }
+            internal List<VerifiedOdField> Fields { get; }
+            internal string Key => OdKeyToken(TableName.ToUpperInvariant()) + string.Concat(Fields.Select(f => OdKeyToken(f.Key)));
+        }
+
+        private static string OdKeyToken(string value) => value.Length.ToString(CultureInfo.InvariantCulture) + ":" + value;
 
         private static void RunInteractive(bool fromPalette)
         {
@@ -2717,3 +3114,4 @@ namespace CLV_CivilTools.Gis
         }
     }
 }
+

@@ -536,7 +536,15 @@ namespace CLV_CivilTools.Gis
                 }
             }
 
-            signature = new EntitySignature(id, ent.Layer, center, ext, isLinear, start, end, length);
+            // Co-located access circles and junction rectangles are distinct structures.
+            string shape = ent.GetType().FullName ?? ent.GetType().Name;
+            if (ent is AcPolyline outline && outline.Closed)
+            {
+                bool curved = Enumerable.Range(0, outline.NumberOfVertices).Any(i => Math.Abs(outline.GetBulgeAt(i)) > 1e-8);
+                shape += curved ? ":closed-curved" : ":closed-straight";
+                shape += ":" + outline.NumberOfVertices;
+            }
+            signature = new EntitySignature(id, ent.Layer, center, ext, isLinear, start, end, length, shape);
             return true;
         }
 
@@ -575,7 +583,12 @@ namespace CLV_CivilTools.Gis
                 return EndpointsMatch(a.StartPoint, a.EndPoint, b.StartPoint, b.EndPoint, ExactPipeTolerance);
             }
 
-            return a.Center.DistanceTo(b.Center) <= ExactStructureTolerance;
+            // Center proximity alone must never discard a different shape at the same location.
+            if (a.IsLinear != b.IsLinear || !string.Equals(a.Shape, b.Shape, StringComparison.Ordinal))
+                return false;
+            return a.Center.DistanceTo(b.Center) <= ExactStructureTolerance &&
+                a.Extents.MinPoint.DistanceTo(b.Extents.MinPoint) <= ExactStructureTolerance &&
+                a.Extents.MaxPoint.DistanceTo(b.Extents.MaxPoint) <= ExactStructureTolerance;
         }
 
         private static bool IsNearMatch(EntitySignature a, EntitySignature b)
@@ -1589,7 +1602,8 @@ Enter batch number to {actionVerb}")
             bool IsLinear,
             Point3d StartPoint,
             Point3d EndPoint,
-            double Length);
+            double Length,
+            string Shape);
 
         private readonly record struct CompareSummary(
             List<EntitySignature> ExactMatches,
@@ -1637,3 +1651,4 @@ Enter batch number to {actionVerb}")
         }
     }
 }
+

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
 using Autodesk.AutoCAD.DatabaseServices;
@@ -17,14 +16,11 @@ namespace CLV_CivilTools.Gis
 {
     /// <summary>
     /// Batch automation for storm structures.
-    /// Pass 1: find/convert all supported storm structure blocks (drop inlets + circular storm manholes)
-    ///         and queue OD copy from matching Structures points.
-    /// Pass 2: find/convert remaining junction structures from the remaining Structures points.
+    /// Plan role-specific one-to-one matches before changing geometry.
+    /// Copy and read back native OD before retiring source geometry; retain imported points.
     /// </summary>
     public static class GisStormStructureAuto
     {
-        private const string OdHelperPath = @"\\ci.las-vegas.nv.us\pw_data_depot\PW_AutoCAD_Support\2026_Civil3D\Lisp\Lisp\CLV_GIS_OD_HELPERS.lsp";
-
         private const string StructuresPointLayer = "Structures";
         private const string TargetInnerLayer = "C-STRM-STRC-INNR";
         private const string TargetOuterLayer = "C-STRM-STRC-E";
@@ -58,293 +54,328 @@ namespace CLV_CivilTools.Gis
             "UFLS-GIS-MH-CIRCULAR"
         };
 
-        private const double ExactPointTolerance = 0.10;
-        private const double TightPointTolerance = 0.50;
-        private const double LoosePointTolerance = 1.50;
-        private const double JsSearchRadius = 25.0;
-        private const double JsExtentsTolerance = 1.0;
+        private const string CompletionKey = "CLV_STORM_PREP_V1";
 
         [CommandMethod("CLV-GIS-STRM-AUTO", CommandFlags.Modal)]
         public static void RunStormStructureAuto()
         {
             AcDocument? doc = AcadApp.DocumentManager.MdiActiveDocument;
-            if (doc == null)
-                return;
+            if (doc != null)
+                RunVerified(doc);
+        }
 
+        // ALL calls this synchronously, so a failed preparation cannot leave cleanup queued.
+        internal static bool RunVerified(AcDocument doc)
+        {
             Editor ed = doc.Editor;
             Database db = doc.Database;
-
+            var sources = new Dictionary<string, SourceInfo>(StringComparer.OrdinalIgnoreCase);
+            var targets = new Dictionary<string, TargetInfo>(StringComparer.OrdinalIgnoreCase);
+            var reviews = new List<string>();
+            var invalidCompletions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int converted = 0;
+            int alreadyVerified = 0;
             try
             {
-                LayerStandards.EnsureGisLayers(db, ed);
-
-                List<ObjectId> stormStructureBlockIds = new List<ObjectId>();
-                int diFound = 0;
-                int circularMhFound = 0;
-                using (Transaction tr = db.TransactionManager.StartTransaction())
+                using (doc.LockDocument())
                 {
-                    if (tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead) is BlockTableRecord space)
+                    // Snapshot every source and destination before any block is exploded.
+                    using (Transaction tr = db.TransactionManager.StartTransaction())
                     {
+                        var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
                         foreach (ObjectId id in space)
                         {
-                            if (tr.GetObject(id, OpenMode.ForRead, false) is not BlockReference br)
-                                continue;
-
-                            string blockKind = GetSupportedStormStructureBlockKind(br, tr);
-                            if (string.IsNullOrWhiteSpace(blockKind))
-                                continue;
-
-                            stormStructureBlockIds.Add(id);
-                            if (string.Equals(blockKind, "DI", StringComparison.OrdinalIgnoreCase))
-                                diFound++;
-                            else if (string.Equals(blockKind, "CIRCULAR-MH", StringComparison.OrdinalIgnoreCase))
-                                circularMhFound++;
-                        }
-                    }
-                    tr.Commit();
-                }
-
-                int blockProcessed = 0;
-                int blockFailed = 0;
-                int blockPointsMatched = 0;
-                int blockOuterEntities = 0;
-                int blockOdQueued = 0;
-                HashSet<ObjectId> consumedPointIds = new HashSet<ObjectId>();
-
-                foreach (ObjectId blockId in stormStructureBlockIds)
-                {
-                    if (TryProcessStormStructureBlock(blockId, consumedPointIds, out DropInletBatchResult diResult))
-                    {
-                        blockProcessed++;
-                        if (!diResult.SourcePointId.IsNull)
-                            blockPointsMatched++;
-                        blockOuterEntities += diResult.OuterHandleCount;
-                        if (diResult.OdQueued)
-                            blockOdQueued++;
-                    }
-                    else
-                    {
-                        blockFailed++;
-                    }
-                }
-
-                List<ObjectId> remainingStructurePointIds = new List<ObjectId>();
-                using (Transaction tr = db.TransactionManager.StartTransaction())
-                {
-                    if (tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead) is BlockTableRecord space)
-                    {
-                        foreach (ObjectId id in space)
-                        {
-                            if (consumedPointIds.Contains(id))
-                                continue;
-
                             if (tr.GetObject(id, OpenMode.ForRead, false) is not Entity ent || ent.IsErased)
                                 continue;
-
-                            if (!string.Equals(ent.Layer, StructuresPointLayer, StringComparison.OrdinalIgnoreCase))
+                            string key = ent.Handle.ToString();
+                            if (ent is DBPoint point && string.Equals(ent.Layer, StructuresPointLayer, StringComparison.OrdinalIgnoreCase))
+                            {
+                                bool read = GisImportCommands.TryReadStructuresIdentity(id, out string name, out string part, out string detail);
+                                if (!read) { name = string.Empty; part = string.Empty; }
+                                var source = new SourceInfo(id, new StormStructureSource(key, name, part, point.Position.X, point.Position.Y));
+                                sources.Add(key, source);
+                                if (!read)
+                                    reviews.Add($"point {key}: {detail}");
+                                if (TryReadCompletion(tr, point, name, part, out List<ObjectId> outputs, out string completionDetail))
+                                {
+                                    source.Outputs = outputs;
+                                }
+                                else if (!string.IsNullOrEmpty(completionDetail))
+                                {
+                                    invalidCompletions.Add(key);
+                                    reviews.Add($"point {key} ({name}): {completionDetail}; original point retained");
+                                }
                                 continue;
-
-                            if (TryGetEntityPoint(ent).HasValue)
-                                remainingStructurePointIds.Add(id);
+                            }
+                            if (string.Equals(ent.Layer, StructuresPointLayer, StringComparison.OrdinalIgnoreCase))
+                            {
+                                reviews.Add($"source {key}: unsupported imported entity type {ent.GetType().Name}; only DBPoint sources are converted, entity retained");
+                                continue;
+                            }
+                            if (ent is BlockReference br)
+                            {
+                                string kind = GetSupportedStormStructureBlockKind(br, tr);
+                                if (string.IsNullOrEmpty(kind))
+                                    continue;
+                                Point3d center = GetPreferredBlockCenter(br, tr);
+                                var role = kind == "DI" ? StormStructureRole.DropInlet : StormStructureRole.Access;
+                                targets.Add(key, new TargetInfo(id, new StormStructureTarget(key, role, center.X, center.Y), false));
+                            }
+                            else if (ent is AcPolyline pl && IsRectangle(pl) && IsOuterLayer(pl.Layer))
+                            {
+                                // Existing prepared polygons need box OD proof. A DI rectangle
+                                // on the same final layer is not automatically box geometry.
+                                if (string.Equals(pl.Layer, TargetOuterLayer, StringComparison.OrdinalIgnoreCase) &&
+                                    (!GisImportCommands.TryReadStructuresIdentity(id, out string existingName, out string existingPart, out _) ||
+                                     StormStructureMatching.Classify(existingName, existingPart) != StormStructureRole.JunctionBox))
+                                    continue;
+                                Point3d center = GetEntityCenter(pl);
+                                targets.Add(key, new TargetInfo(id, new StormStructureTarget(key, StormStructureRole.JunctionBox, center.X, center.Y), false));
+                            }
                         }
+                        // Reruns use persistent soft-pointer links, not another nearest-entity search.
+                        foreach (SourceInfo source in sources.Values.Where(s => s.Outputs.Count > 0))
+                        {
+                            ObjectId outerId = source.Outputs[0];
+                            var outer = (Entity)tr.GetObject(outerId, OpenMode.ForRead);
+                            string key = outer.Handle.ToString();
+                            Point3d center = new Point3d(source.Data.X, source.Data.Y, 0.0);
+                            var role = StormStructureMatching.Classify(source.Data.Name, source.Data.PartSizeName);
+                            if (targets.TryGetValue(key, out TargetInfo? previous) && previous.CompletedSource != null)
+                            {
+                                invalidCompletions.Add(source.Data.Id);
+                                invalidCompletions.Add(previous.CompletedSource);
+                                reviews.Add($"output {key}: more than one source claims this destination");
+                                continue;
+                            }
+                            targets[key] = new TargetInfo(outerId, new StormStructureTarget(key, role, center.X, center.Y), true)
+                            { CompletedSource = source.Data.Id };
+                        }
+                        tr.Commit();
                     }
-                    tr.Commit();
-                }
 
-                int jsFound = remainingStructurePointIds.Count;
-                int jsProcessed = 0;
-                int jsFailed = 0;
-                int jsOdQueued = 0;
-
-                foreach (ObjectId pointId in remainingStructurePointIds)
-                {
-                    if (TryProcessJunctionStructure(pointId, out JunctionBatchResult jsResult))
+                    StormStructureMatchResult plan = StormStructureMatching.Match(
+                        sources.Values.Select(s => s.Data), targets.Values.Select(t => t.Data));
+                    reviews.AddRange(plan.Issues.Select(i => $"{i.Code}: sources=[{string.Join(",", i.SourceIds)}], targets=[{string.Join(",", i.TargetIds)}]: {i.Message}"));
+                    LayerStandards.EnsureGisLayers(db, ed);
+                    var reserved = new HashSet<ObjectId>();
+                    // Boxes are resolved while access/DI geometry remains inside its original blocks.
+                    foreach (StormStructureMatch match in plan.Matches.OrderBy(m => m.Role == StormStructureRole.JunctionBox ? 0 : 1))
                     {
-                        jsProcessed++;
-                        if (jsResult.OdQueued)
-                            jsOdQueued++;
-                    }
-                    else
-                    {
-                        jsFailed++;
+                        SourceInfo source = sources[match.SourceId];
+                        TargetInfo target = targets[match.TargetId];
+                        if (invalidCompletions.Contains(source.Data.Id))
+                            continue;
+                        if (source.Outputs.Count > 0 && (!target.IsCompleted || target.CompletedSource != source.Data.Id))
+                        {
+                            reviews.Add($"point {source.Data.Id}: existing completion cannot be reassigned; review its linked output");
+                            continue;
+                        }
+                        if (target.IsCompleted && target.CompletedSource != source.Data.Id)
+                        {
+                            reviews.Add($"point {source.Data.Id}: destination belongs to another completed source");
+                            continue;
+                        }
+                        if (target.IsCompleted)
+                        {
+                            bool verified = true;
+                            foreach (ObjectId output in source.Outputs)
+                            {
+                                var status = GisImportCommands.CopyObjectDataVerified(source.Id, output, out string detail);
+                                if (!IsVerified(status))
+                                {
+                                    verified = false;
+                                    reviews.Add($"point {source.Data.Id} ({source.Data.Name}): existing output {status}: {detail}");
+                                }
+                            }
+                            if (verified)
+                                alreadyVerified++;
+                            continue;
+                        }
+                        if (TryConvert(doc, source, target, reserved, out string failure))
+                            converted++;
+                        else
+                            reviews.Add($"point {source.Data.Id} ({source.Data.Name}) -> {target.Data.Id}: {failure}");
                     }
                 }
-
-                int xDataCleaned = GisXDataCleanup.CleanCurrentDrawingEntityXData(doc, preserveClvCache: true);
-                ed.WriteMessage(
-                    $"\nCLV-GIS-STRM-AUTO complete. diFound={diFound}, circularMhFound={circularMhFound}, stormBlocksProcessed={blockProcessed}, stormBlocksFailed={blockFailed}, stormBlockPointsMatched={blockPointsMatched}, stormBlockOuterEntities={blockOuterEntities}, stormBlockOdQueued={blockOdQueued}, remainingPointsForJs={jsFound}, jsProcessed={jsProcessed}, jsFailed={jsFailed}, jsOdQueued={jsOdQueued}, xDataCleaned={xDataCleaned}."
-                );
+                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06: converted/OD verified={converted}, already verified={alreadyVerified}, review items={reviews.Count}. All {sources.Count} Structures source points retained; no broad cleanup run.");
+                foreach (string review in reviews.Distinct(StringComparer.Ordinal))
+                    ed.WriteMessage("\n  REVIEW: " + review);
+                return reviews.Count == 0 && sources.Count > 0;
             }
             catch (System.Exception ex)
             {
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO failed: {ex.Message}");
-            }
-        }
-
-        private static bool TryProcessStormStructureBlock(ObjectId blockId, HashSet<ObjectId> consumedPointIds, out DropInletBatchResult result)
-        {
-            result = new DropInletBatchResult();
-
-            AcDocument? doc = AcadApp.DocumentManager.MdiActiveDocument;
-            if (doc == null)
-                return false;
-
-            Database db = doc.Database;
-            Editor ed = doc.Editor;
-
-            try
-            {
-                using (doc.LockDocument())
-                using (Transaction tr = db.TransactionManager.StartTransaction())
-                {
-                    if (tr.GetObject(blockId, OpenMode.ForWrite, false) is not BlockReference br || br.IsErased)
-                        return false;
-
-                    Point3d blockCenter = GetPreferredBlockCenter(br, tr);
-                    EnsureLayer(db, tr, TargetInnerLayer);
-                    EnsureLayer(db, tr, TargetOuterLayer);
-
-                    if (tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite) is not BlockTableRecord space)
-                        return false;
-
-                    List<ObjectId> createdIds = new List<ObjectId>();
-                    int createdCount = 0;
-                    int erasedCount = 0;
-                    int innerMoved = 0;
-                    int outerMoved = 0;
-
-                    ExplodeRecursive(br, space, tr, createdIds, ref createdCount);
-                    br.Erase(true);
-
-                    foreach (ObjectId id in createdIds)
-                    {
-                        if (tr.GetObject(id, OpenMode.ForWrite, false) is not Entity ent || ent.IsErased)
-                            continue;
-
-                        if (ShouldEraseExplodedEntity(ent))
-                        {
-                            ent.Erase(true);
-                            erasedCount++;
-                            continue;
-                        }
-
-                        string layerName = ent.Layer ?? string.Empty;
-                        if (MatchesAnyToken(layerName, SourceInnerLayerTokens))
-                        {
-                            ent.Layer = TargetInnerLayer;
-                            innerMoved++;
-                            continue;
-                        }
-
-                        if (MatchesAnyToken(layerName, SourceOuterLayerTokens))
-                        {
-                            ent.Layer = TargetOuterLayer;
-                            outerMoved++;
-                        }
-                    }
-
-                    ObjectId sourcePointId = FindStructurePointAtCenter(tr, db, blockCenter, out double matchTolerance, out double sourcePointDistance);
-                    List<string> outerHandles = GetEligibleOuterDestinationHandles(tr, createdIds, blockCenter);
-
-                    result = new DropInletBatchResult
-                    {
-                        SourcePointId = sourcePointId,
-                        SourcePointHandle = GetHandleString(tr, sourcePointId),
-                        OuterHandleCount = outerHandles.Count,
-                        CreatedCount = createdCount,
-                        ErasedCount = erasedCount,
-                        InnerMoved = innerMoved,
-                        OuterMoved = outerMoved,
-                        MatchTolerance = matchTolerance,
-                        SourcePointDistance = sourcePointDistance,
-                        OuterHandles = outerHandles
-                    };
-
-                    tr.Commit();
-                }
-
-                if (!result.SourcePointId.IsNull)
-                    consumedPointIds.Add(result.SourcePointId);
-
-                if (!string.IsNullOrWhiteSpace(result.SourcePointHandle) && result.OuterHandles.Count > 0)
-                    result.OdQueued = QueueCopyObjectDataViaLisp(result.SourcePointHandle, result.OuterHandles, ed);
-
-                return true;
-            }
-            catch
-            {
+                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO stopped: {ex.Message}. Unverified source geometry and all imported source points are retained. No downstream cleanup was queued.");
                 return false;
             }
         }
 
-        private static bool TryProcessJunctionStructure(ObjectId pointId, out JunctionBatchResult result)
+        private static bool TryConvert(AcDocument doc, SourceInfo source, TargetInfo target,
+            HashSet<ObjectId> reserved, out string detail)
         {
-            result = new JunctionBatchResult();
-
-            AcDocument? doc = AcadApp.DocumentManager.MdiActiveDocument;
-            if (doc == null)
-                return false;
-
-            Database db = doc.Database;
-            Editor ed = doc.Editor;
-
+            detail = string.Empty;
             try
             {
-                using (doc.LockDocument())
-                using (Transaction tr = db.TransactionManager.StartTransaction())
+                Database db = doc.Database;
+                using Transaction tr = db.TransactionManager.StartTransaction();
+                var original = tr.GetObject(target.Id, OpenMode.ForRead, false) as Entity;
+                if (original == null || original.IsErased || reserved.Contains(target.Id))
                 {
-                    if (tr.GetObject(pointId, OpenMode.ForRead, false) is not Entity pointEnt || pointEnt.IsErased)
-                        return false;
-
-                    if (!string.Equals(pointEnt.Layer, StructuresPointLayer, StringComparison.OrdinalIgnoreCase))
-                        return false;
-
-                    Point3d? maybePoint = TryGetEntityPoint(pointEnt);
-                    if (!maybePoint.HasValue)
-                        return false;
-
-                    Point3d center = maybePoint.Value;
-                    string sourcePointHandle = pointEnt.Handle.ToString();
-
-                    EnsureLayer(db, tr, TargetInnerLayer);
-                    EnsureLayer(db, tr, TargetOuterLayer);
-
-                    List<PolylineCandidate> candidates = FindClosedPolylineCandidates(tr, db, center, JsSearchRadius);
-                    PolylineCandidate? outer = ChooseOuterCandidate(candidates, center);
-                    PolylineCandidate? inner = ChooseInnerCandidate(candidates, outer, center);
-
-                    string outerHandle = string.Empty;
-                    string innerHandle = string.Empty;
-                    if (outer != null && tr.GetObject(outer.Id, OpenMode.ForWrite, false) is Entity outerEnt)
-                    {
-                        outerEnt.Layer = TargetOuterLayer;
-                        outerHandle = outerEnt.Handle.ToString();
-                    }
-
-                    if (inner != null && tr.GetObject(inner.Id, OpenMode.ForWrite, false) is Entity innerEnt)
-                    {
-                        innerEnt.Layer = TargetInnerLayer;
-                        innerHandle = innerEnt.Handle.ToString();
-                    }
-
-                    result = new JunctionBatchResult
-                    {
-                        SourcePointHandle = sourcePointHandle,
-                        OuterHandle = outerHandle,
-                        InnerHandle = innerHandle,
-                        CandidateCount = candidates.Count
-                    };
-
-                    tr.Commit();
+                    detail = "destination unavailable or already reserved";
+                    return false;
                 }
-
-                if (!string.IsNullOrWhiteSpace(result.SourcePointHandle) && !string.IsNullOrWhiteSpace(result.OuterHandle))
-                    result.OdQueued = QueueCopyObjectDataViaLisp(result.SourcePointHandle, result.OuterHandle, ed);
-
+                EnsureLayer(db, tr, TargetOuterLayer);
+                EnsureLayer(db, tr, TargetInnerLayer);
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                var created = new List<ObjectId>();
+                var outputs = new List<ObjectId>();
+                ObjectId innerId = ObjectId.Null;
+                var center = new Point3d(source.Data.X, source.Data.Y, 0.0);
+                if (target.Data.Role == StormStructureRole.JunctionBox)
+                {
+                    var outer = (AcPolyline)original;
+                    // Ambiguous nested linework is reviewed instead of choosing by enumeration order.
+                    var inners = new List<ObjectId>();
+                    foreach (ObjectId id in space)
+                    {
+                        if (id == target.Id || reserved.Contains(id)) continue;
+                        if (tr.GetObject(id, OpenMode.ForRead, false) is AcPolyline pl && !pl.IsErased &&
+                            IsRectangle(pl) && IsInnerLayer(pl.Layer) &&
+                            Distance2d(GetEntityCenter(pl), center) <= StormStructureMatching.MatchTolerance &&
+                            Math.Abs(pl.Area) < Math.Abs(outer.Area) && IsInsideRectangle(outer, pl))
+                            inners.Add(id);
+                    }
+                    if (inners.Count > 1)
+                    {
+                        detail = "multiple inner box outlines; review required";
+                        return false;
+                    }
+                    if (inners.Count == 1) innerId = inners[0];
+                    var clone = (Entity)outer.Clone();
+                    clone.Layer = TargetOuterLayer;
+                    space.AppendEntity(clone);
+                    tr.AddNewlyCreatedDBObject(clone, true);
+                    created.Add(clone.ObjectId);
+                    outputs.Add(clone.ObjectId);
+                }
+                else
+                {
+                    if (original is not BlockReference block)
+                    {
+                        detail = "expected supported source block";
+                        return false;
+                    }
+                    int count = 0;
+                    ExplodeRecursive(block, space, tr, created, ref count);
+                    foreach (ObjectId id in created)
+                    {
+                        if (tr.GetObject(id, OpenMode.ForWrite, false) is not Entity ent || ent.IsErased) continue;
+                        if (ShouldEraseExplodedEntity(ent)) { ent.Erase(true); continue; }
+                        if (MatchesAnyToken(ent.Layer, SourceInnerLayerTokens)) ent.Layer = TargetInnerLayer;
+                        else if (MatchesAnyToken(ent.Layer, SourceOuterLayerTokens)) ent.Layer = TargetOuterLayer;
+                        if (string.Equals(ent.Layer, TargetOuterLayer, StringComparison.OrdinalIgnoreCase) &&
+                            IsRoleOutline(ent, target.Data.Role) &&
+                            OutlineMatchesAnchor(ent, target.Data.Role, center))
+                            outputs.Add(id);
+                    }
+                    if (outputs.Count == 0 || (target.Data.Role == StormStructureRole.Access && outputs.Count != 1))
+                    {
+                        detail = $"expected verified role-specific outer outline(s), one for access; found {outputs.Count}";
+                        return false;
+                    }
+                }
+                // This is synchronous native OD copy + full readback, never 'helper queued'.
+                foreach (ObjectId output in outputs)
+                {
+                    var status = GisImportCommands.CopyObjectDataVerified(source.Id, output, out detail);
+                    if (!IsVerified(status))
+                    {
+                        detail = $"OD {status}: {detail}; conversion rolled back";
+                        return false;
+                    }
+                }
+                // Only after successful readback may original block/outer outline be retired.
+                original.UpgradeOpen();
+                original.Erase(true);
+                if (!innerId.IsNull)
+                    ((Entity)tr.GetObject(innerId, OpenMode.ForWrite)).Layer = TargetInnerLayer;
+                WriteCompletion(tr, source, outputs);
+                tr.Commit();
+                reserved.Add(target.Id);
+                if (!innerId.IsNull) reserved.Add(innerId);
                 return true;
             }
-            catch
+            catch (System.Exception ex)
             {
+                detail = ex.Message + "; conversion rolled back";
+                return false;
+            }
+        }
+
+        private static bool IsVerified(GisImportCommands.ObjectDataCopyStatus status) =>
+            status == GisImportCommands.ObjectDataCopyStatus.CopiedVerified ||
+            status == GisImportCommands.ObjectDataCopyStatus.AlreadyEquivalent;
+
+        private static void WriteCompletion(Transaction tr, SourceInfo source, List<ObjectId> outputs)
+        {
+            var point = (Entity)tr.GetObject(source.Id, OpenMode.ForWrite);
+            if (point.ExtensionDictionary.IsNull) point.CreateExtensionDictionary();
+            var dictionary = (DBDictionary)tr.GetObject(point.ExtensionDictionary, OpenMode.ForWrite);
+            var record = new Xrecord();
+            dictionary.SetAt(CompletionKey, record);
+            tr.AddNewlyCreatedDBObject(record, true);
+            var data = new List<TypedValue>
+            {
+                new TypedValue((int)DxfCode.Text, "1"),
+                new TypedValue((int)DxfCode.Text, source.Data.Name),
+                new TypedValue((int)DxfCode.Text, source.Data.PartSizeName),
+                new TypedValue((int)DxfCode.Real, source.Data.X),
+                new TypedValue((int)DxfCode.Real, source.Data.Y)
+            };
+            data.AddRange(outputs.Select(id => new TypedValue((int)DxfCode.SoftPointerId, id)));
+            record.Data = new ResultBuffer(data.ToArray());
+        }
+
+        private static bool TryReadCompletion(Transaction tr, Entity source, string name, string part,
+            out List<ObjectId> outputs, out string detail)
+        {
+            outputs = new List<ObjectId>();
+            detail = string.Empty;
+            if (source.ExtensionDictionary.IsNull) return false;
+            var dictionary = (DBDictionary)tr.GetObject(source.ExtensionDictionary, OpenMode.ForRead);
+            if (!dictionary.Contains(CompletionKey)) return false;
+            try
+            {
+                var record = (Xrecord)tr.GetObject(dictionary.GetAt(CompletionKey), OpenMode.ForRead);
+                using ResultBuffer? buffer = record.Data;
+                TypedValue[] values = buffer?.AsArray() ?? Array.Empty<TypedValue>();
+                if (values.Length < 6 || (string)values[0].Value != "1" ||
+                    !string.Equals(values[1].Value as string, name, StringComparison.Ordinal) ||
+                    !string.Equals(values[2].Value as string, part, StringComparison.Ordinal))
+                    throw new InvalidOperationException("completion identity changed or unreadable");
+                if (source is not DBPoint point || values[3].Value is not double x || values[4].Value is not double y ||
+                    Distance2d(point.Position, new Point3d(x, y, 0.0)) > StormStructureMatching.MatchTolerance)
+                    throw new InvalidOperationException("completed source point moved; review its linked output");
+                var anchor = new Point3d(x, y, 0.0);
+                foreach (TypedValue value in values.Skip(5))
+                {
+                    if (value.Value is not ObjectId id || id.IsNull || !id.IsValid || id.IsErased ||
+                        tr.GetObject(id, OpenMode.ForRead, false) is not Entity ent || ent.IsErased ||
+                        !string.Equals(ent.Layer, TargetOuterLayer, StringComparison.OrdinalIgnoreCase) ||
+                        !IsRoleOutline(ent, StormStructureMatching.Classify(name, part)) ||
+                        !OutlineMatchesAnchor(ent, StormStructureMatching.Classify(name, part), anchor))
+                        throw new InvalidOperationException("completed output is missing or changed");
+                    if (!GisImportCommands.TryReadStructuresIdentity(id, out string outputName, out string outputPart, out string readDetail) ||
+                        !string.Equals(outputName, name, StringComparison.Ordinal) || !string.Equals(outputPart, part, StringComparison.Ordinal))
+                        throw new InvalidOperationException("completed output OD changed: " + readDetail);
+                    outputs.Add(id);
+                }
+                return true;
+            }
+            catch (System.Exception ex)
+            {
+                outputs.Clear();
+                detail = ex.Message;
                 return false;
             }
         }
@@ -359,13 +390,6 @@ namespace CLV_CivilTools.Gis
                 return "DI";
 
             if (SupportedCircularStormManholeNames.Any(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase)))
-                return "CIRCULAR-MH";
-
-            if (name.IndexOf("MH-CIRCULAR", StringComparison.OrdinalIgnoreCase) >= 0)
-                return "CIRCULAR-MH";
-
-            if (name.IndexOf("MANHOLE", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                name.IndexOf("CIRC", StringComparison.OrdinalIgnoreCase) >= 0)
                 return "CIRCULAR-MH";
 
             return string.Empty;
@@ -388,17 +412,6 @@ namespace CLV_CivilTools.Gis
             {
                 // ignore
             }
-
-            return string.Empty;
-        }
-
-        private static string GetHandleString(Transaction tr, ObjectId id)
-        {
-            if (id.IsNull || !id.IsValid)
-                return string.Empty;
-
-            if (tr.GetObject(id, OpenMode.ForRead, false) is DBObject dbo)
-                return dbo.Handle.ToString();
 
             return string.Empty;
         }
@@ -524,459 +537,113 @@ namespace CLV_CivilTools.Gis
             tr.AddNewlyCreatedDBObject(ltr, true);
         }
 
-        private static ObjectId FindStructurePointAtCenter(Transaction tr, Database db, Point3d center, out double matchTolerance, out double sourcePointDistance)
+        private static bool IsOuterLayer(string layer) =>
+            MatchesAnyToken(layer, SourceOuterLayerTokens) || string.Equals(layer, TargetOuterLayer, StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsInnerLayer(string layer) =>
+            MatchesAnyToken(layer, SourceInnerLayerTokens) || string.Equals(layer, TargetInnerLayer, StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsRectangle(AcPolyline pl)
         {
-            matchTolerance = 0.0;
-            sourcePointDistance = -1.0;
-
-            ObjectId bestId = FindStructurePointAtCenterCore(tr, db, center, ExactPointTolerance, out sourcePointDistance);
-            if (!bestId.IsNull)
+            if (!pl.Closed || pl.NumberOfVertices != 4 || Math.Abs(pl.Area) <= 1e-8) return false;
+            for (int i = 0; i < 4; i++)
             {
-                matchTolerance = ExactPointTolerance;
-                return bestId;
+                if (Math.Abs(pl.GetBulgeAt(i)) > 1e-8) return false;
+                Vector2d a = pl.GetPoint2dAt((i + 1) % 4) - pl.GetPoint2dAt(i);
+                Vector2d b = pl.GetPoint2dAt((i + 2) % 4) - pl.GetPoint2dAt((i + 1) % 4);
+                if (a.Length <= 1e-8 || b.Length <= 1e-8 || Math.Abs(a.DotProduct(b) / (a.Length * b.Length)) > 1e-5) return false;
             }
-
-            bestId = FindStructurePointAtCenterCore(tr, db, center, TightPointTolerance, out sourcePointDistance);
-            if (!bestId.IsNull)
-            {
-                matchTolerance = TightPointTolerance;
-                return bestId;
-            }
-
-            bestId = FindStructurePointAtCenterCore(tr, db, center, LoosePointTolerance, out sourcePointDistance);
-            if (!bestId.IsNull)
-                matchTolerance = LoosePointTolerance;
-
-            return bestId;
+            return true;
         }
 
-        private static ObjectId FindStructurePointAtCenterCore(Transaction tr, Database db, Point3d center, double tolerance, out double sourcePointDistance)
+        private static bool IsInsideRectangle(AcPolyline outer, AcPolyline inner)
         {
-            sourcePointDistance = -1.0;
-            if (tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead) is not BlockTableRecord space)
-                return ObjectId.Null;
-
-            ObjectId bestId = ObjectId.Null;
-            double bestDistance = double.MaxValue;
-
-            foreach (ObjectId id in space)
+            for (int i = 0; i < inner.NumberOfVertices; i++)
             {
-                if (tr.GetObject(id, OpenMode.ForRead, false) is not Entity ent || ent.IsErased)
-                    continue;
-
-                if (!string.Equals(ent.Layer, StructuresPointLayer, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                Point3d? maybePoint = TryGetEntityPoint(ent);
-                if (!maybePoint.HasValue)
-                    continue;
-
-                double dist = Distance2d(center, maybePoint.Value);
-                if (dist > tolerance)
-                    continue;
-
-                if (dist < bestDistance)
+                Point2d point = inner.GetPoint2dAt(i);
+                double? sign = null;
+                for (int j = 0; j < 4; j++)
                 {
-                    bestDistance = dist;
-                    bestId = id;
+                    Point2d a = outer.GetPoint2dAt(j);
+                    Point2d b = outer.GetPoint2dAt((j + 1) % 4);
+                    double cross = (b.X - a.X) * (point.Y - a.Y) - (b.Y - a.Y) * (point.X - a.X);
+                    if (Math.Abs(cross) <= 1e-8) continue;
+                    double current = Math.Sign(cross);
+                    if (sign.HasValue && sign.Value != current) return false;
+                    sign = current;
                 }
             }
-
-            if (!bestId.IsNull)
-                sourcePointDistance = bestDistance;
-
-            return bestId;
+            return true;
         }
 
-        private static Point3d? TryGetEntityPoint(Entity ent)
+        private static bool IsRoleOutline(Entity ent, StormStructureRole role)
         {
-            if (ent is DBPoint dbPoint)
-                return dbPoint.Position;
-
-            if (ent is BlockReference br)
-                return br.Position;
-
-            return null;
-        }
-
-        private static List<string> GetEligibleOuterDestinationHandles(Transaction tr, List<ObjectId> createdIds, Point3d blockCenter)
-        {
-            List<(string Handle, double Score)> handles = new List<(string, double)>();
-
-            foreach (ObjectId id in createdIds)
+            if (role == StormStructureRole.Access)
             {
-                if (tr.GetObject(id, OpenMode.ForRead, false) is not Entity ent || ent.IsErased)
-                    continue;
-
-                if (!string.Equals(ent.Layer, TargetOuterLayer, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (!CouldBeOuterDestination(ent, blockCenter))
-                    continue;
-
-                handles.Add((ent.Handle.ToString(), ScoreOuterDestination(ent, blockCenter)));
+                if (ent is Circle circle) return circle.Radius > 0.20;
+                // Existing circular blocks can explode to a closed bulged polyline.
+                if (ent is AcPolyline round && round.Closed && round.NumberOfVertices >= 2)
+                {
+                    for (int i = 0; i < round.NumberOfVertices; i++)
+                        if (Math.Abs(round.GetBulgeAt(i)) <= 1e-8) return false;
+                    return Math.Abs(round.Area) > 0.1;
+                }
+                return false;
             }
-
-            return handles
-                .OrderByDescending(x => x.Score)
-                .Select(x => x.Handle)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-
-        private static bool CouldBeOuterDestination(Entity ent, Point3d blockCenter)
-        {
-            if (ent is Circle circle)
-                return Distance2d(blockCenter, circle.Center) <= Math.Max(circle.Radius, 1.5);
-
-            if (ent is AcPolyline pl)
-            {
-                if (!pl.Closed)
-                    return false;
-
-                try
-                {
-                    if (pl.Area <= 0.0)
-                        return false;
-
-                    return IsPointInsideClosedPolyline(pl, blockCenter);
-                }
-                catch
-                {
-                    return false;
-                }
-            }
-
-            if (ent is Ellipse ellipse)
-            {
-                try
-                {
-                    Point3d c = ellipse.Center;
-                    double major = ellipse.MajorAxis.Length;
-                    double minor = major * ellipse.RadiusRatio;
-                    double tol = Math.Max(Math.Max(major, minor), 1.5);
-                    return Distance2d(blockCenter, c) <= tol;
-                }
-                catch
-                {
-                    return false;
-                }
-            }
-
+            if (role == StormStructureRole.JunctionBox) return ent is AcPolyline box && IsRectangle(box);
+            if (role == StormStructureRole.DropInlet) return ent is AcPolyline inlet && inlet.Closed && Math.Abs(inlet.Area) > 1e-8;
             return false;
         }
 
-        private static double ScoreOuterDestination(Entity ent, Point3d blockCenter)
+        private static bool OutlineMatchesAnchor(Entity ent, StormStructureRole role, Point3d anchor)
         {
-            Point3d candidateCenter = GetEntityCenter(ent);
-            double distPenalty = Distance2d(blockCenter, candidateCenter);
-
-            if (ent is Circle circle)
-                return (Math.PI * circle.Radius * circle.Radius * 1000.0) - distPenalty;
-
-            if (ent is AcPolyline pl)
+            if (role != StormStructureRole.DropInlet)
+                return Distance2d(GetEntityCenter(ent), anchor) <= StormStructureMatching.MatchTolerance;
+            if (ent is not AcPolyline pl || !pl.Closed) return false;
+            // DI_CENTER is the design anchor; an asymmetric inlet need not have a
+            // bounding-box center at that anchor. Retain the established footprint test.
+            if (Distance2d(pl.GetClosestPointTo(anchor, false), anchor) <= StormStructureMatching.MatchTolerance) return true;
+            bool inside = false;
+            for (int i = 0, j = pl.NumberOfVertices - 1; i < pl.NumberOfVertices; j = i++)
             {
-                try
-                {
-                    return (Math.Abs(pl.Area) * 1000.0) - distPenalty;
-                }
-                catch
-                {
-                    return -distPenalty;
-                }
+                Point2d a = pl.GetPoint2dAt(i);
+                Point2d b = pl.GetPoint2dAt(j);
+                if ((a.Y > anchor.Y) != (b.Y > anchor.Y) &&
+                    anchor.X < (b.X - a.X) * (anchor.Y - a.Y) / (b.Y - a.Y) + a.X)
+                    inside = !inside;
             }
-
-            if (ent is Ellipse ellipse)
-            {
-                try
-                {
-                    double major = ellipse.MajorAxis.Length;
-                    double minor = major * ellipse.RadiusRatio;
-                    return (Math.PI * major * minor * 1000.0) - distPenalty;
-                }
-                catch
-                {
-                    return -distPenalty;
-                }
-            }
-
-            return -distPenalty;
+            return inside;
         }
 
         private static Point3d GetEntityCenter(Entity ent)
         {
-            try
-            {
-                Extents3d ext = ent.GeometricExtents;
-                return new Point3d(
-                    (ext.MinPoint.X + ext.MaxPoint.X) * 0.5,
-                    (ext.MinPoint.Y + ext.MaxPoint.Y) * 0.5,
-                    (ext.MinPoint.Z + ext.MaxPoint.Z) * 0.5);
-            }
-            catch
-            {
-                if (ent is BlockReference br)
-                    return br.Position;
-
-                if (ent is Circle circle)
-                    return circle.Center;
-
-                if (ent is Ellipse ellipse)
-                    return ellipse.Center;
-
-                return Point3d.Origin;
-            }
-        }
-
-        private static List<PolylineCandidate> FindClosedPolylineCandidates(Transaction tr, Database db, Point3d center, double maxRadius)
-        {
-            List<PolylineCandidate> results = new List<PolylineCandidate>();
-            if (tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead) is not BlockTableRecord space)
-                return results;
-
-            foreach (ObjectId id in space)
-            {
-                if (tr.GetObject(id, OpenMode.ForRead, false) is not AcPolyline pl || pl.IsErased || !pl.Closed)
-                    continue;
-
-                if (pl.Area <= 0.0)
-                    continue;
-
-                if (!CouldBelongToStructure(pl))
-                    continue;
-
-                Point3d plCenter = GetPolylineCenter(pl);
-                if (Distance2d(center, plCenter) > maxRadius)
-                    continue;
-
-                Extents3d ext;
-                try
-                {
-                    ext = pl.GeometricExtents;
-                }
-                catch
-                {
-                    continue;
-                }
-
-                if (!PointWithinExtents(center, ext, JsExtentsTolerance))
-                    continue;
-
-                bool contains = false;
-                try
-                {
-                    contains = IsPointInsideClosedPolyline(pl, center);
-                }
-                catch
-                {
-                    contains = false;
-                }
-
-                if (!contains)
-                    continue;
-
-                results.Add(new PolylineCandidate(id, pl.Handle.ToString(), Math.Abs(pl.Area), plCenter, ext));
-            }
-
-            return results;
-        }
-
-        private static bool CouldBelongToStructure(AcPolyline pl)
-        {
-            string layer = pl.Layer ?? string.Empty;
-            if (string.Equals(layer, StructuresPointLayer, StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            if (layer.IndexOf("CURB", StringComparison.OrdinalIgnoreCase) >= 0)
-                return false;
-
-            if (string.Equals(layer, "C-DETL-MARK", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            return true;
-        }
-
-        private static PolylineCandidate? ChooseOuterCandidate(List<PolylineCandidate> candidates, Point3d center)
-        {
-            if (candidates.Count == 0)
-                return null;
-
-            return candidates.OrderByDescending(c => c.Area).ThenBy(c => Distance2d(center, c.Center)).FirstOrDefault();
-        }
-
-        private static PolylineCandidate? ChooseInnerCandidate(List<PolylineCandidate> candidates, PolylineCandidate? outer, Point3d center)
-        {
-            if (outer == null)
-                return null;
-
-            return candidates
-                .Where(c => c.Id != outer.Id && c.Area < outer.Area && ExtentsContainedWithin(c.Extents, outer.Extents, 0.5))
-                .OrderByDescending(c => c.Area)
-                .ThenBy(c => Distance2d(center, c.Center))
-                .FirstOrDefault();
-        }
-
-        private static Point3d GetPolylineCenter(AcPolyline pl)
-        {
-            Extents3d ext = pl.GeometricExtents;
+            if (ent is Circle circle) return circle.Center;
+            Extents3d ext = ent.GeometricExtents;
             return new Point3d((ext.MinPoint.X + ext.MaxPoint.X) * 0.5, (ext.MinPoint.Y + ext.MaxPoint.Y) * 0.5, 0.0);
-        }
-
-        private static bool PointWithinExtents(Point3d point, Extents3d ext, double tol)
-        {
-            return point.X >= ext.MinPoint.X - tol &&
-                   point.X <= ext.MaxPoint.X + tol &&
-                   point.Y >= ext.MinPoint.Y - tol &&
-                   point.Y <= ext.MaxPoint.Y + tol;
-        }
-
-        private static bool ExtentsContainedWithin(Extents3d inner, Extents3d outer, double tol)
-        {
-            return inner.MinPoint.X >= outer.MinPoint.X - tol &&
-                   inner.MaxPoint.X <= outer.MaxPoint.X + tol &&
-                   inner.MinPoint.Y >= outer.MinPoint.Y - tol &&
-                   inner.MaxPoint.Y <= outer.MaxPoint.Y + tol;
-        }
-
-        private static bool IsPointInsideClosedPolyline(AcPolyline pl, Point3d point)
-        {
-            List<Point2d> vertices = new List<Point2d>();
-            for (int i = 0; i < pl.NumberOfVertices; i++)
-                vertices.Add(pl.GetPoint2dAt(i));
-
-            if (vertices.Count < 3)
-                return false;
-
-            bool inside = false;
-            double x = point.X;
-            double y = point.Y;
-            int j = vertices.Count - 1;
-
-            for (int i = 0; i < vertices.Count; i++)
-            {
-                double xi = vertices[i].X;
-                double yi = vertices[i].Y;
-                double xj = vertices[j].X;
-                double yj = vertices[j].Y;
-
-                bool intersect = ((yi > y) != (yj > y)) &&
-                                 (x < ((xj - xi) * (y - yi) / ((yj - yi) == 0.0 ? 1e-12 : (yj - yi)) + xi));
-                if (intersect)
-                    inside = !inside;
-
-                j = i;
-            }
-
-            return inside;
         }
 
         private static double Distance2d(Point3d a, Point3d b)
         {
             double dx = a.X - b.X;
             double dy = a.Y - b.Y;
-            return Math.Sqrt((dx * dx) + (dy * dy));
+            return Math.Sqrt(dx * dx + dy * dy);
         }
 
-        private static bool QueueCopyObjectDataViaLisp(string sourceHandle, string destHandle, Editor ed)
+        private sealed class SourceInfo
         {
-            if (string.IsNullOrWhiteSpace(sourceHandle) || string.IsNullOrWhiteSpace(destHandle) || !File.Exists(OdHelperPath))
-                return false;
-
-            try
-            {
-                AcDocument? doc = AcadApp.DocumentManager.MdiActiveDocument;
-                if (doc == null)
-                    return false;
-
-                string escapedPath = OdHelperPath.Replace("\\", "\\\\").Replace("\"", "\\\"");
-                string escapedSource = sourceHandle.Replace("\"", "\\\"");
-                string escapedDest = destHandle.Replace("\"", "\\\"");
-                string expr = $"(progn (vl-load-com) (load \"{escapedPath}\") (CLV-GIS-OD-COPY-HANDLES \"{escapedSource}\" \"{escapedDest}\") (princ)) ";
-                doc.SendStringToExecute(expr, true, false, false);
-                return true;
-            }
-            catch (System.Exception ex)
-            {
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO OD helper queue failed: {ex.Message}");
-                return false;
-            }
+            internal SourceInfo(ObjectId id, StormStructureSource data) { Id = id; Data = data; }
+            internal ObjectId Id { get; }
+            internal StormStructureSource Data { get; }
+            internal List<ObjectId> Outputs { get; set; } = new List<ObjectId>();
         }
 
-        private static bool QueueCopyObjectDataViaLisp(string sourceHandle, IEnumerable<string> destHandles, Editor ed)
+        private sealed class TargetInfo
         {
-            List<string> cleanHandles = destHandles
-                .Where(h => !string.IsNullOrWhiteSpace(h))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            if (string.IsNullOrWhiteSpace(sourceHandle) || cleanHandles.Count == 0 || !File.Exists(OdHelperPath))
-                return false;
-
-            try
-            {
-                AcDocument? doc = AcadApp.DocumentManager.MdiActiveDocument;
-                if (doc == null)
-                    return false;
-
-                string escapedPath = OdHelperPath.Replace("\\", "\\\\").Replace("\"", "\\\"");
-                string escapedSource = sourceHandle.Replace("\"", "\\\"");
-                string copies = string.Join(" ", cleanHandles.Select(h =>
-                {
-                    string escapedDest = h.Replace("\"", "\\\"");
-                    return $"(CLV-GIS-OD-COPY-HANDLES \"{escapedSource}\" \"{escapedDest}\")";
-                }));
-
-                string expr = $"(progn (vl-load-com) (load \"{escapedPath}\") {copies} (princ)) ";
-                doc.SendStringToExecute(expr, true, false, false);
-                return true;
-            }
-            catch (System.Exception ex)
-            {
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO OD helper queue failed: {ex.Message}");
-                return false;
-            }
-        }
-
-        private sealed class PolylineCandidate
-        {
-            public PolylineCandidate(ObjectId id, string handle, double area, Point3d center, Extents3d extents)
-            {
-                Id = id;
-                Handle = handle;
-                Area = area;
-                Center = center;
-                Extents = extents;
-            }
-
-            public ObjectId Id { get; }
-            public string Handle { get; }
-            public double Area { get; }
-            public Point3d Center { get; }
-            public Extents3d Extents { get; }
-        }
-
-        private sealed class DropInletBatchResult
-        {
-            public ObjectId SourcePointId { get; set; } = ObjectId.Null;
-            public string SourcePointHandle { get; set; } = string.Empty;
-            public List<string> OuterHandles { get; set; } = new List<string>();
-            public int OuterHandleCount { get; set; }
-            public int CreatedCount { get; set; }
-            public int ErasedCount { get; set; }
-            public int InnerMoved { get; set; }
-            public int OuterMoved { get; set; }
-            public double MatchTolerance { get; set; }
-            public double SourcePointDistance { get; set; } = -1.0;
-            public bool OdQueued { get; set; }
-        }
-
-        private sealed class JunctionBatchResult
-        {
-            public string SourcePointHandle { get; set; } = string.Empty;
-            public string OuterHandle { get; set; } = string.Empty;
-            public string InnerHandle { get; set; } = string.Empty;
-            public int CandidateCount { get; set; }
-            public bool OdQueued { get; set; }
+            internal TargetInfo(ObjectId id, StormStructureTarget data, bool completed) { Id = id; Data = data; IsCompleted = completed; }
+            internal ObjectId Id { get; }
+            internal StormStructureTarget Data { get; }
+            internal bool IsCompleted { get; }
+            internal string? CompletedSource { get; set; }
         }
     }
 }

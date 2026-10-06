@@ -17,9 +17,13 @@ namespace CLV_CivilTools.Gis
 
             try
             {
-                LayerStandards.EnsureGisLayers(doc.Database, ed);
-                ed.WriteMessage("\nCLV-GIS-STORM-GIS: storm/sewer GIS layer standards synced. Queueing STORM STRUCTURES AUTO then PIPE OD OFFSET ALL, then strong cleanup.");
-                doc.SendStringToExecute("CLV-GIS-STRM-AUTO CLV-GIS-PIPE-OFFSET-OD-ALL CLV-GIS-CLEAN-DWG ", true, false, false);
+                if (!GisStormStructureAuto.RunVerified(doc))
+                {
+                    ed.WriteMessage("\nCLV-GIS-STORM-GIS: review the structure results before continuing. Pipe offset and broad cleanup were not queued; imported Structures points are retained.");
+                    return;
+                }
+                ed.WriteMessage("\nCLV-GIS-STORM-GIS: structure OD verified. Queueing pipe offset without broad cleanup; imported Structures points remain available for review.");
+                GisPipeOdOffsetCommands.QueueAllWithoutCleanup(doc);
             }
             catch (System.Exception ex)
             {
@@ -28,3 +32,4 @@ namespace CLV_CivilTools.Gis
         }
     }
 }
+

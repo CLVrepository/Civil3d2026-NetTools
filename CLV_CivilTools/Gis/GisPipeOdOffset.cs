@@ -72,6 +72,19 @@ namespace CLV_CivilTools.Gis
             }
         }
 
+        // Storm ALL must not indirectly queue CLV-GIS-CLEAN-DWG while OD source points are retained.
+        internal static bool QueueAllWithoutCleanup(Document doc)
+        {
+            if (!EnsureHelperLoaded(doc, doc.Editor, out string helperPath))
+            {
+                doc.Editor.WriteMessage($"\nCLV-GIS-STORM-GIS: pipe helper unavailable: {NetworkHelperPath}. Structures remain prepared; pipe offset was not run.");
+                return false;
+            }
+            doc.Editor.WriteMessage($"\nCLV-GIS-STORM-GIS: queueing {helperPath}; pipe completion must be checked in the helper output.");
+            doc.SendStringToExecute(HelperAllCommandName + " ", true, false, false);
+            return true;
+        }
+
         private static bool EnsureHelperLoaded(Document? doc, Editor ed, out string helperPath)
         {
             helperPath = NetworkHelperPath;
@@ -92,3 +105,4 @@ namespace CLV_CivilTools.Gis
         }
     }
 }
+

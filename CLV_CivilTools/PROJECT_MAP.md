@@ -1,3 +1,11 @@
+## 2026-10-06 - Centered storm GIS PREP-ALL trial
+- `Gis/StormStructureMatching.cs`: pure OD-role classifier and order-independent, mutual one-to-one planner. Exact `-JS` suffix identifies a junction box before generic manhole wording; unsuffixed explicit `ACCESS STRUCTURE` identifies access; known SDDI/type tokens identify drop inlets. Duplicate identities, conflicting roles, nonfinite coordinates, competing matches, and offsets beyond 0.10 drawing units are review items.
+- `Gis/GisStormStructureAuto.cs`: snapshots same-record Structures identity and source geometry before edits; plans rectangular junctions while access/DI blocks remain intact; reserves destinations; preserves DI_CENTER footprint matching; synchronously verifies full typed native OD before retiring original geometry. All imported source points remain. Completion Xrecords on source points link outputs for rerun verification and survive XData cleanup.
+- `Gis/GisImport.cs`: bounded fail-closed OD adapter using existing ManagedMapApi loading. Reads Name and PartSizeName from the same Structures record; copies all Character/Integer/Real/Point fields; verifies full typed source/destination records; never overwrites differing native destination OD.
+- `Gis/GisStormGisCommands.cs` and `Gis/GisPipeOdOffset.cs`: ALL calls structures synchronously, stops downstream work on any review/failure, then queues the existing pipe helper without broad managed cleanup. Standalone pipe commands keep their existing cleanup behavior.
+- `Gis/GisSurveyCacheFinalize.cs`: exact duplicate checks for nonlinear structures now require matching entity/outline shape and extents, not center proximity alone. Circle/curved-access output cannot be suppressed by a co-located straight box outline. Nearby differences remain review conflicts.
+- No new LISP helper or shared-server deployment is required. See `Docs/STORM_GIS_PREP_CENTERED_TRIAL.md` for trial steps and validation limits.
+
 ## 2026-08-20 - Q1 Pipe Top Check
 - `Ufls/UflsPipeInfo.cs`: added `UFLS-PIPE-TOP-CHECK`, a COGO-point-driven pipe top verification command. It reuses the existing `UFLS-PIPE-INFO` pipe geometry/interpolation/top-of-pipe calculation by passing the selected COGO point X/Y into the shared calculation path, while using the selected COGO point Elevation only as `SURV - TOP`.
 - `Ufls/UflsPalette.cs`: added `PIPE TOP CHECK` under Q1 UFLS > CHECK > INFO.
@@ -932,3 +940,4 @@ The viewer remains a separate palette rather than a drawing underlay. PDFium/Ski
 
 ### Map Transform test revision
 - `Survey/SurveyBestFitMap.cs` emits `MAP TRANSFORM revision 2026.08.06-HISTORY-R3` when the revised editable-history implementation is actually loaded. Recalled sessions temporarily restore the map to its saved original placement and recreate numbered pair markers during editing; Cancel restores the prior placement. The command also verifies the saved XRecord can be read back immediately after Finalize.
+

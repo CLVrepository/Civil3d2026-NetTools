@@ -1,3 +1,9 @@
+## 2026-10-06 - Storm GIS PREP-ALL centered trial
+- `CLV-GIS-STORM-GIS` (existing storm GIS PREP-ALL routing): synchronously runs role-aware structure preparation. Queues existing pipe offset ALL only when all structure sources/destinations are resolved and OD verified; broad managed cleanup is omitted so retained imported points remain available.
+- `CLV-GIS-STRM-AUTO`: reads same-record Structures Name/PartSizeName, separates DI/access/junction-box roles, accepts only unambiguous center matches within 0.10 drawing units, verifies native OD before geometry replacement, and reports review handles. All imported source points remain; reruns verify linked outputs without re-exploding completed structures.
+- `CLV-GIS-COMPARE` / `CLV-GIS-FINALIZE-STRC`: different co-located structure shapes/extents are nearby conflicts instead of exact duplicates.
+- No new commands or keyword prompts. Separate single/manual structure, point-erasure, cleanup, and pipe commands are unchanged. Trial instructions: `Docs/STORM_GIS_PREP_CENTERED_TRIAL.md`.
+
 ## 2026-08-20 - Q1 Pipe Top Check
 - `UFLS-PIPE-TOP-CHECK` - Q1 UFLS > CHECK tab > INFO > `PIPE TOP CHECK`; selects a Civil 3D COGO point, then a Civil 3D pipe, calculates `PLAN - TOP` using the existing `UFLS-PIPE-INFO` top-of-pipe logic at the COGO point X/Y, uses the COGO point Elevation as `SURV - TOP`, calculates `DIFF = SURV - TOP - PLAN - TOP`, and places one left-aligned three-line MText label (`PLAN - TOP`, `SURV - TOP`, `DIFF`) on `V-SURV-CHCK` with `CLV-Non Anno` text style and `0.1` text height.
 
@@ -438,3 +444,4 @@ The existing `LEGALDESC` / `CLV-LEGAL-DESCRIPTION` workflow now includes automat
 
 ### MAP TRANSFORM history verification
 - `SURVEY-BESTFIT-MAP` / `UFLS-BESTFIT-MAP`: revised editable-history build identifies itself as `2026.08.06-HISTORY-R3` at command start, temporarily restores recalled maps to their original pre-transform placement while editing, recreates numbered saved-pair markers, and verifies history persistence after Finalize.
+

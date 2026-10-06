@@ -1,3 +1,11 @@
+## 2026-10-06 - Storm GIS PREP-ALL role-safe centered trial
+- Separates coincident access and `-JS` junction-box Object Data using verified Structures records before geometry conversion; generic MANHOLE/SDMH text no longer routes a box to the access block.
+- Enforces one source per destination and one destination per source, with duplicate/ambiguous/offset sources retained for review. Junction linework is processed while DI and access blocks remain intact.
+- Checks actual typed OD readback before retiring source blocks/outer outlines. Keeps every imported Structures point, with drawing-persistent output links for safe reruns. Failed conversions roll back their newly generated geometry.
+- Storm ALL stops before pipe work when structure review is needed and no longer automatically runs broad cleanup. Existing standalone manual tools retain their behavior.
+- Prevents a centered rectangular box from suppressing a circular access feature during cache duplicate detection by requiring matching shape/extents.
+- No LISP files added or changed. Native Civil 3D/Map runtime validation is required before production use; see the centered-trial guide.
+
 ## 2026-08-20 - Q1 Pipe Top Check
 - Added `UFLS-PIPE-TOP-CHECK` / Q1 UFLS > CHECK > INFO > `PIPE TOP CHECK`. The command selects a Civil 3D COGO point first, uses that point's X/Y for the existing PIPE INFO top-of-pipe calculation, uses the COGO point Elevation as `SURV - TOP`, calculates `DIFF = SURV - TOP - PLAN - TOP`, and places one three-line MText label on `V-SURV-CHCK`.
 - `PIPE TOP CHECK` requires drawing text style `CLV-Non Anno`, uses text height `0.1`, and does not create a label if the required style is missing. The command restores the original current layer after label creation or failure.
@@ -1819,3 +1827,4 @@ CHANGELOG
 - Corrected first-page `BY:`, `P.R. BY:`, and `PAGE X OF Y` placement by retaining the original leading tab runs from the City Surveyor template.
 - APN and date replacement now changes only the placeholder text nodes and leaves all original header layout controls intact.
 - Page-number fields are inserted after the preserved template tabs and inherit the original PAGE run formatting.
+
