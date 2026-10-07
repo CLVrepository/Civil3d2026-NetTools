@@ -47,6 +47,7 @@ namespace CLV_CivilTools.Gis
 
                 string? sdfPath = SelectSdf(source);
                 if (sdfPath == null) return;
+                source.Editor.WriteMessage("\nGIS setup: checking the selected SDF, shared template and matching import profile...");
                 if (!GisNewDrawingProfile.TryResolveProfilePath(sourceCs, out string profilePath, out string pathDetail))
                     throw new InvalidOperationException(pathDetail);
                 RequireReadableFile(GisNewDrawingProfile.TemplatePath, "Blank template");
@@ -60,6 +61,7 @@ namespace CLV_CivilTools.Gis
                 string profileHash = Hash(profileGuard);
                 if (!GisNewDrawingProfile.TryLoad(profilePath, sourceCs, out GisNewDrawingProfile? profile, out string profileDetail) || profile == null)
                     throw new InvalidOperationException(profileDetail);
+                source.Editor.WriteMessage("\nGIS setup: reading SDF schema, coordinate system and network features (read-only)...");
                 if (!GisNewDrawingSdf.TryRead(sdfPath, profile, out GisNewDrawingSdfSnapshot? sdf, out string sdfDetail) || sdf == null)
                     throw new InvalidOperationException(sdfDetail);
 
@@ -69,6 +71,7 @@ namespace CLV_CivilTools.Gis
                     source.Editor.WriteMessage("\nProfile note: " + diagnostic);
 
                 // Session context is required for Add/activation/CloseAndDiscard.
+                source.Editor.WriteMessage("\nGIS setup: preflight passed; creating the new Blank (2026) drawing...");
                 destination = DocumentCollectionExtension.Add(AcadApp.DocumentManager, GisNewDrawingProfile.TemplatePath);
                 AcadApp.DocumentManager.MdiActiveDocument = destination;
                 HostApplicationServices.WorkingDatabase = destination.Database;
@@ -81,6 +84,7 @@ namespace CLV_CivilTools.Gis
                     GisNewDrawingMapApi.AssignProjection(sourceCs);
                     SetSetupState(destination.Database, "INCOMPLETE", source.Name, sdfPath, profilePath, sourceCs);
                 }
+                destination.Editor.WriteMessage("\nGIS setup: copying and verifying survey linework and blocks at their original coordinates...");
                 GisNewDrawingClone.Result cloned = GisNewDrawingClone.CloneAndVerify(source, destination, sourceSnapshot);
                 AcadApp.DocumentManager.MdiActiveDocument = destination;
                 HostApplicationServices.WorkingDatabase = destination.Database;
@@ -93,6 +97,7 @@ namespace CLV_CivilTools.Gis
                     if (Hash(profileGuard) != profileHash)
                         throw new InvalidOperationException("The import profile changed after preflight.");
 
+                    destination.Editor.WriteMessage("\nGIS setup: loading the selected profile and importing/verifying Pipes and Structures...");
                     GisNewDrawingMapApi.ImportSummary imported = GisNewDrawingMapApi.ImportAndVerify(
                         destination, sdf, profilePath, profile);
                     if (!GisNewDrawingSdf.TryVerifyUnchanged(sdf, out changedDetail))

@@ -17,6 +17,8 @@ namespace CLV_CivilTools.Gis
     /// FeatureAccessManager.GetConnectionManager; IConnection.CreateCommand;
     /// IGetSpatialContexts.ActiveOnly/Execute; ISpatialContextReader.GetName,
     /// GetCoordinateSystem and GetCoordinateSystemWkt; ISelect.Execute;
+    /// IDescribeSchema.SchemaName/Execute; FeatureSchema.Classes;
+    /// SchemaElement.Name/FeatureSchema/Parent; ClassDefinition.QualifiedName;
     /// IFeatureCommand.SetFeatureClassName; IFeatureReader.GetClassDefinition,
     /// GetGeometry; FeatureClass.GeometryProperty; IReader scalar getters/Close.
     /// SDF File/ReadOnly connection properties are documented in the OSGeo FDO
@@ -30,6 +32,7 @@ namespace CLV_CivilTools.Gis
         private const string GeometryFactoryType = "OSGeo.FDO.Geometry.FgfGeometryFactory";
         private const int MaximumSpatialContexts = 1024;
         private const int MaximumFeaturesPerClass = 1000000;
+        private const int MaximumSchemaElements = 10000;
 
         internal static bool TryRead(string path, GisNewDrawingProfile profile,
             out GisNewDrawingSdfSnapshot? snapshot, out string detail)
@@ -86,6 +89,9 @@ namespace CLV_CivilTools.Gis
                         throw new InvalidDataException("The SDF has no spatial context. Its coordinate system cannot be verified.");
                     if (contexts.GroupBy(context => context.Name, StringComparer.Ordinal).Any(group => group.Count() != 1))
                         throw new InvalidDataException("The SDF has duplicate spatial-context names.");
+                    // Reader definitions may be detached copies. Establish exact schema
+                    // membership independently before accepting either feature reader.
+                    VerifyClassDeclarations(connection, commandType, profile.SelectedTables);
                     pipes = ReadFeatures(connection, commandType, geometryFactory, profile.SelectedTables.Single(table =>
                         table.InputClass == GisNewDrawingProfile.PipesInputClass), contexts, profile.SourceCoordinateSystem);
                     structures = ReadFeatures(connection, commandType, geometryFactory, profile.SelectedTables.Single(table =>
@@ -155,8 +161,9 @@ namespace CLV_CivilTools.Gis
             // explicit null-structure stubs. ExecuteWithLock must never be used.
             object reader = scope.Own(Call(command, "Execute"), close: true);
             object definition = scope.Own(Call(reader, "GetClassDefinition"));
-            if (Text(Get(definition, "QualifiedName")) != table.InputClass)
-                throw new InvalidDataException($"The SDF returned a different class definition for {table.InputClass}.");
+            // This method is reached only after VerifyClassDeclarations succeeds for
+            // all requested classes on this same read-only, file-guarded connection.
+            ValidateClassIdentity(scope, definition, table.InputClass, allowDetached: true);
             object geometry = scope.Own(Get(definition, "GeometryProperty"));
             string geometryName = Text(Get(geometry, "Name"));
             if (string.IsNullOrWhiteSpace(geometryName))
@@ -215,6 +222,95 @@ namespace CLV_CivilTools.Gis
                 result.Add(new GisNewDrawingSdfFeature(values, geometryBytes, type, coordinates));
             }
             return Array.AsReadOnly(result.ToArray());
+        }
+
+        private static void VerifyClassDeclarations(object connection, Type commandType,
+            IEnumerable<GisNewDrawingProfileTable> tables)
+        {
+            foreach (var group in tables.GroupBy(table => ClassIdentity(table.InputClass).Schema, StringComparer.Ordinal))
+            {
+                using var scope = new NativeScope();
+                object command = scope.Own(Call(connection, "CreateCommand", Enum.Parse(commandType, "CommandType_DescribeSchema")));
+                Set(command, "SchemaName", group.Key);
+                object schemas = scope.Own(Call(command, "Execute"));
+                int schemaCount = SchemaCount(schemas);
+                int matches = 0;
+                var declared = group.ToDictionary(table => ClassIdentity(table.InputClass).Class,
+                    table => table.InputClass, StringComparer.Ordinal);
+                var classMatches = declared.Keys.ToDictionary(name => name, _ => 0, StringComparer.Ordinal);
+                var actualSchemas = new List<string>();
+                foreach (int index in Enumerable.Range(0, schemaCount))
+                {
+                    using var schemaScope = new NativeScope();
+                    object schema = schemaScope.Own(GetItem(schemas, index));
+                    string schemaName = Text(Get(schema, "Name"));
+                    actualSchemas.Add(schemaName);
+                    // DescribeSchema can also return dependent schemas. They are not
+                    // substitutes for the exact requested schema, even with like names.
+                    if (!string.Equals(schemaName, group.Key, StringComparison.Ordinal)) continue;
+                    matches++;
+                    object classes = schemaScope.Own(Get(schema, "Classes"));
+                    int count = SchemaCount(classes);
+                    for (int classIndex = 0; classIndex < count; classIndex++)
+                    {
+                        using var classScope = new NativeScope();
+                        object definition = classScope.Own(GetItem(classes, classIndex));
+                        string name = Text(Get(definition, "Name"));
+                        if (!declared.TryGetValue(name, out string? inputClass)) continue;
+                        classMatches[name]++;
+                        ValidateClassIdentity(classScope, definition, inputClass, allowDetached: false);
+                    }
+                }
+                if (matches != 1)
+                    throw new InvalidDataException($"The SDF must declare exactly one schema '{group.Key}'; found {matches}. " +
+                        $"DescribeSchema returned [{string.Join(", ", actualSchemas)}].");
+                foreach (var required in declared)
+                    if (classMatches[required.Key] != 1)
+                        throw new InvalidDataException($"The SDF must declare exactly one class '{required.Value}' in schema '{group.Key}'; " +
+                            $"found {classMatches[required.Key]}.");
+            }
+        }
+
+        private static int SchemaCount(object collection)
+        {
+            int count = Integer(Get(collection, "Count"));
+            if (count < 0 || count > MaximumSchemaElements)
+                throw new InvalidDataException("The SDF schema element count exceeds the preflight safety limit.");
+            return count;
+        }
+
+        private static (string Schema, string Class) ClassIdentity(string inputClass)
+        {
+            // These are the only approved profile input classes. No suffix matching,
+            // inferred default schema, aliases or case-insensitive comparisons.
+            return inputClass switch
+            {
+                GisNewDrawingProfile.PipesInputClass => ("Civil_Schema", "Pipes"),
+                GisNewDrawingProfile.StructuresInputClass => ("Civil_Schema", "Structures"),
+                _ => throw new InvalidDataException($"Unsupported exact SDF input class '{inputClass}'.")
+            };
+        }
+
+        private static void ValidateClassIdentity(NativeScope scope, object definition, string inputClass, bool allowDetached)
+        {
+            (string expectedSchema, string expectedClass) = ClassIdentity(inputClass);
+            string name = Text(Get(definition, "Name"));
+            string qualifiedName = Text(Get(definition, "QualifiedName"));
+            object? schema = Get(definition, "FeatureSchema");
+            if (schema != null) scope.Own(schema);
+            object? parent = Get(definition, "Parent");
+            if (parent != null) scope.Own(parent);
+            string? schemaName = schema == null ? null : Text(Get(schema, "Name"));
+            string? parentName = parent == null ? null : Text(Get(parent, "Name"));
+            bool detached = schema == null && parent == null;
+            bool qualifiedNameMatches = string.Equals(qualifiedName, inputClass, StringComparison.Ordinal) ||
+                (allowDetached && detached && string.Equals(qualifiedName, expectedClass, StringComparison.Ordinal));
+            if (!string.Equals(name, expectedClass, StringComparison.Ordinal) || !qualifiedNameMatches ||
+                (schema != null && !string.Equals(schemaName, expectedSchema, StringComparison.Ordinal)) ||
+                (parent != null && !string.Equals(parentName, expectedSchema, StringComparison.Ordinal)))
+                throw new InvalidDataException($"The SDF returned a different class definition for {inputClass}. " +
+                    $"Name='{name}', QualifiedName='{qualifiedName}', FeatureSchema='{schemaName ?? "<null>"}', " +
+                    $"Parent='{parentName ?? "<null>"}' ({(allowDetached ? "reader" : "declared schema")}).");
         }
 
         private static (string Type, IReadOnlyList<GisNewDrawingSdfCoordinate> Coordinates) DecodeGeometry(

@@ -67,3 +67,9 @@ Native test in a disposable source copy:
 A first native attempt stopped during read-only source capture with `eInvalidKey`, before the SDF prompt or destination creation. The original diagnostic did not establish the exact failing getter. Snapshot getters are now method-specific: no RGB reads for inherited/indexed colors, no Alpha read for inherited transparency, no optional name reads when absent, and no TextAt call on plain/shape linetype elements. Mode and applicable values remain part of the comparison. A native failure still stops the operation, now with a labelled property/stage; no error is replaced with a guessed default.
 
 Run `dotnet run --project Tests/GisNewDrawingAppearance.Tests/GisNewDrawingAppearance.Tests.csproj` (append `-p:TargetFramework=net10.0` if needed) to test the lazy-reader contracts. These portable tests do not establish the exact C1955 cause or replace the original-drawing native retry.
+
+## SDF reader class identity
+
+SDF selection and its read-only validation occur before the new Blank drawing is created. A subsequent native trial reached the SDF picker and stopped at the class-definition check. The original gate compared the feature reader's QualifiedName to `Civil_Schema:Pipes`, although a reader can return a copied class definition without a schema parent.
+
+The revised preflight anchors each requested class in the exact declared schema first, then checks the reader's exact class name and any supplied qualified/schema/parent identity. It does not accept arbitrary suffix matches or conflicting schema names. Failures report the actual returned identity. Setup stage messages make it clear whether the command is checking files, reading SDF metadata, creating the destination, copying geometry or importing data. The source drawing's CRS is read first; an unassigned blank template never determines the source CRS.

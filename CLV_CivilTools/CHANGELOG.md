@@ -1,3 +1,8 @@
+## 2026-10-07 - SDF class identity and setup stage diagnostics
+- Replaced the reader QualifiedName-only gate with declared-schema/class validation and strict reader identity/linkage checks. FDO reader copies may be detached from their schema; a valid detached name no longer requires a fabricated schema prefix. Conflicting identities still stop before destination creation.
+- SDF identity failures include the actual returned names/linkage. Added visible setup stages after SDF selection, before destination creation, during copying and before import.
+- Native values from the user's sample were not measured during this fix; installed-provider/original-drawing retry remains required.
+
 ## 2026-10-07 - GIS drawing capture appearance guards
 - Fixed unsafe method-specific reads in `CLV-GIS-NEW-DRAWING` source snapshots: RGB is read only for true color, alpha only for explicit-alpha transparency, and optional color names only when present. ByLayer/ByBlock/ACI/RGB/foreground and transparency inheritance stay distinct.
 - Ordinary linetype dashes and shape elements no longer invoke the text-only getter. Capture errors include handle/resource/property stages rather than a bare native error.

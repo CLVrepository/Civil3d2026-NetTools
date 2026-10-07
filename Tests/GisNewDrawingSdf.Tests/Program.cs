@@ -67,6 +67,105 @@ try
     });
     Run("Missing required source class fails with no partial snapshot", () => { FakeState.Classes.Remove(GisNewDrawingProfile.StructuresInputClass); Reject("KeyNotFoundException"); });
     Run("Different returned class identity fails", () => { Pipes().ReturnedName = "Other:Pipes"; Reject("different class definition"); });
+    Run("Attached exact class definitions pass with declared schema anchor", () =>
+    {
+        Read();
+        True(FakeState.Events.IndexOf("DescribeSchema.Civil_Schema") < FakeState.Events.IndexOf("Select.Civil_Schema:Pipes"));
+        True(FakeState.Events.Contains("Select.Civil_Schema:Structures"));
+    });
+    Run("Detached bare names pass only after exact schema declarations", () =>
+    {
+        Detach(Pipes(), "Pipes"); Detach(Structures(), "Structures"); Read();
+    });
+    Run("Detached qualified exact names also pass", () =>
+    {
+        Detach(Pipes(), GisNewDrawingProfile.PipesInputClass); Read();
+    });
+    Run("Dependent schemas may accompany the exact declared schema", () =>
+    {
+        FakeState.Schemas.Insert(0, new("Unrelated", new FakeDeclaredClassData("Pipes") { QualifiedName = "Unrelated:Pipes", Schema = "Unrelated", Parent = "Unrelated" }));
+        Detach(Pipes(), "Pipes"); Read();
+    });
+    Run("Missing exact schema cannot be inferred from a Pipes class", () =>
+    {
+        FakeState.Schemas[0].Name = "Other"; Detach(Pipes(), "Pipes");
+        RejectBeforeSelect("exactly one schema 'Civil_Schema'");
+    });
+    Run("Case-folded schema name is not accepted", () =>
+    {
+        FakeState.Schemas[0].Name = "civil_schema"; RejectBeforeSelect("exactly one schema");
+    });
+    Run("Missing schema declarations fail before Select", () => { FakeState.Schemas.Clear(); RejectBeforeSelect("found 0"); });
+    Run("Ambiguous schema declarations fail before Select", () =>
+    {
+        FakeState.Schemas.Add(new("Civil_Schema")); RejectBeforeSelect("exactly one schema");
+    });
+    Run("Both exact class declarations are required before either Select", () =>
+    {
+        FakeState.Schemas[0].Classes.RemoveAt(1); RejectBeforeSelect("exactly one class 'Civil_Schema:Structures'");
+    });
+    Run("Ambiguous class declarations fail before Select", () =>
+    {
+        FakeState.Schemas[0].Classes.Add(new("Pipes")); RejectBeforeSelect("exactly one class 'Civil_Schema:Pipes'");
+    });
+    Run("Case-folded declared class is not accepted", () =>
+    {
+        FakeState.Schemas[0].Classes[0].Name = "pipes"; RejectBeforeSelect("exactly one class 'Civil_Schema:Pipes'");
+    });
+    Run("Conflicting declaration QualifiedName fails with actual metadata", () =>
+    {
+        FakeState.Schemas[0].Classes[0].QualifiedName = "Other:Pipes"; RejectBeforeSelect("QualifiedName='Other:Pipes'");
+    });
+    Run("Conflicting declaration schema linkage fails", () =>
+    {
+        FakeState.Schemas[0].Classes[0].Schema = "Other"; RejectBeforeSelect("FeatureSchema='Other'");
+    });
+    Run("Conflicting declaration parent fails", () =>
+    {
+        FakeState.Schemas[0].Classes[0].Parent = "Other"; RejectBeforeSelect("Parent='Other'");
+    });
+    Run("Bare detached declaration does not establish the schema anchor", () =>
+    {
+        var declaration = FakeState.Schemas[0].Classes[0];
+        declaration.QualifiedName = "Pipes"; declaration.Schema = declaration.Parent = null;
+        RejectBeforeSelect("declared schema");
+    });
+    Run("Reader wrong exact Name fails despite matching QualifiedName", () =>
+    {
+        Pipes().ReaderName = "Structures"; Reject("Name='Structures'"); Equal(0, FakeState.FeatureReadCount);
+    });
+    Run("Detached class with another schema-qualified name fails", () =>
+    {
+        Detach(Pipes(), "Other:Pipes"); Reject("QualifiedName='Other:Pipes'");
+    });
+    Run("Detached class does not accept a suffix match", () =>
+    {
+        Detach(Pipes(), "prefixPipes"); Reject("QualifiedName='prefixPipes'");
+    });
+    Run("Detached class still requires exact case-sensitive Name", () =>
+    {
+        Detach(Pipes(), "Pipes"); Pipes().ReaderName = "pipes"; Reject("Name='pipes'");
+    });
+    Run("Reader linked to wrong schema fails despite matching QualifiedName", () =>
+    {
+        Pipes().ReaderSchema = "Other"; Reject("FeatureSchema='Other'");
+    });
+    Run("Reader linked to wrong parent fails despite matching QualifiedName", () =>
+    {
+        Pipes().ReaderParent = "Other"; Reject("Parent='Other'");
+    });
+    Run("Bare reader name with FeatureSchema linkage is inconsistent", () =>
+    {
+        Pipes().ReturnedName = "Pipes"; Pipes().ReaderParent = null; Reject("different class definition");
+    });
+    Run("Bare reader name with Parent linkage is inconsistent", () =>
+    {
+        Pipes().ReturnedName = "Pipes"; Pipes().ReaderSchema = null; Reject("different class definition");
+    });
+    Run("DescribeSchema failure releases all acquired wrappers", () =>
+    {
+        FakeState.FailDescribeSchema = true; RejectBeforeSelect("Injected DescribeSchema failure");
+    });
     Run("Missing mapped field fails before reading features", () => { Pipes().MissingProperty = "Length"; Reject("Missing mapped property"); Equal(0, FakeState.FeatureReadCount); });
     Run("Unsupported scalar type is not converted lossily", () => { Pipes().UnsupportedTypeProperty = "Length"; Reject("unsupported FDO scalar type"); });
     Run("Null mapped scalars are preserved", () =>
@@ -179,6 +278,17 @@ void Reject(string expected)
     True(!GisNewDrawingSdf.TryRead(path, Profile(GisNewDrawingProfile.LvfCoordinateSystem), out var snapshot, out string detail), "Expected failure.");
     True(snapshot == null, "Failure returned a partial snapshot.");
     True(detail.Contains(expected, StringComparison.OrdinalIgnoreCase), "Unexpected failure: " + detail);
+}
+void RejectBeforeSelect(string expected)
+{
+    Reject(expected);
+    True(!FakeState.Events.Any(value => value.StartsWith("Select.", StringComparison.Ordinal)), "Schema rejection must precede every Select.");
+    Equal(0, FakeState.FeatureReadCount);
+}
+void Detach(FakeClassData data, string qualifiedName)
+{
+    data.ReaderSchema = data.ReaderParent = null;
+    data.ReturnedName = qualifiedName;
 }
 GisNewDrawingProfile Profile(string crs)
 {

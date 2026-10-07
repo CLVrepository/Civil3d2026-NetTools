@@ -12,7 +12,7 @@ namespace OSGeo.FDO.ClientServices
 }
 namespace OSGeo.FDO.Commands
 {
-    public enum CommandType { CommandType_GetSpatialContexts, CommandType_Select }
+    public enum CommandType { CommandType_GetSpatialContexts, CommandType_DescribeSchema, CommandType_Select }
 }
 
 public static class FakeState
@@ -21,6 +21,8 @@ public static class FakeState
     public static readonly List<string> Events = new();
     public static readonly Dictionary<string, FakeClassData> Classes = new(StringComparer.Ordinal);
     public static readonly Dictionary<string, FakeGeometryData> Geometries = new(StringComparer.Ordinal);
+    public static readonly List<FakeSchemaData> Schemas = new();
+    public static bool FailDescribeSchema;
     public static bool FailGeometryDecode;
     public static List<(string Name, string Crs, string Wkt)> Contexts = new();
     public static bool HasReadOnly = true;
@@ -36,7 +38,8 @@ public static class FakeState
 
     public static void Reset()
     {
-        Objects.Clear(); Events.Clear(); Classes.Clear(); Geometries.Clear();
+        Objects.Clear(); Events.Clear(); Classes.Clear(); Geometries.Clear(); Schemas.Clear();
+        FailDescribeSchema = false;
         FailGeometryDecode = false;
         HasReadOnly = HonorsReadOnly = HasFile = OpenSucceeds = true;
         FailSpatialRead = FailFeatureRead = FailReaderClose = FailReaderDispose = false;
@@ -48,6 +51,7 @@ public static class FakeState
         structures.Rows.Add(new() { ["Name"] = "Structure 1", ["PartSizeName"] = "UFLS-Access Structure", ["Geometry"] = new byte[] { 9, 10, 11, 12 } });
         structures.Rows.Add(new() { ["Name"] = "Stub 1", ["PartSizeName"] = "UFLS-Null Structure", ["Geometry"] = new byte[] { 13, 14, 15, 16 } });
         Classes.Add(pipes.Name, pipes); Classes.Add(structures.Name, structures);
+        Schemas.Add(new("Civil_Schema", new("Pipes"), new("Structures")));
         // Synthetic test keys, not FGF decoding. The native decoder is represented
         // by explicit geometry objects so the production accessor path is tested.
         Geometries.Add("01020304", new("GeometryType_LineString", (1.5, 2.5, null), (3.5, 4.5, null)));
@@ -69,6 +73,9 @@ public sealed class FakeClassData
     public string Name { get; }
     public string Association { get; set; } = "Default";
     public string? ReturnedName { get; set; }
+    public string? ReaderName { get; set; }
+    public string? ReaderSchema { get; set; } = "Civil_Schema";
+    public string? ReaderParent { get; set; } = "Civil_Schema";
     public string? MissingProperty { get; set; }
     public string? UnsupportedTypeProperty { get; set; }
     public List<Dictionary<string, object?>> Rows { get; } = new();
@@ -102,6 +109,7 @@ public sealed class FakeConnection : FakeDisposable
     public FakeDisposable CreateCommand(CommandType kind) => kind switch
     {
         CommandType.CommandType_GetSpatialContexts => new FakeSpatialCommand(),
+        CommandType.CommandType_DescribeSchema => new FakeDescribeSchemaCommand(),
         CommandType.CommandType_Select => new FakeSelectCommand(),
         _ => throw new InvalidOperationException("Unexpected command; writes are prohibited.")
     };
@@ -147,7 +155,70 @@ public sealed class FakeSelectCommand : FakeDisposable
 {
     private string className = string.Empty;
     public void SetFeatureClassName(string value) { className = value; }
-    public FakeFeatureReader Execute() => new(FakeState.Classes[className]);
+    public FakeFeatureReader Execute()
+    {
+        FakeState.Events.Add("Select." + className);
+        return new(FakeState.Classes[className]);
+    }
+}
+public sealed class FakeSchemaData
+{
+    public FakeSchemaData(string name, params FakeDeclaredClassData[] classes) { Name = name; Classes = classes.ToList(); }
+    public string Name { get; set; }
+    public List<FakeDeclaredClassData> Classes { get; }
+}
+public sealed class FakeDeclaredClassData
+{
+    public FakeDeclaredClassData(string name) { Name = name; QualifiedName = "Civil_Schema:" + name; }
+    public string Name { get; set; }
+    public string QualifiedName { get; set; }
+    public string? Schema { get; set; } = "Civil_Schema";
+    public string? Parent { get; set; } = "Civil_Schema";
+}
+public sealed class FakeDescribeSchemaCommand : FakeDisposable
+{
+    public string SchemaName { get; set; } = string.Empty;
+    public FakeSchemaCollection Execute()
+    {
+        if (SchemaName != "Civil_Schema") throw new InvalidOperationException("Did not request exact Civil_Schema.");
+        FakeState.Events.Add("DescribeSchema." + SchemaName);
+        if (FakeState.FailDescribeSchema) throw new IOException("Injected DescribeSchema failure.");
+        // Include dependent/unrequested schemas to test the documented API contract.
+        return new();
+    }
+}
+public sealed class FakeSchemaCollection : FakeDisposable
+{
+    public int Count => FakeState.Schemas.Count;
+    public FakeSchema this[int index] => new(FakeState.Schemas[index]);
+}
+public sealed class FakeSchema : FakeDisposable
+{
+    private readonly FakeSchemaData data;
+    public FakeSchema(FakeSchemaData data) { this.data = data; }
+    public string Name => data.Name;
+    public FakeClassCollection Classes => new(data);
+}
+public sealed class FakeClassCollection : FakeDisposable
+{
+    private readonly FakeSchemaData data;
+    public FakeClassCollection(FakeSchemaData data) { this.data = data; }
+    public int Count => data.Classes.Count;
+    public FakeDeclaredClass this[int index] => new(data.Classes[index]);
+}
+public sealed class FakeDeclaredClass : FakeDisposable
+{
+    private readonly FakeDeclaredClassData data;
+    public FakeDeclaredClass(FakeDeclaredClassData data) { this.data = data; }
+    public string Name => data.Name;
+    public string QualifiedName => data.QualifiedName;
+    public FakeSchemaReference? FeatureSchema => data.Schema == null ? null : new(data.Schema);
+    public FakeSchemaReference? Parent => data.Parent == null ? null : new(data.Parent);
+}
+public sealed class FakeSchemaReference : FakeDisposable
+{
+    public FakeSchemaReference(string name) { Name = name; }
+    public string Name { get; }
 }
 public sealed class FakeFeatureReader : FakeDisposable
 {
@@ -185,7 +256,10 @@ public sealed class FakeClassDefinition : FakeDisposable
 {
     private readonly FakeClassData data;
     public FakeClassDefinition(FakeClassData data) { this.data = data; }
+    public string Name => data.ReaderName ?? data.Name.Split(':')[1];
     public string QualifiedName => data.ReturnedName ?? data.Name;
+    public FakeSchemaReference? FeatureSchema => data.ReaderSchema == null ? null : new(data.ReaderSchema);
+    public FakeSchemaReference? Parent => data.ReaderParent == null ? null : new(data.ReaderParent);
     public FakeGeometryProperty GeometryProperty => new(data.Association);
     public FakeProperties Properties => new(data);
 }
