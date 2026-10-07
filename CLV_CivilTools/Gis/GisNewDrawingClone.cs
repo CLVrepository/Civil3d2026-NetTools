@@ -8,6 +8,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using AcDocument = Autodesk.AutoCAD.ApplicationServices.Document;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
+using static CLV_CivilTools.Gis.GisNewDrawingAppearance;
 
 namespace CLV_CivilTools.Gis
 {
@@ -262,7 +263,7 @@ namespace CLV_CivilTools.Gis
 
         private static EntityState ReadEntity(Entity entity, string kind, Transaction tr)
         {
-            string geometry = GeometrySignature(entity, tr);
+            string geometry = ReadAt($"Entity handle {entity.Handle}: geometry snapshot", () => GeometrySignature(entity, tr));
             var state = GisImportCommands.InspectObjectDataFingerprint(entity.ObjectId, out string fingerprint, out string detail);
             if (state == GisImportCommands.ObjectDataFingerprintState.ReadFailed)
                 throw new InvalidOperationException($"Handle {entity.Handle}: native OD cannot be verified: {detail}");
@@ -382,17 +383,22 @@ namespace CLV_CivilTools.Gis
         }
 
         private static ResourceState ReadResource(SymbolTableRecord record, Transaction tr)
+            => ReadAt($"Resource handle {record.Handle} ({record.GetType().Name}): snapshot", () => ReadResourceCore(record, tr));
+
+        private static ResourceState ReadResourceCore(SymbolTableRecord record, Transaction tr)
         {
+            string context = $"Resource handle {record.Handle} ({record.GetType().Name})";
             var key = new Key();
             key.Add(record.GetType().Name); key.Add(record.Name);
             string kind;
             if (record is LayerTableRecord layer)
             {
                 kind = "layer";
-                AddColor(key, layer.Color);
+                AddColor(key, ReadAt(context + ".Color", () => layer.Color), context + ".Color");
                 key.Add(layer.IsOff); key.Add(layer.IsFrozen); key.Add(layer.IsLocked);
-                key.Add(layer.IsPlottable); key.Add(layer.LineWeight); key.Add(layer.Transparency.Alpha);
-                key.Add(layer.PlotStyleName); key.Add(layer.ViewportVisibilityDefault);
+                key.Add(layer.IsPlottable); key.Add(layer.LineWeight);
+                AddTransparency(key, ReadAt(context + ".Transparency", () => layer.Transparency), context + ".Transparency");
+                key.Add(ReadAt(context + ".PlotStyleName", () => layer.PlotStyleName)); key.Add(layer.ViewportVisibilityDefault);
                 key.Add(((LinetypeTableRecord)tr.GetObject(layer.LinetypeObjectId, OpenMode.ForRead)).Name);
                 // Viewport overrides and non-global materials are not proven by this
                 // resource comparison, so do not silently reuse such layer records.
@@ -416,11 +422,28 @@ namespace CLV_CivilTools.Gis
                 key.Add(line.Comments); key.Add(line.PatternLength); key.Add(line.NumDashes); key.Add(line.IsScaledToFit);
                 for (int i = 0; i < line.NumDashes; i++)
                 {
-                    key.Add(line.DashLengthAt(i)); key.Add(line.ShapeNumberAt(i)); key.Add(line.ShapeOffsetAt(i));
-                    key.Add(line.ShapeRotationAt(i)); key.Add(line.ShapeScaleAt(i)); key.Add(line.ShapeIsUcsOrientedAt(i));
-                    key.Add(line.ShapeIsUprightAt(i)); key.Add(line.TextAt(i));
-                    ObjectId styleId = line.ShapeStyleAt(i);
-                    key.Add(styleId.IsNull ? "" : ((TextStyleTableRecord)tr.GetObject(styleId, OpenMode.ForRead)).Name);
+                    int index = i;
+                    string elementContext = context + $" dash[{index}]";
+                    key.Add(ReadAt(elementContext + ".DashLengthAt", () => line.DashLengthAt(index)));
+                    ObjectId styleId = ReadAt(elementContext + ".ShapeStyleAt", () => line.ShapeStyleAt(index));
+                    int shapeNumber = ReadAt(elementContext + ".ShapeNumberAt", () => line.ShapeNumberAt(index));
+                    // ShapeStyleAt is null for a plain dash. ShapeNumberAt is zero
+                    // for text/no shape. Native TextAt is not applicable to plain
+                    // dashes or shape elements: never invoke it for those cases.
+                    LinetypeElement element = ReadAt(elementContext + ": classify", () =>
+                        ReadLinetypeElement(!styleId.IsNull, shapeNumber,
+                            () => ReadAt(elementContext + ".TextAt", () => line.TextAt(index))));
+                    key.Add(element.Kind); key.Add(element.ShapeNumber); key.Add(element.Text);
+                    if (element.Kind != LinetypeElementKind.PlainDash)
+                    {
+                        key.Add(ReadAt(elementContext + ".ShapeOffsetAt", () => line.ShapeOffsetAt(index)));
+                        key.Add(ReadAt(elementContext + ".ShapeRotationAt", () => line.ShapeRotationAt(index)));
+                        key.Add(ReadAt(elementContext + ".ShapeScaleAt", () => line.ShapeScaleAt(index)));
+                        key.Add(ReadAt(elementContext + ".ShapeIsUcsOrientedAt", () => line.ShapeIsUcsOrientedAt(index)));
+                        key.Add(ReadAt(elementContext + ".ShapeIsUprightAt", () => line.ShapeIsUprightAt(index)));
+                        key.Add(ReadAt(elementContext + ".ShapeStyle.Name", () =>
+                            ((TextStyleTableRecord)tr.GetObject(styleId, OpenMode.ForRead)).Name));
+                    }
                 }
             }
             else throw new InvalidOperationException($"Handle {record.Handle}: unsupported symbol dependency {record.GetType().Name}.");
@@ -523,9 +546,12 @@ namespace CLV_CivilTools.Gis
                 entity is BlockReference && entity.GetType() != typeof(BlockReference))
                 throw new InvalidOperationException($"Handle {entity.Handle}: derived curve/block type {entity.GetType().FullName} needs its own complete geometry verifier.");
             var key = new Key();
+            string context = $"Entity handle {entity.Handle} ({entity.GetType().Name})";
             key.Add(entity.GetType().FullName); key.Add(entity.Layer);
-            AddColor(key, entity.Color); key.Add(entity.Linetype); key.Add(entity.LinetypeScale);
-            key.Add(entity.LineWeight); key.Add(entity.Visible); key.Add(entity.Transparency.Alpha);
+            AddColor(key, ReadAt(context + ".Color", () => entity.Color), context + ".Color");
+            key.Add(entity.Linetype); key.Add(entity.LinetypeScale);
+            key.Add(entity.LineWeight); key.Add(entity.Visible);
+            AddTransparency(key, ReadAt(context + ".Transparency", () => entity.Transparency), context + ".Transparency");
             switch (entity)
             {
                 case Line line:
@@ -643,7 +669,9 @@ namespace CLV_CivilTools.Gis
                         value.Add(attribute.Height); value.Add(attribute.WidthFactor); value.Add(attribute.Oblique);
                         value.Add(attribute.HorizontalMode); value.Add(attribute.VerticalMode); value.Add(attribute.Invisible);
                         value.Add(attribute.IsMirroredInX); value.Add(attribute.IsMirroredInY); value.Add(attribute.IsMTextAttribute);
-                        value.Add(attribute.Layer); AddColor(value, attribute.Color);
+                        value.Add(attribute.Layer);
+                        AddColor(value, ReadAt($"Attribute handle {attribute.Handle}.Color", () => attribute.Color),
+                            $"Attribute handle {attribute.Handle}.Color");
                         value.Add(((TextStyleTableRecord)tr.GetObject(attribute.TextStyleId, OpenMode.ForRead)).Name);
                         if (attribute.IsMTextAttribute)
                         {
@@ -678,14 +706,47 @@ namespace CLV_CivilTools.Gis
             if (text.ColumnType != ColumnType.NoColumns)
                 throw new InvalidOperationException($"MText handle {text.Handle}: columned text needs a complete per-column geometry verifier before cloning.");
             key.Add(text.BackgroundFill); key.Add(text.UseBackgroundColor); key.Add(text.BackgroundScaleFactor);
-            AddColor(key, text.BackgroundFillColor); key.Add(text.BackgroundTransparency.Alpha); key.Add(text.ShowBorders);
+            AddColor(key, ReadAt($"MText handle {text.Handle}.BackgroundFillColor", () => text.BackgroundFillColor),
+                $"MText handle {text.Handle}.BackgroundFillColor");
+            AddTransparency(key, ReadAt($"MText handle {text.Handle}.BackgroundTransparency", () => text.BackgroundTransparency),
+                $"MText handle {text.Handle}.BackgroundTransparency");
+            key.Add(text.ShowBorders);
             key.Add(((TextStyleTableRecord)tr.GetObject(text.TextStyleId, OpenMode.ForRead)).Name);
         }
 
-        private static void AddColor(Key key, Autodesk.AutoCAD.Colors.Color color)
+        private static void AddColor(Key key, Autodesk.AutoCAD.Colors.Color color, string context)
         {
-            key.Add(color.ColorMethod); key.Add(color.ColorIndex); key.Add(color.Red); key.Add(color.Green); key.Add(color.Blue);
-            key.Add(color.BookName); key.Add(color.ColorName);
+            Autodesk.AutoCAD.Colors.ColorMethod method = ReadAt(context + ".ColorMethod", () => color.ColorMethod);
+            ColorMode mode = method switch
+            {
+                Autodesk.AutoCAD.Colors.ColorMethod.ByLayer => ColorMode.ByLayer,
+                Autodesk.AutoCAD.Colors.ColorMethod.ByBlock => ColorMode.ByBlock,
+                Autodesk.AutoCAD.Colors.ColorMethod.ByAci => ColorMode.Aci,
+                Autodesk.AutoCAD.Colors.ColorMethod.ByColor => ColorMode.Rgb,
+                Autodesk.AutoCAD.Colors.ColorMethod.Foreground => ColorMode.Foreground,
+                _ => throw new InvalidOperationException(context + ": unsupported native color method " + method)
+            };
+            ColorValue value = ReadColor(mode,
+                () => ReadAt(context + ".ColorIndex", () => (int)color.ColorIndex),
+                () => (ReadAt(context + ".Red", () => color.Red), ReadAt(context + ".Green", () => color.Green),
+                    ReadAt(context + ".Blue", () => color.Blue)),
+                () => ReadAt(context + ".HasBookName", () => color.HasBookName),
+                () => ReadAt(context + ".BookName", () => color.BookName),
+                () => ReadAt(context + ".HasColorName", () => color.HasColorName),
+                () => ReadAt(context + ".ColorName", () => color.ColorName));
+            key.Add(value.Mode); key.Add(value.Aci); key.Add(value.Red); key.Add(value.Green); key.Add(value.Blue);
+            key.Add(value.HasBookName); key.Add(value.BookName); key.Add(value.HasColorName); key.Add(value.ColorName);
+        }
+
+        private static void AddTransparency(Key key, Autodesk.AutoCAD.Colors.Transparency transparency, string context)
+        {
+            TransparencyMode mode = ReadAt(context + ": method", () => GetTransparencyMode(
+                ReadAt(context + ".IsInvalid", () => transparency.IsInvalid),
+                ReadAt(context + ".IsByLayer", () => transparency.IsByLayer),
+                ReadAt(context + ".IsByBlock", () => transparency.IsByBlock),
+                ReadAt(context + ".IsByAlpha", () => transparency.IsByAlpha)));
+            TransparencyValue value = ReadTransparency(mode, () => ReadAt(context + ".Alpha", () => transparency.Alpha));
+            key.Add(value.Mode); key.Add(value.Alpha);
         }
 
         // Length-prefixed, type-tagged exact round-trip values avoid collisions and

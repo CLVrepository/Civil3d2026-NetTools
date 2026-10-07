@@ -61,3 +61,9 @@ Native test in a disposable source copy:
 - Verify all imported OD fields against the SDF and no unexpected classes or layers. Test the explicit effective-mapping stop if the IPF does not establish native OD.
 - Test missing/disconnected UNC resources, unsupported/missing CRS, opposite-CRS SDF, mismatched profiles, template model-space content, conflicting block definitions, missing OD, import cancellation, partial imports and repeat invocation.
 - Test a real LVF SDF separately. Successful LVHEF testing does not establish LVF acceptance.
+
+## Capture appearance guard regression
+
+A first native attempt stopped during read-only source capture with `eInvalidKey`, before the SDF prompt or destination creation. The original diagnostic did not establish the exact failing getter. Snapshot getters are now method-specific: no RGB reads for inherited/indexed colors, no Alpha read for inherited transparency, no optional name reads when absent, and no TextAt call on plain/shape linetype elements. Mode and applicable values remain part of the comparison. A native failure still stops the operation, now with a labelled property/stage; no error is replaced with a guessed default.
+
+Run `dotnet run --project Tests/GisNewDrawingAppearance.Tests/GisNewDrawingAppearance.Tests.csproj` (append `-p:TargetFramework=net10.0` if needed) to test the lazy-reader contracts. These portable tests do not establish the exact C1955 cause or replace the original-drawing native retry.

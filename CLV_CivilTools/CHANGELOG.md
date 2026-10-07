@@ -1,3 +1,8 @@
+## 2026-10-07 - GIS drawing capture appearance guards
+- Fixed unsafe method-specific reads in `CLV-GIS-NEW-DRAWING` source snapshots: RGB is read only for true color, alpha only for explicit-alpha transparency, and optional color names only when present. ByLayer/ByBlock/ACI/RGB/foreground and transparency inheritance stay distinct.
+- Ordinary linetype dashes and shape elements no longer invoke the text-only getter. Capture errors include handle/resource/property stages rather than a bare native error.
+- Added portable lazy-reader regression tests. The exact getter that failed source handle C1955 remains unconfirmed; end-to-end native acceptance is still required.
+
 ## 2026-10-07 - Create a separate GIS drawing
 - Added `CLV-GIS-NEW-DRAWING` / Q2 > GIS > DATA > `CREATE GIS DRAWING`: strict CRS/SDF/profile preflight, shared Blank template, verified survey-geometry/block cloning at native coordinates, and profile-driven Pipes/Structures import with native OD readback. Leaves the result unsaved and does not run R5 conversion.
 - Uses the confirmed UNC template/IPF resources without changing them. Missing or ambiguous CRS/OD mappings fail closed. Native Civil 3D acceptance remains required; see `Docs/GIS_NEW_DRAWING.md`.
