@@ -19,7 +19,7 @@ namespace CLV_CivilTools.Gis
     /// Plan role-specific one-to-one matches before changing geometry.
     /// Copy and read back native OD before retiring source geometry; retain imported points.
     /// </summary>
-    public static class GisStormStructureAuto
+    public static partial class GisStormStructureAuto
     {
         private const string StructuresPointLayer = "Structures";
         private const string TargetInnerLayer = "C-STRM-STRC-INNR";
@@ -84,6 +84,11 @@ namespace CLV_CivilTools.Gis
                     using (Transaction tr = db.TransactionManager.StartTransaction())
                     {
                         var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+                        if (!string.Equals(space.Name, BlockTableRecord.ModelSpace, StringComparison.OrdinalIgnoreCase))
+                        {
+                            ed.WriteMessage("\nStorm GIS preparation requires model space. No structure or pipe work was started.");
+                            return false;
+                        }
                         foreach (ObjectId id in space)
                         {
                             if (tr.GetObject(id, OpenMode.ForRead, false) is not Entity ent || ent.IsErased)
@@ -155,6 +160,15 @@ namespace CLV_CivilTools.Gis
                                 targets.Add(key, new TargetInfo(id, new StormStructureTarget(key, outlineRole, center.X, center.Y, GetStructureFootprint(pl), IsExistingOutline: true), false));
                             }
                         }
+                        foreach (StormPrepArchiveRecord archived in GisStormPrepArchive.ReadAll(db, tr))
+                        {
+                            ValidateArchivedOutputs(tr, archived);
+                            if (sources.ContainsKey(archived.SourceHandle))
+                                throw new InvalidOperationException($"Source {archived.SourceHandle} exists both live and in cleanup history; review required.");
+                            sources.Add(archived.SourceHandle, new SourceInfo(ObjectId.Null,
+                                new StormStructureSource(archived.SourceHandle, archived.Name, archived.PartSizeName, archived.Anchor.X, archived.Anchor.Y))
+                            { Outputs = archived.OutputIds.ToList(), Archive = archived });
+                        }
                         // Every persisted output belongs to one logical completed structure.
                         // Check all primary/secondary claims before hiding any ordinary candidate.
                         StormStructureCompletionPlan completions = StormStructureMatching.PlanCompletions(
@@ -214,7 +228,13 @@ namespace CLV_CivilTools.Gis
                         if (target.IsCompleted)
                         {
                             bool verified = true;
-                            foreach (ObjectId output in source.Outputs)
+                            if (source.Archive != null)
+                            {
+                                using Transaction check = db.TransactionManager.StartTransaction();
+                                ValidateArchivedOutputs(check, source.Archive);
+                                check.Commit();
+                            }
+                            else foreach (ObjectId output in source.Outputs)
                             {
                                 var status = GisImportCommands.CopyObjectDataVerified(source.Id, output, out string detail);
                                 if (!IsVerified(status))
@@ -252,7 +272,7 @@ namespace CLV_CivilTools.Gis
                     try { ed.Regen(); ed.UpdateScreen(); }
                     catch (System.Exception ex) { ed.WriteMessage($"\nStorm GIS display refresh failed: {ex.Message}. Verified geometry remains in the drawing; inspect it after changing space or reopening the test copy."); }
                 }
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06-R4: converted/OD verified={converted}, already verified={alreadyVerified}, review items={reviews.Count}, intentionally retained null pipe ends={preservedPipeEndNotices.Count}. All {sources.Count} Structures source points retained; no broad cleanup run. Planned targets: total={targets.Count}, existing outlines={targets.Values.Count(t => t.Data.IsExistingOutline)}.");
+                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.07-R5: converted/OD verified={converted}, already verified={alreadyVerified}, review items={reviews.Count}, intentionally retained null pipe ends={preservedPipeEndNotices.Count}. Live Structures points retained={sources.Values.Count(s => s.Archive == null)}; archived completions={sources.Values.Count(s => s.Archive != null)}; no broad cleanup run. Planned targets: total={targets.Count}, existing outlines={targets.Values.Count(t => t.Data.IsExistingOutline)}.");
                 foreach (string preserved in preservedPipeEndNotices)
                     ed.WriteMessage("\n  PRESERVED NULL PIPE END (no geometry expected): " + preserved);
                 foreach (string review in reviews.Distinct(StringComparer.Ordinal))
@@ -261,7 +281,7 @@ namespace CLV_CivilTools.Gis
             }
             catch (System.Exception ex)
             {
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.06-R4 stopped: {ex.Message}. Unverified source geometry and all imported source points are retained. No downstream cleanup was queued.");
+                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.07-R5 stopped: {ex.Message}. Unverified source geometry and all imported source points are retained. No downstream cleanup was queued.");
                 return false;
             }
         }
@@ -384,6 +404,25 @@ namespace CLV_CivilTools.Gis
             status == GisImportCommands.ObjectDataCopyStatus.CopiedVerified ||
             status == GisImportCommands.ObjectDataCopyStatus.AlreadyEquivalent;
 
+        private static void ValidateArchivedOutputs(Transaction tr, StormPrepArchiveRecord archived)
+        {
+            foreach (ObjectId id in archived.OutputIds)
+            {
+                if (id.IsNull || !id.IsValid || id.IsErased ||
+                    tr.GetObject(id, OpenMode.ForRead, false) is not Entity output || output.IsErased || output.OwnerId != output.Database.CurrentSpaceId ||
+                    !string.Equals(output.Layer, TargetOuterLayer, StringComparison.OrdinalIgnoreCase) ||
+                    !IsRoleOutline(output, archived.Role) || !OutlineMatchesAnchor(output, archived.Role, archived.Anchor))
+                    throw new InvalidOperationException($"Archived source {archived.SourceHandle} ({archived.Name}) has missing/changed output geometry; history retained for review.");
+                if (!GisImportCommands.TryReadStructuresIdentity(id, out string name, out string part, out string identityDetail) ||
+                    !string.Equals(name, archived.Name, StringComparison.Ordinal) || !string.Equals(part, archived.PartSizeName, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"Archived source {archived.SourceHandle} output {output.Handle} identity changed: {identityDetail}");
+                var state = GisImportCommands.InspectObjectDataFingerprint(id, out string fingerprint, out string detail);
+                if (state != GisImportCommands.ObjectDataFingerprintState.Present ||
+                    !string.Equals(fingerprint, archived.ObjectDataFingerprint, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"Archived source {archived.SourceHandle} output {output.Handle} complete OD changed or is unreadable: {detail}");
+            }
+        }
+
         private static void QueueEntityGraphics(Transaction tr, IEnumerable<ObjectId> ids)
         {
             foreach (ObjectId id in ids.Distinct())
@@ -440,7 +479,7 @@ namespace CLV_CivilTools.Gis
                 foreach (TypedValue value in values.Skip(5))
                 {
                     if (value.Value is not ObjectId id || id.IsNull || !id.IsValid || id.IsErased ||
-                        tr.GetObject(id, OpenMode.ForRead, false) is not Entity ent || ent.IsErased ||
+                        tr.GetObject(id, OpenMode.ForRead, false) is not Entity ent || ent.IsErased || ent.OwnerId != ent.Database.CurrentSpaceId ||
                         !string.Equals(ent.Layer, TargetOuterLayer, StringComparison.OrdinalIgnoreCase) ||
                         !IsRoleOutline(ent, StormStructureMatching.Classify(name, part)) ||
                         !OutlineMatchesAnchor(ent, StormStructureMatching.Classify(name, part), anchor))
@@ -772,6 +811,7 @@ namespace CLV_CivilTools.Gis
             internal ObjectId Id { get; }
             internal StormStructureSource Data { get; }
             internal List<ObjectId> Outputs { get; set; } = new List<ObjectId>();
+            internal StormPrepArchiveRecord? Archive { get; set; }
         }
 
         private sealed class TargetInfo

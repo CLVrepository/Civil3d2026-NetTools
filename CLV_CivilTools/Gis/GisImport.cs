@@ -40,6 +40,21 @@ namespace CLV_CivilTools.Gis
             ReadFailed
         }
 
+        internal enum ObjectDataFingerprintState
+        {
+            Empty,
+            Present,
+            ReadFailed
+        }
+
+        internal enum PipeInsideDiameterState
+        {
+            Absent,
+            Valid,
+            Invalid,
+            ReadFailed
+        }
+
         private const string SourceCoordinateSystem = "NAD_1983_StatePlane_Nevada_East_FIPS_2701_Feet";
         private const string TempBoundaryLayer = "GIS-TEMP-BOUNDARY";
         private const string ManagedMapApiAssemblyName = "ManagedMapApi";
@@ -250,6 +265,185 @@ namespace CLV_CivilTools.Gis
             catch (System.Exception ex)
             {
                 detail = "Original outline OD could not be verified without changes: " + OdErrorMessage(ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Reads a versioned fingerprint of all typed native OD records. Empty and
+        /// unreadable data are distinct outcomes; neither provides retention proof.
+        /// The caller owns the active document lock. This method never writes OD.
+        /// </summary>
+        internal static ObjectDataFingerprintState InspectObjectDataFingerprint(ObjectId entityId,
+            out string fingerprint, out string detail)
+        {
+            fingerprint = string.Empty;
+            try
+            {
+                RequireActiveOdEntity(entityId);
+                List<VerifiedOdRecord> records = ReadVerifiedOdRecords(entityId);
+                if (records.Count == 0)
+                {
+                    detail = "No native Object Data is attached; no retention fingerprint was produced.";
+                    return ObjectDataFingerprintState.Empty;
+                }
+
+                fingerprint = StormObjectDataFingerprint.Compute(records.Select(record => record.Key));
+                detail = $"Read fingerprint of {records.Count} complete typed OD record(s), without changes.";
+                return ObjectDataFingerprintState.Present;
+            }
+            catch (System.Exception ex)
+            {
+                fingerprint = string.Empty;
+                detail = "Native OD fingerprint read failed: " + OdErrorMessage(ex);
+                return ObjectDataFingerprintState.ReadFailed;
+            }
+        }
+
+        /// <summary>
+        /// Reads InsideDiameter in feet from every attached native OD record without
+        /// selecting an arbitrary table or first record. A valid result requires one
+        /// positive finite numeric value agreed by every occurrence. Integer, Real,
+        /// and invariant numeric Character fields are supported; units and localized
+        /// number formats are not guessed. Table names are evidence for the caller's
+        /// separate storm/sewer filter: Valid does not itself assert storm ownership.
+        /// Only Valid returns a full typed OD fingerprint from that same snapshot.
+        /// The caller owns the active document lock. This method never writes OD.
+        /// </summary>
+        internal static PipeInsideDiameterState InspectPipeInsideDiameter(ObjectId entityId,
+            out double diameterFeet, out string fingerprint, out IReadOnlyList<string> odTableNames,
+            out string detail)
+        {
+            diameterFeet = 0;
+            fingerprint = string.Empty;
+            odTableNames = Array.Empty<string>();
+            try
+            {
+                RequireActiveOdEntity(entityId);
+                List<VerifiedOdRecord> records = ReadVerifiedOdRecords(entityId);
+                odTableNames = records.Select(record => record.TableName)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+                double? agreedDiameter = null;
+                int occurrenceCount = 0;
+                foreach (VerifiedOdRecord record in records)
+                {
+                    List<VerifiedOdField> fields = record.Fields.Where(field =>
+                        string.Equals(field.Name, "InsideDiameter", StringComparison.OrdinalIgnoreCase)).ToList();
+                    if (fields.Count == 0) continue;
+                    if (fields.Count != 1)
+                        throw new VerifiedOdPipeDiameterException($"Table {record.TableName} has duplicate InsideDiameter fields; no diameter was selected.");
+
+                    VerifiedOdField field = fields[0];
+                    double value;
+                    if (field.Kind == "Integer" && field.Value is int integer)
+                        value = integer;
+                    else if (field.Kind == "Real" && field.Value is double real)
+                        value = real;
+                    else if (field.Kind == "Character" && field.Value is string text &&
+                        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
+                        value = parsed;
+                    else
+                        throw new VerifiedOdPipeDiameterException($"Table {record.TableName} InsideDiameter is not an Integer, Real, or invariant numeric Character value.");
+
+                    if (!double.IsFinite(value) || value <= 0)
+                        throw new VerifiedOdPipeDiameterException($"Table {record.TableName} InsideDiameter must be positive and finite, in feet.");
+                    if (agreedDiameter.HasValue && agreedDiameter.Value != value)
+                        throw new VerifiedOdPipeDiameterException("Attached OD records have conflicting InsideDiameter values; no first-record or table preference was applied.");
+                    agreedDiameter = value;
+                    occurrenceCount++;
+                }
+
+                if (!agreedDiameter.HasValue)
+                {
+                    detail = "No InsideDiameter field is attached in native Object Data.";
+                    return PipeInsideDiameterState.Absent;
+                }
+                if (!SameVerifiedOdRecords(records, ReadVerifiedOdRecords(entityId)))
+                    throw new InvalidOperationException("Source OD changed during pipe diameter verification.");
+
+                fingerprint = StormObjectDataFingerprint.Compute(records.Select(record => record.Key));
+                diameterFeet = agreedDiameter.Value;
+                detail = $"Read one agreed positive InsideDiameter from {occurrenceCount} occurrence(s) and fingerprinted {records.Count} complete typed OD record(s), without changes.";
+                return PipeInsideDiameterState.Valid;
+            }
+            catch (System.Exception ex)
+            {
+                diameterFeet = 0;
+                fingerprint = string.Empty;
+                // The strict shared snapshot reader also rejects nonfinite Real
+                // diameters. Preserve that fail-closed behavior while distinguishing
+                // invalid input data from native API/lifetime/read failures here.
+                for (System.Exception? current = ex; current != null; current = current.InnerException)
+                {
+                    if (current is VerifiedOdPipeDiameterException)
+                    {
+                        detail = "Native OD pipe diameter is invalid: " + current.Message;
+                        return PipeInsideDiameterState.Invalid;
+                    }
+                }
+                odTableNames = Array.Empty<string>();
+                detail = "Native OD pipe diameter read failed: " + OdErrorMessage(ex);
+                return PipeInsideDiameterState.ReadFailed;
+            }
+        }
+
+        /// <summary>
+        /// Strictly read-only typed OD equality proof for a source and database-resident
+        /// outputs. Every distinct output must contain the complete nonempty source OD.
+        /// The source itself cannot count as an output. Success does not authorize an
+        /// erase: the caller must also validate ownership, geometry and archive storage.
+        /// An applying transaction may use this to validate its newly appended outputs;
+        /// it must abort on failure and cannot report persisted retention before commit.
+        /// Independent cleanup of an earlier conversion invokes this after that output
+        /// geometry has committed. This OD-only check does not establish transaction
+        /// finality or acquire the document lock; those remain the caller's responsibility.
+        /// </summary>
+        internal static bool TryVerifyTransferredObjectData(ObjectId sourceId,
+            IReadOnlyList<ObjectId> outputIds, out string fingerprint, out string detail)
+        {
+            fingerprint = string.Empty;
+            try
+            {
+                RequireActiveOdEntity(sourceId);
+                if (outputIds == null || outputIds.Count == 0)
+                    throw new InvalidOperationException("At least one distinct committed output is required.");
+
+                // Snapshot the caller's list and validate all IDs before the native reads.
+                ObjectId[] outputs = outputIds.ToArray();
+                if (outputs.Distinct().Count() != outputs.Length)
+                    throw new InvalidOperationException("Duplicate output IDs do not prove separate retained outputs.");
+                foreach (ObjectId outputId in outputs)
+                {
+                    if (outputId == sourceId)
+                        throw new InvalidOperationException("The source cannot be its own retained output.");
+                    RequireActiveOdEntity(outputId);
+                }
+
+                List<VerifiedOdRecord> source = ReadVerifiedOdRecords(sourceId);
+                if (source.Count == 0)
+                    throw new InvalidOperationException("The source has no native OD; retention cannot be verified.");
+
+                foreach (ObjectId outputId in outputs)
+                {
+                    List<VerifiedOdRecord> actual = ReadVerifiedOdRecords(outputId);
+                    if (actual.Count == 0 || !SameVerifiedOdRecords(source, actual))
+                        throw new InvalidOperationException($"Output {outputId.Handle} does not retain the complete typed source OD; nothing was repaired.");
+                }
+
+                // Keep the returned digest tied to the same source snapshot that all
+                // outputs matched, rather than a source changed during native access.
+                if (!SameVerifiedOdRecords(source, ReadVerifiedOdRecords(sourceId)))
+                    throw new InvalidOperationException("Source OD changed during retention verification.");
+
+                fingerprint = StormObjectDataFingerprint.Compute(source.Select(record => record.Key));
+                detail = $"Read-only verification succeeded: {source.Count} typed OD record(s) retained on each of {outputs.Length} output(s).";
+                return true;
+            }
+            catch (System.Exception ex)
+            {
+                fingerprint = string.Empty;
+                detail = "Transferred OD retention was not verified: " + OdErrorMessage(ex);
                 return false;
             }
         }
@@ -514,6 +708,9 @@ namespace CLV_CivilTools.Gis
                             "Point" => GetVerifiedOdProperty(mapValue, "Point"),
                             _ => throw new InvalidOperationException("Unsupported OD field type: " + kind)
                         };
+                        if (kind == "Real" && value is double diameter && !double.IsFinite(diameter) &&
+                            string.Equals(name, "InsideDiameter", StringComparison.OrdinalIgnoreCase))
+                            throw new VerifiedOdPipeDiameterException($"Table {tableName} InsideDiameter must be positive and finite, in feet.");
                         if ((kind == "Character" && value is not string) ||
                             (kind == "Integer" && value is not int) ||
                             (kind == "Real" && (value is not double real || !double.IsFinite(real))) ||
@@ -670,6 +867,11 @@ namespace CLV_CivilTools.Gis
         private sealed class VerifiedOdIdentityException : InvalidOperationException
         {
             internal VerifiedOdIdentityException(string message) : base(message) { }
+        }
+
+        private sealed class VerifiedOdPipeDiameterException : InvalidOperationException
+        {
+            internal VerifiedOdPipeDiameterException(string message) : base(message) { }
         }
 
         private sealed class VerifiedOdField
@@ -3306,4 +3508,3 @@ namespace CLV_CivilTools.Gis
         }
     }
 }
-

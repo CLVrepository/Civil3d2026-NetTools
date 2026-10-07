@@ -1,3 +1,8 @@
+## 2026-10-07 - Managed storm preparation and cleanup R5
+- `CLV-GIS-STORM-GIS` / storm GIS PREP-ALL: revision `2026.10.07-R5` performs managed storm pipe offsets, owned-wall trim at verified straight DI/box outers, and verified point/marker cleanup after structure preparation. It records pipe/structure ownership for reruns; any dependent failure rolls back the pipe/trim/cleanup transaction. No LISP helper is required by this ALL path.
+- `CLV-GIS-STORM-CLEAN-VERIFIED`: model-space point/marker-only cleanup of existing completion-verified structures. Archives all output ownership before removing eligible Structures DBPoints and known uniquely associated marker blocks. Preserves null/STUB and unresolved objects. It does not offset or trim pipes, so existing R4 results need not run ALL again just to remove markers.
+- Legacy manual `CLV-GIS-TRIM-INSIDE` and standalone storm/sewer pipe commands retain their previous behavior.
+
 ## 2026-10-06 - Storm GIS access visibility R4
 - `CLV-GIS-STRM-AUTO` / `CLV-GIS-STORM-GIS`: revision `2026.10.06-R4` uses only the current evaluated visibility state for access-block geometry and explicitly queues verified geometry for graphics update. DI conversion, source-role matching and pipe gating remain. No new commands or prompts.
 

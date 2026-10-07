@@ -92,6 +92,104 @@ internal static class Program
             ("Visible traversal preserves depth-first entity order", VisibilityOrdering),
             ("Null traversal callbacks fail before traversal", VisibilityNullCallbacks),
             ("Null child collection identifies a leaf", VisibilityLeaf),
+            ("Cleanup matches native DI and MH anchor fixtures", CleanupNativeAnchors),
+            ("Cleanup separates coincident DI access box and null sources", CleanupCoincidentRoles),
+            ("Unverified known-role source blocks marker ownership", CleanupUnverifiedCompetitor),
+            ("Unknown-role source blocks marker ownership", CleanupUnknownCompetitor),
+            ("Cleanup respects full completion ownership conflicts", CleanupOwnershipConflict),
+            ("Malformed completion claims remain ownership competitors", CleanupMalformedClaimConflict),
+            ("Cleanup rejects duplicate source and marker IDs", CleanupDuplicateIds),
+            ("Live and archived duplicate names remain unresolved", CleanupDuplicateArchivedName),
+            ("Ambiguous marker cohort remains intact", CleanupAmbiguousMarkers),
+            ("Cleanup never erases wrong marker names or layers", CleanupMarkerIdentity),
+            ("Cleanup preserves markers with OD or unreadable OD", CleanupProtectedMarkerOd),
+            ("Cleanup marker tolerance remains strict", CleanupTolerance),
+            ("Archived owner can clean only a recorded marker", CleanupArchivedRecordedMarker),
+            ("Archived owner cannot clean a newly inserted marker", CleanupArchivedNewMarker),
+            ("Archived owner still competes with live source", CleanupArchivedCompetitor),
+            ("Invalid archived marker ID lists require review", CleanupInvalidArchiveMarkerIds),
+            ("Source cleanup requires live verified completion geometry", CleanupMissingVerification),
+            ("Cleanup preserves malformed sources and markers", CleanupMalformedInputs),
+            ("Cleanup can archive a verified source without a marker", CleanupSourceWithoutMarker),
+            ("Cleanup planning is deterministic and idempotent", CleanupOrderAndRerun),
+            ("Verified owner IDs include live and archived completions", CleanupVerifiedOwners),
+            ("Verified owner IDs exclude unresolved and ambiguous owners", CleanupExcludedOwners),
+            ("Cleanup result constructor remains compatible", CleanupPlanCompatibility),
+            ("Terminal trim handles both line directions", TerminalTrimDirections),
+            ("Terminal trim handles skew box geometry", TerminalTrimSkew),
+            ("Terminal trim deduplicates a proper corner crossing", TerminalTrimCorner),
+            ("Pure corner tangency leaves pipe unchanged", TerminalTrimTangency),
+            ("Outside and boundary-terminal pipes stay unchanged", TerminalTrimAlreadyOutside),
+            ("Boundary-overlapping pipe requires review", TerminalTrimOverlap),
+            ("Through and inside-only pipes require review", TerminalTrimThroughAndInside),
+            ("Multiple terminal crossings require review", TerminalTrimMultipleCrossings),
+            ("Terminal trim preserves multi-segment parameters", TerminalTrimMultiSegment),
+            ("Boundary-to-inside pipe requires review", TerminalTrimBoundaryEndpoint),
+            ("Terminal trim handles survey coordinates", TerminalTrimSurveyCoordinates),
+            ("Terminal trim leaves inputs unchanged", TerminalTrimReadOnlyInputs),
+            ("Terminal trim rerun is a no-op", TerminalTrimRerun),
+            ("Terminal trim rejects invalid boundaries", TerminalTrimInvalidBoundaries),
+            ("Terminal trim rejects invalid open paths", TerminalTrimInvalidPaths),
+            ("Terminal trim rejects missing inputs", TerminalTrimMissingInputs),
+            ("Terminal trim is independent of boundary winding", TerminalTrimBoundaryWinding),
+            ("Terminal trim rejects an extra tangent contact", TerminalTrimExtraContact),
+            ("Outward gap probe detects true interior ahead", TerminalGapAhead),
+            ("Outward gap probe ignores a box behind the endpoint", TerminalGapBehind),
+            ("Outward gap probe ignores a parallel miss", TerminalGapParallel),
+            ("Outward gap probe distinguishes tangent and entering corners", TerminalGapCorners),
+            ("Boundary-only outward overlap is clear", TerminalGapEdgeOnly),
+            ("Gap probe detects interior following concave edge overlap", TerminalGapAfterOverlap),
+            ("Gap probe requires a strictly exterior endpoint", TerminalGapExteriorEndpoint),
+            ("Gap probe requires interior before the distance bound", TerminalGapDistanceBound),
+            ("Gap probe detects concave multiple interior intervals", TerminalGapConcave),
+            ("Gap search distance is independent of neighbor length", TerminalGapNormalizedDirection),
+            ("Gap probe rejects malformed vectors and limits", TerminalGapInvalidInputs),
+            ("Gap probe remains stable at survey coordinates", TerminalGapSurveyCoordinates),
+            ("Gap probe preserves its input boundary", TerminalGapReadOnly),
+            ("Endpoint containment includes boundary and excludes invalid data", TerminalGapContainsEndpoint),
+            ("Pipe size rule uses exact 12-inch threshold in feet", PipeDiameterThreshold),
+            ("Pipe size rule rejects invalid numeric diameters", PipeInvalidDiameters),
+            ("Single-line pipe ownership must have no offset walls", PipeSingleLineOwnership),
+            ("Two-wall pipe ownership requires both distinct sides", PipeTwoWallOwnership),
+            ("Pipe walls cannot share IDs or reuse source ID", PipeDuplicateOwnership),
+            ("Pipe ownership rejects missing source or sides", PipeMissingOwnership),
+            ("Pipe layer hints stay distinct from native OD proof", PipeSourceLayerHints),
+            ("Pipe utility rules identify sewer exclusions", PipeSewerNames),
+            ("Sewer-only pipe evidence is excluded", PipeUtilitySewerOnly),
+            ("Mixed storm and sewer pipe evidence requires review", PipeUtilityConflicts),
+            ("Storm and generic utility candidates preserve OD eligibility", PipeUtilityCandidates),
+            ("Storm utility evidence uses exact documented tokens", PipeUtilityExactEvidence),
+            ("Incomplete utility metadata requires review", PipeUtilityMalformed),
+            ("Utility classification is culture and order invariant", PipeUtilityCultureAndOrder),
+            ("Equivalent pipe completion records support no-op readback", PipeCompletionNoOp),
+            ("Changed pipe source metadata invalidates completion equality", PipeCompletionSourceChanges),
+            ("Changed pipe wall metadata invalidates completion equality", PipeCompletionWallChanges),
+            ("Pipe completion comparison preserves side and output order", PipeCompletionSideOrder),
+            ("Pipe completion comparison handles absent records", PipeCompletionNulls),
+            ("Null-terminal exemption binds both wall sides and source ends", OpenNullSidesAndTerminals),
+            ("Null-terminal correspondence survives path reversal", OpenNullReversedPaths),
+            ("Null-terminal exemption retains size and radial tolerances", OpenNullThresholdAndRadius),
+            ("Null-terminal exemption rejects wrong inward tangents", OpenNullWrongTangent),
+            ("Null-terminal exemption rejects wrong offset width", OpenNullWrongWidth),
+            ("Null-terminal exemption rejects middle or split endpoints", OpenNullMiddleSplit),
+            ("Null-terminal exemption rejects ambiguous original endpoints", OpenNullAmbiguousTerminals),
+            ("Physical or unknown nearby anchors veto null exemption", OpenNullCompetingAnchors),
+            ("Global duplicate null identities veto exemption", OpenNullDuplicateIdentities),
+            ("Null-terminal exemption rejects invalid path geometry", OpenNullInvalidGeometry),
+            ("Unlocatable structure anchors veto null exemption", OpenNullUnlocatableAnchors),
+            ("Null-terminal exemption requires exact verified null convention", OpenNullStrictConvention),
+            ("Null-terminal correspondence preserves survey data", OpenNullSurveyAndReadOnly),
+            ("Physical containing footprint vetoes open null terminal", OpenNullPhysicalInside),
+            ("Physical boundary contact vetoes open null terminal", OpenNullPhysicalBoundary),
+            ("Outside physical footprints retain valid null proof", OpenNullPhysicalOutside),
+            ("Invalid physical footprints veto null exemption", OpenNullPhysicalInvalid),
+            ("Fingerprint golden vectors match canonical format", FingerprintGoldenVectors),
+            ("Fingerprint ignores record order but preserves multiplicity", FingerprintMultiset),
+            ("Fingerprint does not mutate or normalize keys", FingerprintExactKeys),
+            ("Fingerprint format is culture invariant", FingerprintCulture),
+            ("Fingerprint safely delimits Unicode and record lengths", FingerprintFraming),
+            ("Fingerprint rejects nulls and malformed Unicode", FingerprintInvalidInputs),
+            ("Fingerprint syntax validation rejects invalid versions", FingerprintValidation),
             ("Rejects nonfinite and missing source data", InvalidSources),
             ("Rejects unknown and invalid target roles", InvalidTargets),
             ("Returns issues for unmatched sources and targets", UnmatchedIssues),
@@ -835,6 +933,828 @@ internal static class Program
     }
     private static void VisibilityLeaf()
         => Check(VisibleLeaves(new VisibilityNode("leaf", true)).Single().Name == "leaf");
+
+    private static StormCleanupSource CleanupOwner(StormStructureSource source, bool verified = true,
+        StormCleanupSourceState state = StormCleanupSourceState.LiveImportedPoint, IReadOnlyList<string>? archivedMarkers = null)
+        => new(source, state, verified, archivedMarkers);
+    private static StormCleanupMarker Marker(string id, string name = "UFLS_DI_MARK", double x = 0, double y = 0,
+        string layer = "V-SURV-CHCK", StormMarkerOdState od = StormMarkerOdState.Empty)
+        => new(id, name, layer, x, y, od);
+    private static StormCleanupPlan Cleanup(StormCleanupSource[] sources, StormCleanupMarker[] markers,
+        IEnumerable<StormStructureCompletion>? completions = null)
+        => StormStructureCleanup.Plan(sources, completions ?? sources
+            .Where(s => StormStructureMatching.Classify(s.Source.Name, s.Source.PartSizeName) is not (StormStructureRole.Unknown or StormStructureRole.NullPipeEnd))
+            .Select(s => new StormStructureCompletion(s.Source.Id, new[] { "OUT-" + s.Source.Id })), markers);
+    private static string CleanupSignature(StormCleanupPlan plan)
+        => string.Join(",", plan.SourceIdsToArchiveAndErase) + ";" +
+            string.Join(",", plan.MarkerMatches.Select(m => m.SourceId + ">" + m.MarkerId)) + ";" +
+            string.Join("|", plan.Issues.Select(i => $"{i.Code}:{string.Join(",", i.SourceIds)}:{string.Join(",", i.TargetIds)}")) + ";" +
+            string.Join(",", plan.VerifiedOwnerIds);
+    private static void CleanupNativeAnchors()
+    {
+        // Native evidence supplies these handles/coordinates; helper role descriptions
+        // are synthetic test metadata, not a claim about the fixture's actual OD text.
+        var sources = new[]
+        {
+            CleanupOwner(Di("D5C17", x: 867280.7594204966, y: 1295717.498120421)),
+            CleanupOwner(Access("D5C1A", x: 867285.6256335936, y: 1295711.003371928))
+        };
+        var plan = Cleanup(sources, new[]
+        {
+            Marker("D5DE5", x: 867280.767, y: 1295717.502),
+            Marker("D5DED", "UFLS_MH_MARK", 867285.6256335936, 1295711.003371928)
+        });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 2 && plan.MarkerMatches.Count == 2 && plan.Issues.Count == 0);
+        Check(plan.MarkerMatches.Single(m => m.SourceId == "D5C17").MarkerId == "D5DE5");
+    }
+    private static void CleanupCoincidentRoles()
+    {
+        var plan = Cleanup(new[] { CleanupOwner(Di("D")), CleanupOwner(Access("A")), CleanupOwner(Box("B")), CleanupOwner(NullPipeEnd()) },
+            new[] { Marker("DI"), Marker("MH", "UFLS_MH_MARK") });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 3 && !plan.SourceIdsToArchiveAndErase.Contains("D5C4A"));
+        Check(plan.MarkerMatches.Count == 2 && plan.MarkerMatches.Single(m => m.MarkerId == "DI").SourceId == "D");
+        Check(plan.MarkerMatches.Single(m => m.MarkerId == "MH").SourceId == "A");
+    }
+    private static void CleanupUnverifiedCompetitor()
+    {
+        var plan = Cleanup(new[] { CleanupOwner(Di("D1")), CleanupOwner(Di("D2", "DI-2", 0.03), false) }, new[] { Marker("M") });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+        Check(plan.Issues.Any(i => i.Code == "AmbiguousCleanupOwner"));
+    }
+    private static void CleanupUnknownCompetitor()
+    {
+        var unknown = new StormStructureSource("U", "UNRESOLVED", "Unknown family", 0.03, 0);
+        var plan = Cleanup(new[] { CleanupOwner(Di("D")), CleanupOwner(unknown, false) }, new[] { Marker("M") });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+        Check(plan.Issues.Any(i => i.Code == "UnknownCleanupRole") && plan.Issues.Any(i => i.Code == "AmbiguousCleanupOwner"));
+    }
+    private static void CleanupOwnershipConflict()
+    {
+        var plan = Cleanup(new[] { CleanupOwner(Di("D1")), CleanupOwner(Di("D2", "DI-2", 10), false) }, new[] { Marker("M") },
+            new[] { new StormStructureCompletion("D1", new[] { "PRIMARY", "SHARED" }), new StormStructureCompletion("D2", new[] { "SHARED" }) });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+        Check(plan.Issues.Any(i => i.Code == "CompletionOwnershipConflict"));
+    }
+    private static void CleanupMalformedClaimConflict()
+    {
+        var plan = Cleanup(new[] { CleanupOwner(Di("D1")), CleanupOwner(Di("D2", "DI-2", 10), false) }, new[] { Marker("M") },
+            new[] { new StormStructureCompletion("D1", new[] { "SHARED" }), new StormStructureCompletion("D2", new[] { "SHARED", "" }) });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+        Check(plan.Issues.Any(i => i.Code == "InvalidCompletion"));
+    }
+    private static void CleanupDuplicateIds()
+    {
+        var plan = Cleanup(new[] { CleanupOwner(Di("D")), CleanupOwner(Di("d", "DI-2")) }, new[] { Marker("M") });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+        Check(plan.Issues.Any(i => i.Code == "DuplicateCleanupSourceId"));
+        plan = Cleanup(new[] { CleanupOwner(Di("D")) }, new[] { Marker("M"), Marker("m") });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+        Check(plan.Issues.Any(i => i.Code == "DuplicateCleanupMarkerId"));
+    }
+    private static void CleanupDuplicateArchivedName()
+    {
+        var plan = Cleanup(new[]
+        {
+            CleanupOwner(Di("LIVE", "DI-1")),
+            CleanupOwner(Di("OLD", " di-1 "), state: StormCleanupSourceState.ArchivedCompletion, archivedMarkers: new[] { "M" })
+        }, new[] { Marker("M") });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+        Check(plan.Issues.Any(i => i.Code == "DuplicateCleanupIdentity"));
+    }
+    private static void CleanupAmbiguousMarkers()
+    {
+        var plan = Cleanup(new[] { CleanupOwner(Di("D")) }, new[] { Marker("M1"), Marker("M2", x: 0.04) });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+        Check(plan.Issues.Any(i => i.Code == "AmbiguousCleanupMarkers"));
+    }
+    private static void CleanupMarkerIdentity()
+    {
+        foreach (StormCleanupMarker marker in new[]
+        {
+            Marker("M", "UFLS_DI_MARK_COPY"), Marker("M", "UNKNOWN"),
+            Marker("M", layer: "V-SURV-CHCK~~"), Marker("M", layer: "OTHER")
+        })
+        {
+            var plan = Cleanup(new[] { CleanupOwner(Di("D")) }, new[] { marker });
+            Check(plan.MarkerMatches.Count == 0 && plan.Issues.Any(i => i.Code == "IneligibleCleanupMarker"));
+        }
+        Check(Cleanup(new[] { CleanupOwner(Di("D")) }, new[] { Marker("M", "ufls_di_mark", layer: "v-surv-chck") }).MarkerMatches.Count == 1);
+    }
+    private static void CleanupProtectedMarkerOd()
+    {
+        foreach (StormMarkerOdState od in new[] { StormMarkerOdState.Present, StormMarkerOdState.Unreadable, (StormMarkerOdState)99 })
+        {
+            var plan = Cleanup(new[] { CleanupOwner(Di("D")) }, new[] { Marker("M", od: od) });
+            Check(plan.MarkerMatches.Count == 0 && plan.Issues.Any(i => i.Code == "MarkerObjectDataProtected"));
+        }
+        var duplicateCandidate = Cleanup(new[] { CleanupOwner(Di("D")) }, new[] { Marker("M1"), Marker("M2", od: StormMarkerOdState.Present) });
+        Check(duplicateCandidate.SourceIdsToArchiveAndErase.Count == 0 && duplicateCandidate.MarkerMatches.Count == 0);
+    }
+    private static void CleanupTolerance()
+    {
+        Check(Cleanup(new[] { CleanupOwner(Di("D")) }, new[] { Marker("M", x: 0.10) }).MarkerMatches.Count == 1);
+        Check(Cleanup(new[] { CleanupOwner(Di("D")) }, new[] { Marker("M", x: 0.10001) }).MarkerMatches.Count == 0);
+        Check(Cleanup(new[] { CleanupOwner(Di("D")) }, new[] { Marker("M", x: 0.08, y: 0.08) }).MarkerMatches.Count == 0);
+    }
+    private static void CleanupArchivedRecordedMarker()
+    {
+        var plan = Cleanup(new[] { CleanupOwner(Di("OLD"), state: StormCleanupSourceState.ArchivedCompletion, archivedMarkers: new[] { "m" }) }, new[] { Marker("M") });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 1);
+    }
+    private static void CleanupArchivedNewMarker()
+    {
+        foreach (IReadOnlyList<string>? recorded in new IReadOnlyList<string>?[] { null, Array.Empty<string>(), new[] { "ORIGINAL" } })
+        {
+            var plan = Cleanup(new[] { CleanupOwner(Di("OLD"), state: StormCleanupSourceState.ArchivedCompletion, archivedMarkers: recorded) }, new[] { Marker("NEW") });
+            Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+            Check(plan.Issues.Any(i => i.Code == "UnrecordedArchivedMarker"));
+        }
+    }
+    private static void CleanupArchivedCompetitor()
+    {
+        var plan = Cleanup(new[]
+        {
+            CleanupOwner(Di("LIVE", "DI-NEW")),
+            CleanupOwner(Di("OLD", "DI-OLD"), state: StormCleanupSourceState.ArchivedCompletion, archivedMarkers: Array.Empty<string>())
+        }, new[] { Marker("NEW") });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+    }
+    private static void CleanupInvalidArchiveMarkerIds()
+    {
+        foreach (string[] recorded in new[] { new[] { "M", "m" }, new[] { "M", "" } })
+        {
+            var plan = Cleanup(new[] { CleanupOwner(Di("OLD"), state: StormCleanupSourceState.ArchivedCompletion, archivedMarkers: recorded) }, new[] { Marker("M") });
+            Check(plan.MarkerMatches.Count == 0 && plan.Issues.Any(i => i.Code == "InvalidArchivedMarkerIds"));
+        }
+    }
+    private static void CleanupMissingVerification()
+    {
+        var owner = CleanupOwner(Di("D"));
+        var plan = Cleanup(new[] { owner }, new[] { Marker("M") }, Array.Empty<StormStructureCompletion>());
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+        plan = Cleanup(new[] { owner }, new[] { Marker("M") }, new[] { new StormStructureCompletion("D", Array.Empty<string>()) });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+        plan = Cleanup(new[] { CleanupOwner(Di("D"), false, StormCleanupSourceState.ArchivedCompletion, new[] { "M" }) }, new[] { Marker("M") });
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+        plan = Cleanup(new[] { CleanupOwner(NullPipeEnd()) }, Array.Empty<StormCleanupMarker>());
+        Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0 && plan.Issues.Count == 0);
+    }
+    private static void CleanupMalformedInputs()
+    {
+        foreach (StormCleanupSource owner in new[] { CleanupOwner(Di("")), CleanupOwner(Di("D", x: double.NaN)), CleanupOwner(Di("D"), state: (StormCleanupSourceState)99) })
+        {
+            var plan = Cleanup(new[] { owner }, new[] { Marker("M") });
+            Check(plan.SourceIdsToArchiveAndErase.Count == 0 && plan.MarkerMatches.Count == 0);
+        }
+        foreach (StormCleanupMarker marker in new[] { Marker(""), Marker("M", x: double.NaN), Marker("M", y: double.PositiveInfinity) })
+            Check(Cleanup(new[] { CleanupOwner(Di("D")) }, new[] { marker }).MarkerMatches.Count == 0);
+    }
+    private static void CleanupSourceWithoutMarker()
+    {
+        var plan = Cleanup(new[] { CleanupOwner(Di("D")), CleanupOwner(Box("B")) }, Array.Empty<StormCleanupMarker>());
+        Check(plan.SourceIdsToArchiveAndErase.Count == 2 && plan.MarkerMatches.Count == 0 && plan.Issues.Count == 0);
+    }
+    private static void CleanupOrderAndRerun()
+    {
+        var sources = new[] { CleanupOwner(Di("D")), CleanupOwner(Access("A", x: 10)) };
+        var markers = new[] { Marker("MD"), Marker("MA", "UFLS_MH_MARK", 10) };
+        Check(CleanupSignature(Cleanup(sources, markers)) == CleanupSignature(Cleanup(sources.Reverse().ToArray(), markers.Reverse().ToArray())));
+        var archived = new[]
+        {
+            CleanupOwner(Di("D"), state: StormCleanupSourceState.ArchivedCompletion, archivedMarkers: new[] { "MD" }),
+            CleanupOwner(Access("A", x: 10), state: StormCleanupSourceState.ArchivedCompletion, archivedMarkers: new[] { "MA" })
+        };
+        var rerun = Cleanup(archived, Array.Empty<StormCleanupMarker>());
+        Check(rerun.SourceIdsToArchiveAndErase.Count == 0 && rerun.MarkerMatches.Count == 0 && rerun.Issues.Count == 0);
+    }
+    private static void CleanupVerifiedOwners()
+    {
+        var sources = new[]
+        {
+            CleanupOwner(Di("LIVE")),
+            CleanupOwner(Box("ARCHIVED", "SD-2-JS", 10), state: StormCleanupSourceState.ArchivedCompletion)
+        };
+        var plan = Cleanup(sources, Array.Empty<StormCleanupMarker>());
+        Check(plan.VerifiedOwnerIds.SequenceEqual(new[] { "ARCHIVED", "LIVE" }));
+        Check(plan.SourceIdsToArchiveAndErase.SequenceEqual(new[] { "LIVE" }));
+        Check(plan.MarkerMatches.Count == 0 && plan.Issues.Count == 0);
+    }
+    private static void CleanupExcludedOwners()
+    {
+        var cases = new[]
+        {
+            Cleanup(new[] { CleanupOwner(Di("A")), CleanupOwner(Di("B", " di-1 "), state: StormCleanupSourceState.ArchivedCompletion) }, Array.Empty<StormCleanupMarker>()),
+            Cleanup(new[] { CleanupOwner(Di("A"), false) }, Array.Empty<StormCleanupMarker>()),
+            Cleanup(new[] { CleanupOwner(new StormStructureSource("U", "UNKNOWN", "", 0, 0)) }, Array.Empty<StormCleanupMarker>()),
+            Cleanup(new[] { CleanupOwner(NullPipeEnd()) }, Array.Empty<StormCleanupMarker>()),
+            Cleanup(new[] { CleanupOwner(Di("A")) }, new[] { Marker("M1"), Marker("M2") }),
+            Cleanup(new[] { CleanupOwner(Di("A")) }, Array.Empty<StormCleanupMarker>(), Array.Empty<StormStructureCompletion>()),
+            Cleanup(new[] { CleanupOwner(Di("A")), CleanupOwner(Di("B", "DI-2", 10)) }, Array.Empty<StormCleanupMarker>(),
+                new[] { new StormStructureCompletion("A", new[] { "SHARED" }), new StormStructureCompletion("B", new[] { "SHARED" }) })
+        };
+        foreach (StormCleanupPlan plan in cases)
+            Check(plan.VerifiedOwnerIds.Count == 0 && plan.SourceIdsToArchiveAndErase.Count == 0);
+    }
+    private static void CleanupPlanCompatibility()
+        => Check(new StormCleanupPlan(Array.Empty<string>(), Array.Empty<StormCleanupMarkerMatch>(), Array.Empty<StormStructureIssue>()).VerifiedOwnerIds.Count == 0);
+
+    private static StormStructureVertex[] TrimSquare() => Rectangle(-1, -1, 1, 1);
+    private static StormStructureVertex[] TrimPath(params (double X, double Y)[] points)
+        => points.Select(p => new StormStructureVertex(p.X, p.Y)).ToArray();
+    private static void TrimDecision(StormTerminalTrimDecision decision, StormTerminalTrimKind kind, double start = 0, double end = 0)
+    {
+        Check(decision.Kind == kind, $"Expected {kind}; got {decision.Kind}: {decision.Reason}");
+        Check(Math.Abs(decision.StartParameter - start) <= 1e-8 && Math.Abs(decision.EndParameter - end) <= 1e-8,
+            $"Expected retained parameters {start}..{end}; got {decision.StartParameter}..{decision.EndParameter}");
+        Check(!string.IsNullOrWhiteSpace(decision.Reason));
+    }
+    private static void TerminalTrimDirections()
+    {
+        TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((0, 0), (2, 0))), StormTerminalTrimKind.Trimmed, 0.5, 1);
+        TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((2, 0), (0, 0))), StormTerminalTrimKind.Trimmed, 0, 0.5);
+    }
+    private static void TerminalTrimSkew()
+    {
+        var boundary = TrimPath((0, 0), (4, 0.001), (4.2, 2), (0.1, 2.001));
+        double crossingX = 4 + 0.2 * ((1 - 0.001) / (2 - 0.001));
+        double expected = (crossingX - 2) / 4;
+        TrimDecision(StormTerminalTrim.Plan(boundary, TrimPath((2, 1), (6, 1))), StormTerminalTrimKind.Trimmed, expected, 1);
+        TrimDecision(StormTerminalTrim.Plan(boundary, TrimPath((6, 1), (2, 1))), StormTerminalTrimKind.Trimmed, 0, 1 - expected);
+    }
+    private static void TerminalTrimCorner()
+        => TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((0, 0), (2, 2))), StormTerminalTrimKind.Trimmed, 0.5, 1);
+    private static void TerminalTrimTangency()
+        => TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((0, 2), (2, 0))), StormTerminalTrimKind.Unchanged, 0, 1);
+    private static void TerminalTrimAlreadyOutside()
+    {
+        foreach (StormStructureVertex[] path in new[]
+        {
+            TrimPath((2, 2), (3, 3)), TrimPath((1, 0), (2, 0)), TrimPath((2, 0), (1, 0)),
+            TrimPath((1, 1), (2, 2))
+        })
+            TrimDecision(StormTerminalTrim.Plan(TrimSquare(), path), StormTerminalTrimKind.Unchanged, 0, 1);
+    }
+    private static void TerminalTrimOverlap()
+        => TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((-2, 1), (2, 1))), StormTerminalTrimKind.Review);
+    private static void TerminalTrimThroughAndInside()
+    {
+        TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((-2, 0), (2, 0))), StormTerminalTrimKind.Review);
+        TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((0, 0), (0.5, 0))), StormTerminalTrimKind.Review);
+    }
+    private static void TerminalTrimMultipleCrossings()
+    {
+        var uShape = TrimPath((0, 0), (6, 0), (6, 6), (4, 6), (4, 2), (2, 2), (2, 6), (0, 6));
+        TrimDecision(StormTerminalTrim.Plan(uShape, TrimPath((1, 5), (7, 5))), StormTerminalTrimKind.Review);
+    }
+    private static void TerminalTrimMultiSegment()
+    {
+        TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((0, 0), (0.5, 0), (2, 0))), StormTerminalTrimKind.Trimmed, 1 + 1.0 / 3, 2);
+        TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((2, 0), (0.5, 0), (0, 0))), StormTerminalTrimKind.Trimmed, 0, 2.0 / 3);
+        TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((0, 0), (2, 0), (2, 3))), StormTerminalTrimKind.Trimmed, 0.5, 2);
+        TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((0, 0), (1, 0), (2, 0))), StormTerminalTrimKind.Trimmed, 1, 2);
+    }
+    private static void TerminalTrimBoundaryEndpoint()
+    {
+        TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((1, 0), (0, 0))), StormTerminalTrimKind.Review);
+        TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((0, 0), (1, 0))), StormTerminalTrimKind.Review);
+    }
+    private static void TerminalTrimSurveyCoordinates()
+    {
+        const double x = 867285.6256335936, y = 1295711.003371928;
+        var boundary = TrimSquare().Select(p => new StormStructureVertex(p.X + x, p.Y + y)).ToArray();
+        TrimDecision(StormTerminalTrim.Plan(boundary, TrimPath((x, y), (x + 2, y))), StormTerminalTrimKind.Trimmed, 0.5, 1);
+    }
+    private static void TerminalTrimReadOnlyInputs()
+    {
+        var boundary = TrimSquare().ToList();
+        var path = TrimPath((0, 0), (2, 0)).ToList();
+        var boundaryBefore = boundary.ToArray();
+        var pathBefore = path.ToArray();
+        StormTerminalTrimDecision decision = StormTerminalTrim.Plan(boundary, path);
+        Check(boundary.SequenceEqual(boundaryBefore) && path.SequenceEqual(pathBefore));
+        boundary[0] = new StormStructureVertex(-100, -100);
+        path[0] = new StormStructureVertex(100, 100);
+        TrimDecision(decision, StormTerminalTrimKind.Trimmed, 0.5, 1);
+    }
+    private static void TerminalTrimRerun()
+    {
+        var original = TrimPath((0, 0), (2, 0), (2, 3));
+        var first = StormTerminalTrim.Plan(TrimSquare(), original);
+        var again = StormTerminalTrim.Plan(TrimSquare(), original);
+        Check(first == again);
+        TrimDecision(first, StormTerminalTrimKind.Trimmed, 0.5, 2);
+        TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((1, 0), (2, 0), (2, 3))), StormTerminalTrimKind.Unchanged, 0, 2);
+    }
+    private static void TerminalTrimInvalidBoundaries()
+    {
+        foreach (StormStructureVertex[] boundary in new[]
+        {
+            Array.Empty<StormStructureVertex>(), TrimPath((0, 0), (1, 0)),
+            TrimPath((0, 0), (1, 1), (2, 2)), TrimPath((-1, -1), (1, 1), (-1, 1), (1, -1)),
+            TrimPath((-1, -1), (1, -1), (double.NaN, 1), (-1, 1)),
+            TrimPath((-1, -1), (1, -1), (1, 1), (-1, 1), (-1, -1))
+        })
+            TrimDecision(StormTerminalTrim.Plan(boundary, TrimPath((0, 0), (2, 0))), StormTerminalTrimKind.Review);
+    }
+    private static void TerminalTrimInvalidPaths()
+    {
+        foreach (StormStructureVertex[] path in new[]
+        {
+            Array.Empty<StormStructureVertex>(), TrimPath((0, 0)), TrimPath((0, 0), (0, 0)),
+            TrimPath((0, 0), (1e-9, 0)), TrimPath((0, 0), (double.PositiveInfinity, 0)),
+            TrimPath((0, 0), (2, 0), (1.5, 0), (3, 0)),
+            TrimPath((0, 0), (2, 2), (0, 2), (2, 0)),
+            TrimPath((0, 0), (2, 0), (2, 2), (0, 0))
+        })
+            TrimDecision(StormTerminalTrim.Plan(TrimSquare(), path), StormTerminalTrimKind.Review);
+    }
+    private static void TerminalTrimMissingInputs()
+    {
+        TrimDecision(StormTerminalTrim.Plan(null!, TrimPath((0, 0), (2, 0))), StormTerminalTrimKind.Review);
+        TrimDecision(StormTerminalTrim.Plan(TrimSquare(), null!), StormTerminalTrimKind.Review);
+    }
+    private static void TerminalTrimBoundaryWinding()
+    {
+        var path = TrimPath((0, 0), (2, 0));
+        Check(StormTerminalTrim.Plan(TrimSquare(), path) == StormTerminalTrim.Plan(TrimSquare().Reverse().ToArray(), path));
+    }
+    private static void TerminalTrimExtraContact()
+        => TrimDecision(StormTerminalTrim.Plan(TrimSquare(), TrimPath((0, 0), (2, 0), (3, 2), (1, 1), (0, 2))), StormTerminalTrimKind.Review);
+
+    private static void GapDecision(StormTerminalGapProbe decision, StormTerminalGapKind kind)
+    {
+        Check(decision.Kind == kind, $"Expected {kind}; got {decision.Kind}: {decision.Reason}");
+        Check(!string.IsNullOrWhiteSpace(decision.Reason));
+    }
+    private static void TerminalGapAhead()
+    {
+        var endpoint = new StormStructureVertex(-2, 0);
+        var neighbor = new StormStructureVertex(-3, 0);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), endpoint, neighbor, 2), StormTerminalGapKind.Gap);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), endpoint, neighbor, 5), StormTerminalGapKind.Gap);
+    }
+    private static void TerminalGapBehind()
+        => GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, 0), new(-1.5, 0), 5), StormTerminalGapKind.Clear);
+    private static void TerminalGapParallel()
+        => GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, 2), new(-3, 2), 5), StormTerminalGapKind.Clear);
+    private static void TerminalGapCorners()
+    {
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, 0), new(-3, -1), 5), StormTerminalGapKind.Clear);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, -2), new(-3, -3), 5), StormTerminalGapKind.Gap);
+    }
+    private static void TerminalGapEdgeOnly()
+        => GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, 1), new(-3, 1), 5), StormTerminalGapKind.Clear);
+    private static void TerminalGapAfterOverlap()
+    {
+        var boundary = TrimPath((0, 0), (6, 0), (6, 3), (3, 3), (3, 1), (0, 1));
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(boundary, new(-1, 1), new(-2, 1), 3), StormTerminalGapKind.Clear);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(boundary, new(-1, 1), new(-2, 1), 8), StormTerminalGapKind.Gap);
+        var forwardOverlap = TrimPath((0, 0), (1, 0), (1, -1), (3, -1), (3, 1), (0, 1));
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(forwardOverlap, new(-1, 0), new(-2, 0), 5), StormTerminalGapKind.Gap);
+    }
+    private static void TerminalGapExteriorEndpoint()
+    {
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(0, 0), new(-1, 0), 5), StormTerminalGapKind.Review);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-1, 0), new(-2, 0), 5), StormTerminalGapKind.Review);
+    }
+    private static void TerminalGapDistanceBound()
+    {
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, 0), new(-3, 0), 0.9999), StormTerminalGapKind.Clear);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, 0), new(-3, 0), 1.0), StormTerminalGapKind.Clear);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, 0), new(-3, 0), 1.0001), StormTerminalGapKind.Gap);
+    }
+    private static void TerminalGapConcave()
+    {
+        var boundary = TrimPath((0, 0), (6, 0), (6, 6), (4, 6), (4, 2), (2, 2), (2, 6), (0, 6));
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(boundary, new(-1, 5), new(-2, 5), 8), StormTerminalGapKind.Gap);
+    }
+    private static void TerminalGapNormalizedDirection()
+    {
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, 0), new(-1002, 0), 1.5), StormTerminalGapKind.Gap);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, 0), new(-2.01, 0), 1.5), StormTerminalGapKind.Gap);
+    }
+    private static void TerminalGapInvalidInputs()
+    {
+        foreach (double limit in new[] { 0.0, -1.0, 1e-9, double.NaN, double.PositiveInfinity })
+            GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, 0), new(-3, 0), limit), StormTerminalGapKind.Review);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, 0), new(-2, 0), 5), StormTerminalGapKind.Review);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(double.NaN, 0), new(-3, 0), 5), StormTerminalGapKind.Review);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimSquare(), new(-2, 0), new(double.PositiveInfinity, 0), 5), StormTerminalGapKind.Review);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(null!, new(-2, 0), new(-3, 0), 5), StormTerminalGapKind.Review);
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(TrimPath((0, 0), (1, 1), (2, 2)), new(-2, 0), new(-3, 0), 5), StormTerminalGapKind.Review);
+    }
+    private static void TerminalGapSurveyCoordinates()
+    {
+        const double x = 867285.6256335936, y = 1295711.003371928;
+        var boundary = TrimSquare().Select(p => new StormStructureVertex(p.X + x, p.Y + y)).ToArray();
+        GapDecision(StormTerminalTrim.ProbeTerminalGap(boundary, new(x - 2, y), new(x - 3, y), 2), StormTerminalGapKind.Gap);
+    }
+    private static void TerminalGapReadOnly()
+    {
+        var boundary = TrimSquare().ToList();
+        var before = boundary.ToArray();
+        var decision = StormTerminalTrim.ProbeTerminalGap(boundary, new(-2, 0), new(-3, 0), 2);
+        Check(boundary.SequenceEqual(before));
+        boundary[0] = new StormStructureVertex(-100, -100);
+        GapDecision(decision, StormTerminalGapKind.Gap);
+    }
+    private static void TerminalGapContainsEndpoint()
+    {
+        Check(StormTerminalTrim.ContainsEndpoint(TrimSquare(), new(0, 0)));
+        Check(StormTerminalTrim.ContainsEndpoint(TrimSquare(), new(1, 0)));
+        Check(!StormTerminalTrim.ContainsEndpoint(TrimSquare(), new(2, 0)));
+        Check(!StormTerminalTrim.ContainsEndpoint(TrimSquare(), new(double.NaN, 0)));
+        Check(!StormTerminalTrim.ContainsEndpoint(null!, new(0, 0)));
+    }
+
+    private static void PipeDiameterThreshold()
+    {
+        Check(StormPipePreparationRules.ClassifyDiameter(11.0 / 12.0) == StormPipeSizeKind.SingleLine);
+        Check(StormPipePreparationRules.ClassifyDiameter(Math.BitDecrement(1.0)) == StormPipeSizeKind.SingleLine);
+        Check(StormPipePreparationRules.ClassifyDiameter(1.0) == StormPipeSizeKind.TwoWall);
+        Check(StormPipePreparationRules.ClassifyDiameter(Math.BitIncrement(1.0)) == StormPipeSizeKind.TwoWall);
+        Check(StormPipePreparationRules.ClassifyDiameter(3.0) == StormPipeSizeKind.TwoWall);
+    }
+    private static void PipeInvalidDiameters()
+    {
+        foreach (double diameter in new[] { 0.0, -0.0, -1.0, double.NaN, double.PositiveInfinity, double.NegativeInfinity })
+        {
+            Check(StormPipePreparationRules.ClassifyDiameter(diameter) == StormPipeSizeKind.Invalid);
+            Check(!StormPipePreparationRules.TryValidateOwnership(100, diameter, new[] { 1 }, new[] { 2 }, out string reason));
+            Check(!string.IsNullOrWhiteSpace(reason));
+        }
+    }
+    private static void PipeSingleLineOwnership()
+    {
+        Check(StormPipePreparationRules.TryValidateOwnership(100, 0.5, Array.Empty<int>(), Array.Empty<int>(), out string reason));
+        Check(reason.Length == 0);
+        Check(!StormPipePreparationRules.TryValidateOwnership(100, 0.5, new[] { 1 }, Array.Empty<int>(), out _));
+        Check(!StormPipePreparationRules.TryValidateOwnership(100, 0.5, Array.Empty<int>(), new[] { 2 }, out _));
+        Check(!StormPipePreparationRules.TryValidateOwnership(100, 0.5, new[] { 1 }, new[] { 2 }, out _));
+    }
+    private static void PipeTwoWallOwnership()
+    {
+        Check(StormPipePreparationRules.TryValidateOwnership(100, 1.0, new[] { 1 }, new[] { 2 }, out string reason));
+        Check(reason.Length == 0);
+        Check(StormPipePreparationRules.TryValidateOwnership(100, 3.0, new[] { 1, 2 }, new[] { 3, 4 }, out _));
+        Check(!StormPipePreparationRules.TryValidateOwnership(100, 1.0, Array.Empty<int>(), new[] { 2 }, out _));
+        Check(!StormPipePreparationRules.TryValidateOwnership(100, 1.0, new[] { 1 }, Array.Empty<int>(), out _));
+        Check(!StormPipePreparationRules.TryValidateOwnership(100, 1.0, Array.Empty<int>(), Array.Empty<int>(), out _));
+    }
+    private static void PipeDuplicateOwnership()
+    {
+        foreach ((int[] positive, int[] negative) in new[]
+        {
+            (new[] { 1, 1 }, new[] { 2 }),
+            (new[] { 1 }, new[] { 2, 2 }),
+            (new[] { 1 }, new[] { 1 }),
+            (new[] { 100 }, new[] { 2 }),
+            (new[] { 1 }, new[] { 100 })
+        })
+        {
+            Check(!StormPipePreparationRules.TryValidateOwnership(100, 1.0, positive, negative, out string reason));
+            Check(!string.IsNullOrWhiteSpace(reason));
+        }
+    }
+    private static void PipeMissingOwnership()
+    {
+        Check(!StormPipePreparationRules.TryValidateOwnership<string>(null!, 1.0, new[] { "P" }, new[] { "N" }, out _));
+        Check(!StormPipePreparationRules.TryValidateOwnership(100, 1.0, null!, new[] { 2 }, out _));
+        Check(!StormPipePreparationRules.TryValidateOwnership(100, 1.0, new[] { 1 }, null!, out _));
+        Check(!StormPipePreparationRules.TryValidateOwnership("S", 1.0, new[] { "P", null! }, new[] { "N" }, out _));
+        Check(!StormPipePreparationRules.TryValidateOwnership("S", 1.0, new[] { "P" }, new[] { null!, "N" }, out _));
+    }
+    private static void PipeSourceLayerHints()
+    {
+        foreach (string layer in new[] { "GIS-PIPE", "GIS-STRM-PIPE", "V-SURV-PIPE-2D", "C-STRM-PIPE-CNTR-E", "c-strm-pipe-cntr-e" })
+            Check(StormPipePreparationRules.IsKnownSourceLayer(layer), layer);
+        foreach (string layer in new[] { "Pipes", "0", "C-STRM-PIPE-E", "V-SURV-STRC-OUTR-2D", "GIS-STRC" })
+            Check(!StormPipePreparationRules.IsKnownSourceLayer(layer), layer);
+        // A generic imported layer is not a known-layer hint; valid native diameter
+        // OD is separate evidence used by the host. Conversely a sewer centerline
+        // can have a pipe-layer hint but must still fail the separate utility gate.
+        Check(StormPipePreparationRules.IsKnownSourceLayer("C-SSWR-PIPE-CNTR-E"));
+        Check(StormPipePreparationRules.IsSewerName("C-SSWR-PIPE-CNTR-E"));
+    }
+    private static void PipeSewerNames()
+    {
+        foreach (string name in new[] { "C-SSWR-PIPE-E", "GIS-SEWER-PIPE", "V-SURV-SEWR-PIPE", "SANITARY PIPE", "GIS-SAN-PIPE", "SS PIPE", "ss_pipes", "SS.PIPE" })
+            Check(StormPipePreparationRules.IsSewerName(name), name);
+        foreach (string name in new[] { "C-STRM-PIPE-E", "Pipes", "ACCESS STRUCTURE", "PASS PIPE", "SD-1", "SS" })
+            Check(!StormPipePreparationRules.IsSewerName(name), name);
+    }
+    private static void PipeUtilitySewerOnly()
+    {
+        Check(StormPipePreparationRules.ClassifyUtility("Pipes", new[] { "SS_Pipes" }) == StormPipeUtilityKind.ExcludedSewer);
+        Check(StormPipePreparationRules.ClassifyUtility("C-SSWR-PIPE-CNTR-E", Array.Empty<string>()) == StormPipeUtilityKind.ExcludedSewer);
+        Check(StormPipePreparationRules.ClassifyUtility("GIS-PIPE", new[] { "Sanitary" }) == StormPipeUtilityKind.ExcludedSewer);
+    }
+    private static void PipeUtilityConflicts()
+    {
+        Check(StormPipePreparationRules.ClassifyUtility("GIS-STRM-PIPE-E", new[] { "SS_Pipes" }) == StormPipeUtilityKind.Review);
+        Check(StormPipePreparationRules.ClassifyUtility("V-SURV-STORM-PIPE", new[] { "SS_Pipes" }) == StormPipeUtilityKind.Review);
+        Check(StormPipePreparationRules.ClassifyUtility("Pipes", new[] { "SD_Pipes", "SS_Pipes" }) == StormPipeUtilityKind.Review);
+        Check(StormPipePreparationRules.ClassifyUtility("C-SSWR-PIPE-CNTR-E", new[] { "SD_Pipes" }) == StormPipeUtilityKind.Review);
+        Check(StormPipePreparationRules.ClassifyUtility("GIS-STRM-SEWER-PIPE", Array.Empty<string>()) == StormPipeUtilityKind.Review);
+    }
+    private static void PipeUtilityCandidates()
+    {
+        Check(StormPipePreparationRules.ClassifyUtility("GIS-STRM-PIPE", new[] { "SD_Pipes" }) == StormPipeUtilityKind.Candidate);
+        Check(StormPipePreparationRules.ClassifyUtility("Pipes", new[] { "SD_Pipes" }) == StormPipeUtilityKind.Candidate);
+        Check(StormPipePreparationRules.ClassifyUtility("Pipes", new[] { "Pipes" }) == StormPipeUtilityKind.Candidate);
+        Check(StormPipePreparationRules.ClassifyUtility("Pipes", Array.Empty<string>()) == StormPipeUtilityKind.Candidate);
+        // Candidate only means utility evidence does not exclude it; valid native
+        // diameter, full OD, source geometry and ownership still gate preparation.
+    }
+    private static void PipeUtilityExactEvidence()
+    {
+        Check(StormPipePreparationRules.ClassifyUtility("gis-strm-pipe-e", new[] { "ss_pipes" }) == StormPipeUtilityKind.Review);
+        Check(StormPipePreparationRules.ClassifyUtility("Pipes", new[] { "sd_pipes", "ss_pipes" }) == StormPipeUtilityKind.Review);
+        Check(StormPipePreparationRules.ClassifyUtility("GIS-SD-PIPE", new[] { "SS_Pipes" }) == StormPipeUtilityKind.ExcludedSewer);
+        Check(StormPipePreparationRules.ClassifyUtility("Pipes", new[] { "OTHER_SD_Pipes", "SS_Pipes" }) == StormPipeUtilityKind.ExcludedSewer);
+        Check(StormPipePreparationRules.ClassifyUtility("GIS-STORMWATER-PIPE", new[] { "SS_Pipes" }) == StormPipeUtilityKind.ExcludedSewer);
+        Check(StormPipePreparationRules.ClassifyUtility("GIS-STORM-STRUCTURE", new[] { "SS_Pipes" }) == StormPipeUtilityKind.ExcludedSewer);
+    }
+    private static void PipeUtilityMalformed()
+    {
+        Check(StormPipePreparationRules.ClassifyUtility(null!, Array.Empty<string>()) == StormPipeUtilityKind.Review);
+        Check(StormPipePreparationRules.ClassifyUtility("Pipes", null!) == StormPipeUtilityKind.Review);
+        foreach (string? name in new string?[] { null, "", " " })
+            Check(StormPipePreparationRules.ClassifyUtility("Pipes", new[] { "SS_Pipes", name! }) == StormPipeUtilityKind.Review);
+    }
+    private static void PipeUtilityCultureAndOrder()
+    {
+        System.Globalization.CultureInfo original = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            foreach (string culture in new[] { "en-US", "tr-TR", "ar-SA" })
+            {
+                System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(culture);
+                Check(StormPipePreparationRules.ClassifyUtility("Pipes", new[] { "sd_pipes", "ss_pipes" }) == StormPipeUtilityKind.Review);
+                Check(StormPipePreparationRules.ClassifyUtility("Pipes", new[] { "ss_pipes", "sd_pipes", "ss_pipes" }) == StormPipeUtilityKind.Review);
+            }
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = original; }
+    }
+    private static StormPipeCompletionRecord<int> PipeCompletion()
+        => new(100, "64", 1.5, StormObjectDataFingerprint.Compute(new[] { "DIAMETER-RECORD" }),
+            "SOURCE-GEOMETRY", "GIS-STRM-PIPE",
+            new[] { new StormPipeWallRecord<int>(201, "C9", "POSITIVE-1"), new StormPipeWallRecord<int>(202, "CA", "POSITIVE-2") },
+            new[] { new StormPipeWallRecord<int>(301, "12D", "NEGATIVE-1"), new StormPipeWallRecord<int>(302, "12E", "NEGATIVE-2") });
+    private static void PipeCompletionNoOp()
+    {
+        var original = PipeCompletion();
+        var readback = original with
+        {
+            Positive = original.Positive.Select(w => w with { }).ToArray(),
+            Negative = original.Negative.Select(w => w with { }).ToArray()
+        };
+        Check(StormPipePreparationRules.SameCompletion(original, original));
+        Check(StormPipePreparationRules.SameCompletion(original, readback));
+        Check(StormPipePreparationRules.SameCompletion(readback, original));
+    }
+    private static void PipeCompletionSourceChanges()
+    {
+        var original = PipeCompletion();
+        foreach (var changed in new[]
+        {
+            original with { SourceId = 101 }, original with { SourceHandle = "65" },
+            original with { DiameterFeet = Math.BitIncrement(original.DiameterFeet) },
+            original with { ObjectDataFingerprint = StormObjectDataFingerprint.Compute(new[] { "CHANGED-OD" }) },
+            original with { SourceGeometry = "MOVED-SOURCE" }, original with { OriginalLayer = "OTHER-LAYER" }
+        })
+            Check(!StormPipePreparationRules.SameCompletion(original, changed));
+    }
+    private static void PipeCompletionWallChanges()
+    {
+        var original = PipeCompletion();
+        foreach (var wall in new[]
+        {
+            original.Positive[0] with { Id = 999 }, original.Positive[0] with { Handle = "OTHER" },
+            original.Positive[0] with { Geometry = "TRIMMED-WALL" }
+        })
+            Check(!StormPipePreparationRules.SameCompletion(original, original with { Positive = new[] { wall, original.Positive[1] } }));
+        Check(!StormPipePreparationRules.SameCompletion(original, original with
+        {
+            Negative = new[] { original.Negative[0] with { Geometry = "CHANGED-NEGATIVE" }, original.Negative[1] }
+        }));
+    }
+    private static void PipeCompletionSideOrder()
+    {
+        var original = PipeCompletion();
+        foreach (var changed in new[]
+        {
+            original with { Positive = original.Negative, Negative = original.Positive },
+            original with { Positive = original.Positive.Reverse().ToArray() },
+            original with { Negative = original.Negative.Reverse().ToArray() },
+            original with { Positive = original.Positive.Take(1).ToArray() },
+            original with { Negative = original.Negative.Concat(new[] { new StormPipeWallRecord<int>(999, "3E7", "EXTRA") }).ToArray() }
+        })
+            Check(!StormPipePreparationRules.SameCompletion(original, changed));
+    }
+    private static void PipeCompletionNulls()
+    {
+        Check(StormPipePreparationRules.SameCompletion<int>(null, null));
+        Check(!StormPipePreparationRules.SameCompletion(PipeCompletion(), null));
+        Check(!StormPipePreparationRules.SameCompletion(null, PipeCompletion()));
+    }
+    private static bool OpenNull(IReadOnlyList<StormStructureVertex> wall, bool start = true, double diameter = 2,
+        IReadOnlyList<StormStructureSource>? anchors = null, IReadOnlyList<StormStructureVertex>? source = null,
+        IReadOnlyList<IReadOnlyList<StormStructureVertex>>? physicalFootprints = null)
+        => StormPipePreparationRules.IsVerifiedOpenNullTerminal(source ?? TrimPath((0, 0), (10, 0)), wall, start, diameter,
+            anchors ?? new[] { NullPipeEnd() }, physicalFootprints);
+    private static void OpenNullSidesAndTerminals()
+    {
+        foreach (double side in new[] { -1.0, 1.0 })
+        {
+            var wall = TrimPath((0, side), (10, side));
+            Check(OpenNull(wall));
+            Check(!OpenNull(wall, start: false));
+            Check(OpenNull(wall, start: false, anchors: new[] { NullPipeEnd(x: 10) }));
+        }
+    }
+    private static void OpenNullReversedPaths()
+    {
+        Check(OpenNull(TrimPath((10, 1), (0, 1)), start: false));
+        Check(OpenNull(TrimPath((10, 1), (0, 1)), anchors: new[] { NullPipeEnd(x: 10) }));
+        Check(OpenNull(TrimPath((0, 1), (10, 1)), source: TrimPath((10, 0), (0, 0))));
+    }
+    private static void OpenNullThresholdAndRadius()
+    {
+        Check(OpenNull(TrimPath((0, 0.5), (10, 0.5)), diameter: 1));
+        Check(!OpenNull(TrimPath((0, 0.4995), (10, 0.4995)), diameter: 0.999));
+        foreach (double diameter in new[] { 0, -1, double.NaN, double.PositiveInfinity })
+            Check(!OpenNull(TrimPath((0, 1), (10, 1)), diameter: diameter));
+        Check(OpenNull(TrimPath((0.1, 1), (10.1, 1))));
+        Check(!OpenNull(TrimPath((0.10001, 1), (10.10001, 1))));
+        Check(!OpenNull(TrimPath((0.08, 1.08), (10.08, 1.08))));
+        Check(OpenNull(TrimPath((0, 1), (10, 1)), anchors: new[] { NullPipeEnd(x: 0.1) }));
+        Check(!OpenNull(TrimPath((0, 1), (10, 1)), anchors: new[] { NullPipeEnd(x: 0.10001) }));
+    }
+    private static void OpenNullWrongTangent()
+    {
+        Check(!OpenNull(TrimPath((0, 1), (-10, 1))));
+        Check(!OpenNull(TrimPath((0, 1), (10, 1.01))));
+        Check(!OpenNull(TrimPath((0, 1), (0, 10))));
+        Check(OpenNull(TrimPath((0, 1), (10, 1 + 1e-9))));
+    }
+    private static void OpenNullWrongWidth()
+    {
+        Check(!OpenNull(TrimPath((0, 1.2), (10, 1.2))));
+        Check(!OpenNull(TrimPath((0, 0), (10, 0))));
+        Check(!OpenNull(TrimPath((0, -1.2), (10, -1.2))));
+    }
+    private static void OpenNullMiddleSplit()
+    {
+        Check(!OpenNull(TrimPath((5, 1), (10, 1)), anchors: new[] { NullPipeEnd(x: 5) }));
+        Check(!OpenNull(TrimPath((0, 1), (5, 1)), start: false, anchors: new[] { NullPipeEnd(x: 5) }));
+        Check(!OpenNull(TrimPath((4, 1), (6, 1)), anchors: new[] { NullPipeEnd(x: 4) }));
+    }
+    private static void OpenNullAmbiguousTerminals()
+    {
+        var source = TrimPath((0, 0), (2, 0), (2, 2), (-1, 2), (-1, 1), (1, 1), (1, 0.05), (0, 0.05));
+        Check(StormTerminalTrim.TryValidatePath(source, out _));
+        Check(!OpenNull(TrimPath((0, 1.025), (3, 1.025)), source: source));
+    }
+    private static void OpenNullCompetingAnchors()
+    {
+        foreach (StormStructureSource other in new[]
+        {
+            Box("BOX", x: 0.03), Access("MH", x: 0.03), Di("DI", x: 0.03),
+            new StormStructureSource("UNKNOWN", "UNKNOWN", "", 0.03, 0),
+            NullPipeEnd("SECOND", "OTHER-STUB", 0.03)
+        })
+            Check(!OpenNull(TrimPath((0, 1), (10, 1)), anchors: new[] { NullPipeEnd(), other }));
+        Check(OpenNull(TrimPath((0, 1), (10, 1)), anchors: new[] { NullPipeEnd(), Box("FAR", x: 100) }));
+    }
+    private static void OpenNullDuplicateIdentities()
+    {
+        Check(!OpenNull(TrimPath((0, 1), (10, 1)), anchors: new[] { NullPipeEnd(), NullPipeEnd(" d5c4a ", "OTHER-STUB", 100) }));
+        Check(!OpenNull(TrimPath((0, 1), (10, 1)), anchors: new[] { NullPipeEnd(), NullPipeEnd("OTHER", " l24-00066-strm-63+75-stub ", 100) }));
+    }
+    private static void OpenNullInvalidGeometry()
+    {
+        foreach (StormStructureVertex[] path in new[]
+        {
+            Array.Empty<StormStructureVertex>(), TrimPath((0, 1)), TrimPath((0, 1), (0, 1)),
+            TrimPath((0, 1), (double.NaN, 1)), TrimPath((0, 1), (2, 3), (0, 3), (2, 1))
+        })
+            Check(!OpenNull(path));
+        Check(!OpenNull(TrimPath((0, 1), (10, 1)), source: TrimPath((0, 0), (0, 0))));
+        Check(!StormPipePreparationRules.IsVerifiedOpenNullTerminal(null!, TrimPath((0, 1), (10, 1)), true, 2, new[] { NullPipeEnd() }));
+        Check(!StormPipePreparationRules.IsVerifiedOpenNullTerminal(TrimPath((0, 0), (10, 0)), null!, true, 2, new[] { NullPipeEnd() }));
+    }
+    private static void OpenNullUnlocatableAnchors()
+    {
+        Check(!OpenNull(TrimPath((0, 1), (10, 1)), anchors: new[] { NullPipeEnd(), new StormStructureSource("U", "UNKNOWN", "", double.NaN, 100) }));
+        Check(!OpenNull(TrimPath((0, 1), (10, 1)), anchors: new[] { NullPipeEnd(), null! }));
+        Check(!StormPipePreparationRules.IsVerifiedOpenNullTerminal(TrimPath((0, 0), (10, 0)), TrimPath((0, 1), (10, 1)), true, 2, null!));
+    }
+    private static void OpenNullStrictConvention()
+    {
+        foreach (StormStructureSource source in new[]
+        {
+            NullPipeEnd(id: ""), NullPipeEnd(name: ""), NullPipeEnd(name: "NOT-A-STUB-SUFFIX"),
+            new StormStructureSource("N", "SD-STUB", "Null Structure", 0, 0),
+            new StormStructureSource("N", "SDDI-1-STUB", "UFLS-Null Structure", 0, 0), Box("B")
+        })
+            Check(!OpenNull(TrimPath((0, 1), (10, 1)), anchors: new[] { source }));
+        Check(!OpenNull(TrimPath((0, 1), (10, 1)), anchors: Array.Empty<StormStructureSource>()));
+    }
+    private static void OpenNullSurveyAndReadOnly()
+    {
+        const double x = 867285.6256335936, y = 1295711.003371928;
+        var source = TrimPath((x, y), (x + 10, y));
+        var wall = TrimPath((x, y + 1), (x + 10, y + 1));
+        var anchors = new[] { NullPipeEnd(x: x, y: y) };
+        var beforeSource = source.ToArray(); var beforeWall = wall.ToArray(); var beforeAnchors = anchors.ToArray();
+        Check(OpenNull(wall, source: source, anchors: anchors));
+        Check(source.SequenceEqual(beforeSource) && wall.SequenceEqual(beforeWall) && anchors.SequenceEqual(beforeAnchors));
+    }
+    private static void OpenNullPhysicalInside()
+    {
+        var wall = TrimPath((0, 1), (10, 1));
+        var anchors = new[] { NullPipeEnd(), Box("OFF-CENTER-BOX", x: 3, y: 3) };
+        Check(OpenNull(wall, anchors: anchors));
+        Check(!OpenNull(wall, anchors: anchors, physicalFootprints: new[] { Rectangle(-1, -1, 5, 5) }));
+        // The gate uses the actual original source terminal, even if the wall
+        // terminal itself lies outside the physical footprint.
+        Check(!OpenNull(wall, physicalFootprints: new[] { Rectangle(-0.25, -0.25, 0.25, 0.25) }));
+    }
+    private static void OpenNullPhysicalBoundary()
+        => Check(!OpenNull(TrimPath((0, 1), (10, 1)), physicalFootprints: new[] { Rectangle(0, -2, 3, 2) }));
+    private static void OpenNullPhysicalOutside()
+    {
+        Check(OpenNull(TrimPath((0, 1), (10, 1)), physicalFootprints: new[] { Rectangle(20, 20, 25, 25) }));
+        Check(OpenNull(TrimPath((0, 1), (10, 1)), physicalFootprints: Array.Empty<IReadOnlyList<StormStructureVertex>>()));
+    }
+    private static void OpenNullPhysicalInvalid()
+    {
+        foreach (IReadOnlyList<StormStructureVertex> footprint in new IReadOnlyList<StormStructureVertex>[]
+        {
+            null!, Array.Empty<StormStructureVertex>(), TrimPath((0, 0), (1, 1), (2, 2)),
+            TrimPath((0, 0), (1, 0), (double.NaN, 1))
+        })
+            Check(!OpenNull(TrimPath((0, 1), (10, 1)), physicalFootprints: new[] { footprint }));
+    }
+
+    private static void FingerprintGoldenVectors()
+    {
+        Check(StormObjectDataFingerprint.Compute(new[] { "a", "bc" }) == "CLV_OD_V1:SHA256:27B872C5465894EC391744714C3492136C5A28C40F38EC7DC82B7BFAAC7082AC");
+        Check(StormObjectDataFingerprint.Compute(Array.Empty<string>()) == "CLV_OD_V1:SHA256:EF6E7D7BEEC445D20E064DA7767E7982E3E94FD231C7ED7C95D7BF8B14134579");
+    }
+    private static void FingerprintMultiset()
+    {
+        Check(StormObjectDataFingerprint.Compute(new[] { "b", "a" }) == StormObjectDataFingerprint.Compute(new[] { "a", "b" }));
+        Check(StormObjectDataFingerprint.Compute(new[] { "a", "a" }) != StormObjectDataFingerprint.Compute(new[] { "a" }));
+        Check(StormObjectDataFingerprint.Compute(Array.Empty<string>()) != StormObjectDataFingerprint.Compute(new[] { "" }));
+    }
+    private static void FingerprintExactKeys()
+    {
+        var keys = new[] { "b", "a" };
+        StormObjectDataFingerprint.Compute(keys);
+        Check(keys.SequenceEqual(new[] { "b", "a" }));
+        Check(StormObjectDataFingerprint.Compute(new[] { "a" }) != StormObjectDataFingerprint.Compute(new[] { " a " }));
+        Check(StormObjectDataFingerprint.Compute(new[] { "a" }) != StormObjectDataFingerprint.Compute(new[] { "A" }));
+    }
+    private static void FingerprintCulture()
+    {
+        System.Globalization.CultureInfo original = System.Globalization.CultureInfo.CurrentCulture;
+        var keys = new[] { "I", "i", "İ", "ı", "typed:Real:1.25" };
+        string expected = StormObjectDataFingerprint.Compute(keys);
+        try
+        {
+            foreach (string name in new[] { "en-US", "tr-TR", "ar-SA" })
+            {
+                System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(name);
+                Check(StormObjectDataFingerprint.Compute(keys) == expected);
+            }
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = original; }
+    }
+    private static void FingerprintFraming()
+    {
+        Check(StormObjectDataFingerprint.Compute(new[] { "ab", "c" }) != StormObjectDataFingerprint.Compute(new[] { "a", "bc" }));
+        Check(StormObjectDataFingerprint.Compute(new[] { "a:b", "c" }) != StormObjectDataFingerprint.Compute(new[] { "a", "b:c" }));
+        Check(StormObjectDataFingerprint.IsValid(StormObjectDataFingerprint.Compute(new[] { "管", "é", "\U0001F600" })));
+        Check(StormObjectDataFingerprint.Compute(new[] { "é" }) != StormObjectDataFingerprint.Compute(new[] { "e\u0301" }));
+    }
+    private static void FingerprintInvalidInputs()
+    {
+        int thrown = 0;
+        try { StormObjectDataFingerprint.Compute(null!); } catch (ArgumentNullException) { thrown++; }
+        try { StormObjectDataFingerprint.Compute(new[] { "a", null! }); } catch (ArgumentException) { thrown++; }
+        try { StormObjectDataFingerprint.Compute(new[] { "\uD800" }); } catch (System.Text.EncoderFallbackException) { thrown++; }
+        try { StormObjectDataFingerprint.Compute(new[] { "\uDC00" }); } catch (System.Text.EncoderFallbackException) { thrown++; }
+        Check(thrown == 4);
+    }
+    private static void FingerprintValidation()
+    {
+        string valid = StormObjectDataFingerprint.Compute(new[] { "a" });
+        Check(StormObjectDataFingerprint.IsValid(valid));
+        foreach (string? invalid in new string?[] { null, "", valid + " ", " " + valid, valid[..^1], valid + "A", valid.ToLowerInvariant(), valid.Replace("V1", "V2"), StormObjectDataFingerprint.Prefix + new string('G', 64) })
+            Check(!StormObjectDataFingerprint.IsValid(invalid));
+    }
     private static void InvalidSources()
     {
         foreach (StormStructureSource source in new[] { Access(""), Access("A", ""), Access("A", x: double.NaN), Access("A", y: double.PositiveInfinity), new StormStructureSource("A", "SD-1", "Manhole", 0, 0) })

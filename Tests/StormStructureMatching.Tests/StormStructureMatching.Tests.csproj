@@ -11,5 +11,9 @@
     <Compile Include="Program.cs" />
     <Compile Include="../../CLV_CivilTools/Gis/StormStructureMatching.cs" Link="StormStructureMatching.cs" />
     <Compile Include="../../CLV_CivilTools/Gis/StormStructureVisibility.cs" Link="StormStructureVisibility.cs" />
+    <Compile Include="../../CLV_CivilTools/Gis/StormStructureCleanup.cs" Link="StormStructureCleanup.cs" />
+    <Compile Include="../../CLV_CivilTools/Gis/StormObjectDataFingerprint.cs" Link="StormObjectDataFingerprint.cs" />
+    <Compile Include="../../CLV_CivilTools/Gis/StormTerminalTrim.cs" Link="StormTerminalTrim.cs" />
+    <Compile Include="../../CLV_CivilTools/Gis/StormPipePreparationRules.cs" Link="StormPipePreparationRules.cs" />
   </ItemGroup>
 </Project>

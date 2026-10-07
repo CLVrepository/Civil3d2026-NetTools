@@ -4,6 +4,9 @@ This zero-package console test runner compiles the actual production
 `CLV_CivilTools/Gis/StormStructureMatching.cs` file without Autodesk assemblies.
 It validates classification and conservative role-aware one-to-one planning.
 It also links the actual `StormStructureVisibility.cs` production traversal.
+The cleanup planner and OD fingerprint helper are linked as production sources too.
+The pure terminal-trim planner is linked directly as well.
+Managed pipe-preparation rule tests link `StormPipePreparationRules.cs` directly.
 
 Run from the repository root with an installed .NET 8 SDK:
 
@@ -58,6 +61,58 @@ all-hidden contents, empty containers versus leaves, callback failure propagatio
 32-level nesting/cycle bounds, traversal order and null callback validation.
 Native evaluated-block lookup, transforms and resulting Civil geometry still
 require host validation; these tests exercise the production traversal itself.
+Cleanup tests cover the observed DI/MH marker anchors, exact marker name/layer and
+empty-OD gates, unresolved/unknown geometric competitors, completion-ownership
+conflicts, duplicate live/archive names and IDs, ambiguous retained cohorts,
+recorded versus newly inserted markers at archived anchors, and no-op reruns.
+Verified owner IDs include both live and archived safe completion owners, while
+point-erasure IDs remain the live subset; unresolved or ambiguous owners are excluded.
+The planner returns archive-then-erase eligibility only; host archive persistence,
+fresh native OD/geometry verification, entity types and atomic deletion require
+Civil 3D tests. Explicit null/STUB sources remain retained.
+Fingerprint tests include independent golden values, ordering/multiplicity,
+input immutability, culture invariance, exact Unicode and delimiter framing,
+invalid UTF-16 rejection and strict versioned-digest syntax validation. A valid
+digest alone never proves that native OD is present or correctly transferred.
+Terminal-trim tests cover both directions, skew boxes, proper corner crossings,
+tangency, outside/already-trimmed paths, boundary overlaps, through/inside-only
+paths, multiple contacts, segment-index parameters, survey coordinates, read-only
+inputs, repeat/no-op behavior, invalid rings/paths, and winding independence.
+Native curves, bulges, widths, Z/elevation, OD transfer and transaction behavior
+must still be excluded or verified by the host adapter and Civil 3D trial.
+Trim host role gates include verified straight closed DI/NDOT and junction-box
+outlines without changing their native OD role; curved DI/access boundaries and
+polyline width handling still require native-host checks.
+Pipe rule tests cover the exact 1-foot (12-inch) threshold, invalid numeric
+diameters, single-line/no-wall and two-distinct-side ownership, duplicate/source
+ID exclusion, missing sides, layer hints versus utility/OD evidence, sewer names,
+and exact completion-record comparison across source/OD/geometry/side/order changes.
+The production comparison can support skipping an unchanged record rewrite only
+after host validation; it does not itself prove live ObjectIds, native geometry,
+OD transfer or safe reuse. `InspectPipeInsideDiameter` stays native-only: its typed
+field parsing, cross-table conflicts, full fingerprint and read-failure behavior
+require Civil 3D fixtures and are not linked into this pure runner.
+The outward terminal-gap probe is tested for true interior ahead, a box behind,
+parallel misses, tangent versus entering corners, boundary-only overlap, interior
+following a concave overlap, distance bounds, multiple interior intervals, vector
+normalization, invalid input, survey coordinates and unchanged input data. It is
+read-only review evidence and never extends a pipe; any null-end exemption is a
+separate source-owned correspondence check, not a nearest-wall exception.
+The production null-terminal exemption predicate has separate coverage for both
+perpendicular wall sides, both original source endpoints, path reversal, tangent
+agreement, diameter/radial bounds, middle/split endpoints, ambiguous original
+terminals, physical/unknown competitors, global duplicate identities, invalid
+geometry, unlocatable anchors, strict null/STUB convention and survey coordinates.
+These checks require host-proven wall/source ownership before use; they do not
+authorize a generic nearby wall or every source on a null-containing network.
+Verified physical footprints veto the null exemption when they contain the actual
+source terminal inside/on, including an off-center box whose point is farther than
+0.10 away; invalid footprints fail closed. Outside valid footprints remain allowed.
+Utility-classification tests distinguish sewer-only exclusion from explicit mixed
+storm/sewer evidence requiring review, use exact documented layer/table tokens,
+preserve neutral/generic candidates, and exercise incomplete metadata, case,
+ordering and culture. Host read failures or invalid diameter/OD must be handled
+before utility classification; a Candidate result alone never authorizes mutation.
 Repeatability here does not
 claim drawing-level rerun safety: persistent output ownership, OD copy/readback,
 rollback, actual block centers, and Civil 3D integration require host tests.
