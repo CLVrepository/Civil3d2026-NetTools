@@ -55,3 +55,11 @@ Sources for ownership (the installed metadata probe, not this upstream mirror, e
 - [Managed disposal typemap](https://github.com/jumpinjackie/mapguide/blob/28dce9ed7c3d4d8e15b0f25c45f674f0051ce881/MgDev/Oem/SWIGEx/Lib/csharp/csharp.swg)
 
 The regression suite checks no-interface disposal for every returned wrapper, exact reverse order with distinct wrapper IDs, code-only and WKT paths, repeated catalog acquisitions preserving a modeled shared owner, null returns and cleanup draining all wrappers when any disposal throws. Repeated calls inside an isolated native host remain necessary to verify deployed runtime behavior.
+
+## Native hidden-method resolution
+
+The complete installed-wrapper candidate enumeration found two duplicated parameter signatures: native `MgCoordinateSystem.ToString()` (string, nonvirtual) plus virtual `Object.ToString()`, and native integer `GetType()` plus `Object.GetType()` returning `System.Type`. Both native methods are hidden declarations rather than overrides. All four wrappers' `Dispose()` methods are virtual non-final overrides; the remaining 25 invoked API methods are virtual non-final new slots declared directly on their documented wrapper classes.
+
+The fake now matches those shapes. A regression explicitly requires flattened reflection to expose both ToString candidates, then checks that the production resolver selects the native declaration. The resolver walks public instance DeclaredOnly members from the receiver class upward, filters the exact expected return type and compatible parameters, selects the sole nearest match, and rejects same-level ambiguity. System.Object is excluded entirely, so a missing native WKT/type accessor cannot silently become a CLR display/type value. Tests also cover inherited/hidden native declarations, wrong-return/static/generic/private/by-ref rejection, and the complete measured API signature/slot table. Existing hostile-WKT and lifecycle tests remain in place.
+
+The optional isolated native fixture shares this resolver through linked production source rather than copying its own lookup logic. It remains source-only until startup isolation and host execution are separately validated.

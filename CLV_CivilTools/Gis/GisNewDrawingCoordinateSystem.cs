@@ -439,35 +439,44 @@ namespace CLV_CivilTools.Gis
                 "Run inside supported Civil 3D with its coordinate-system dictionary available; no replacement runtime or dictionary is used.");
         }
 
-        private static MethodInfo FindMethod(object target, string name, object[] arguments)
+        // Map wrappers can hide Object methods without overriding their virtual
+        // slot (notably ToString/GetType). GetMethods on the whole hierarchy then
+        // returns both declarations. Resolve the intended return/argument contract
+        // at the nearest declaring level; never depend on enumeration order and
+        // never use System.Object as a substitute for a missing native API member.
+        internal static MethodInfo FindMethod(Type receiverType, string name, Type returnType, params object[] arguments)
         {
-            MethodInfo[] matches = target.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .Where(candidate => candidate.Name == name && !candidate.ContainsGenericParameters &&
-                    candidate.ReturnType != typeof(Type) && candidate.GetParameters().Length == arguments.Length &&
-                    candidate.GetParameters().Select((parameter, index) =>
-                        parameter.ParameterType.IsInstanceOfType(arguments[index])).All(isMatch => isMatch)).ToArray();
-            if (matches.Length != 1)
-                throw new MissingMethodException($"Map {target.GetType().FullName}.{name} must expose one exact public instance signature; found {matches.Length}.");
-            return matches[0];
+            for (Type? declaring = receiverType; declaring != null && declaring != typeof(object); declaring = declaring.BaseType)
+            {
+                MethodInfo[] matches = declaring.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                    .Where(candidate => candidate.Name == name && !candidate.ContainsGenericParameters &&
+                        candidate.ReturnType == returnType && candidate.GetParameters().Length == arguments.Length &&
+                        candidate.GetParameters().Select((parameter, index) =>
+                            parameter.ParameterType.IsInstanceOfType(arguments[index])).All(isMatch => isMatch)).ToArray();
+                if (matches.Length == 1) return matches[0];
+                if (matches.Length > 1)
+                    throw new MissingMethodException($"Map {receiverType.FullName}.{name} has {matches.Length} compatible declarations at nearest level '{declaring.FullName}'; an exact native signature is required.");
+            }
+            throw new MissingMethodException($"Map {receiverType.FullName}.{name} has no compatible native declaration returning '{returnType.FullName}'; System.Object fallback is not allowed.");
         }
-        private static object Call(object target, string name, params object[] arguments)
-            => FindMethod(target, name, arguments).Invoke(target, arguments)
+        private static object Call(object target, string name, Type returnType, params object[] arguments)
+            => FindMethod(target.GetType(), name, returnType, arguments).Invoke(target, arguments)
                 ?? throw new InvalidDataException($"Map {target.GetType().FullName}.{name} returned null.");
-        private static string ReadText(object target, string method) => Call(target, method) is string text ? text
-            : throw new InvalidDataException($"Map {method} returned an unexpected non-string value.");
-        private static bool ReadBoolean(object target, string method, params object[] arguments) => Call(target, method, arguments) is bool value ? value
-            : throw new InvalidDataException($"Map {method} returned an unexpected non-Boolean value.");
-        private static int ReadInteger(object target, string method) => Call(target, method) switch
+        private static string ReadText(object target, string method) => (string)Call(target, method, typeof(string));
+        private static bool ReadBoolean(object target, string method, params object[] arguments)
+            => (bool)Call(target, method, typeof(bool), arguments);
+        private static int ReadInteger(object target, string method)
         {
-            int value => value,
-            short value => value,
-            _ => throw new InvalidDataException($"Map {method} returned an unexpected integer type.")
-        };
+            // Installed native GetQuadrant is INT16; all other used integer
+            // accessors (including native GetType) are INT32.
+            object value = Call(target, method, method == "GetQuadrant" ? typeof(short) : typeof(int));
+            return value is short small ? small : (int)value;
+        }
         private static double ReadNumber(object target, string method, params object[] arguments)
         {
-            object value = Call(target, method, arguments);
-            if (value is not double number || !double.IsFinite(number))
-                throw new InvalidDataException($"Map {method} returned a nonfinite or unexpected numeric value.");
+            double number = (double)Call(target, method, typeof(double), arguments);
+            if (!double.IsFinite(number))
+                throw new InvalidDataException($"Map {method} returned a nonfinite numeric value.");
             return number;
         }
 
@@ -488,8 +497,18 @@ namespace CLV_CivilTools.Gis
             }
             internal object Acquire(object target, string name, params object[] arguments)
             {
-                MethodInfo method = FindMethod(target, name, arguments);
-                MethodInfo dispose = FindDispose(method.ReturnType);
+                string returnName = name switch
+                {
+                    "GetCatalog" => "OSGeo.MapGuide.MgCoordinateSystemCatalog",
+                    "GetMathComparator" => "OSGeo.MapGuide.MgCoordinateSystemMathComparator",
+                    "Create" or "CreateFromCode" => "OSGeo.MapGuide.MgCoordinateSystem",
+                    _ => throw new InvalidDataException($"Unsupported owned Map CRS acquisition '{name}'.")
+                };
+                // Installed 2026 metadata places all four acquired public wrappers
+                // in Geometry; arbitrary cross-assembly subclasses are not supported.
+                Type returnType = target.GetType().Assembly.GetType(returnName, throwOnError: true)!;
+                MethodInfo method = FindMethod(target.GetType(), name, returnType, arguments);
+                MethodInfo dispose = FindDispose(returnType);
                 return Track(method.Invoke(target, arguments), dispose, target.GetType().FullName + "." + name);
             }
             private object Track(object? value, MethodInfo dispose, string acquisition)
@@ -498,15 +517,7 @@ namespace CLV_CivilTools.Gis
                 if (!owned.Any(item => ReferenceEquals(item.Value, value))) owned.Add(new OwnedWrapper(value, dispose, acquisition));
                 return value;
             }
-            private static MethodInfo FindDispose(Type type)
-            {
-                MethodInfo[] matches = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(method => method.Name == "Dispose" && !method.ContainsGenericParameters &&
-                        method.ReturnType == typeof(void) && method.GetParameters().Length == 0).ToArray();
-                if (matches.Length != 1)
-                    throw new InvalidDataException($"Map CRS wrapper '{type.FullName}' must expose one public instance void Dispose(); found {matches.Length}.");
-                return matches[0];
-            }
+            private static MethodInfo FindDispose(Type type) => FindMethod(type, "Dispose", typeof(void));
             public void Dispose()
             {
                 var failures = new List<System.Exception>();

@@ -1,3 +1,7 @@
+## 2026-10-07 - Native CRS hidden-method resolution
+- Resolves each reflected CRS member at the nearest compatible declaring class with an exact return type. Handles the installed wrapper's hidden nonvirtual `ToString()` and integer `GetType()` without accepting inherited `System.Object` methods or arbitrary overload order.
+- Mirrors the complete measured wrapper signature/virtual-slot shapes in the shared fake and adds declaration, ambiguity, fallback and API-contract regressions. CRS equivalence and native ownership rules are unchanged; original-SDF acceptance remains pending.
+
 ## 2026-10-07 - Installed Map CRS wrapper disposal contract
 - Corrects the verifier's `IDisposable` assumption: the installed Map 3D 2026 wrappers instead expose public virtual `Dispose()` methods. Binds the exact managed disposal contract before each acquisition and releases caller-owned wrappers in reverse order without touching shared catalog ownership.
 - Regression facade now mirrors the installed no-interface/virtual-wrapper hierarchy. Added alias, distinct-wrapper, shared-catalog, null-return, reverse-order and disposal-failure coverage. Native CRS/SDF acceptance remains pending.

@@ -136,73 +136,73 @@ namespace OSGeo.MapGuide
             FakeMapGuide.Close(kind, id);
         }
     }
-    public sealed class MgCoordinateSystemFactory : MgGuardDisposable
+    public class MgCoordinateSystemFactory : MgGuardDisposable
     {
         private MgCoordinateSystem? lastDefinition;
         public MgCoordinateSystemFactory() : base(nameof(MgCoordinateSystemFactory)) { }
         public override void Dispose() => base.Dispose();
-        public MgCoordinateSystemCatalog? GetCatalog() { FakeMapGuide.Hit(nameof(GetCatalog)); return FakeMapGuide.ReturnNullCatalog ? null : new(); }
-        public MgCoordinateSystem? CreateFromCode(string code)
+        public virtual MgCoordinateSystemCatalog? GetCatalog() { FakeMapGuide.Hit(nameof(GetCatalog)); return FakeMapGuide.ReturnNullCatalog ? null : new(); }
+        public virtual MgCoordinateSystem? CreateFromCode(string code)
         {
             FakeMapGuide.Hit(nameof(CreateFromCode) + ":" + code);
             if (FakeMapGuide.ReturnNullDefinition) return null;
             return lastDefinition = new(FakeMapGuide.Definitions[code]);
         }
-        public bool IsValid(string wkt) { FakeMapGuide.Hit("Factory.IsValid"); return FakeMapGuide.WktValid; }
-        public MgCoordinateSystem? Create(string wkt)
+        public virtual bool IsValid(string wkt) { FakeMapGuide.Hit("Factory.IsValid"); return FakeMapGuide.WktValid; }
+        public virtual MgCoordinateSystem? Create(string wkt)
         {
             FakeMapGuide.Hit(nameof(Create));
             return FakeMapGuide.ReturnNullParsed ? null : FakeMapGuide.ReuseManagedDefinition ? lastDefinition : new(FakeMapGuide.ParsedDefinitions[wkt]);
         }
     }
-    public sealed class MgCoordinateSystemCatalog : MgGuardDisposable
+    public class MgCoordinateSystemCatalog : MgGuardDisposable
     {
         public MgCoordinateSystemCatalog() : base(nameof(MgCoordinateSystemCatalog)) { }
         public override void Dispose() => base.Dispose();
-        public MgCoordinateSystemMathComparator? GetMathComparator() { FakeMapGuide.Hit(nameof(GetMathComparator)); return FakeMapGuide.ReturnNullComparator ? null : new(); }
+        public virtual MgCoordinateSystemMathComparator? GetMathComparator() { FakeMapGuide.Hit(nameof(GetMathComparator)); return FakeMapGuide.ReturnNullComparator ? null : new(); }
     }
-    public sealed class MgCoordinateSystemMathComparator : MgGuardDisposable
+    public class MgCoordinateSystemMathComparator : MgGuardDisposable
     {
         public MgCoordinateSystemMathComparator() : base(nameof(MgCoordinateSystemMathComparator)) { }
         public override void Dispose() => base.Dispose();
-        public bool GetCompareInternalDatumOldParameters() { FakeMapGuide.Hit(nameof(GetCompareInternalDatumOldParameters)); return FakeMapGuide.CompareDatumParameters; }
-        public bool SameCoordinateSystem(MgCoordinateSystem first, MgCoordinateSystem second)
+        public virtual bool GetCompareInternalDatumOldParameters() { FakeMapGuide.Hit(nameof(GetCompareInternalDatumOldParameters)); return FakeMapGuide.CompareDatumParameters; }
+        public virtual bool SameCoordinateSystem(MgCoordinateSystem first, MgCoordinateSystem second)
         {
             FakeMapGuide.Hit(nameof(SameCoordinateSystem));
             FakeMapGuide.Comparisons.Add((first, second));
             return FakeMapGuide.ComparatorOverride?.Invoke(first, second) ?? FakeMapGuide.ComparatorResult;
         }
     }
-    public sealed class MgCoordinateSystem : MgGuardDisposable
+    public class MgCoordinateSystem : MgGuardDisposable
     {
         private readonly FakeDefinition definition;
         public object NativeIdentity => definition;
         public MgCoordinateSystem(FakeDefinition definition) : base(nameof(MgCoordinateSystem)) { this.definition = definition; }
         public override void Dispose() => base.Dispose();
         private T Read<T>(string method, T value) { FakeMapGuide.Hit(method); return value; }
-        public string GetCsCode() => Read(nameof(GetCsCode), definition.Code);
-        public bool IsValid() => Read(nameof(IsValid), definition.Valid);
-        public bool IsUsable(MgCoordinateSystemCatalog catalog) => Read(nameof(IsUsable), definition.Usable);
-        public bool IsGeodetic() => Read(nameof(IsGeodetic), definition.Geodetic);
+        public virtual string GetCsCode() => Read(nameof(GetCsCode), definition.Code);
+        public virtual bool IsValid() => Read(nameof(IsValid), definition.Valid);
+        public virtual bool IsUsable(MgCoordinateSystemCatalog catalog) => Read(nameof(IsUsable), definition.Usable);
+        public virtual bool IsGeodetic() => Read(nameof(IsGeodetic), definition.Geodetic);
         public new int GetType() => Read(nameof(GetType), definition.Type);
-        public int GetUnitCode() => Read(nameof(GetUnitCode), definition.UnitCode);
-        public double GetUnitScale() => Read(nameof(GetUnitScale), definition.UnitScale);
-        public int GetProjectionCode() => Read(nameof(GetProjectionCode), definition.ProjectionCode);
-        public int GetProjectionParameterCount() => Read(nameof(GetProjectionParameterCount), definition.ParameterCount);
-        public double GetProjectionParameter(int index)
+        public virtual int GetUnitCode() => Read(nameof(GetUnitCode), definition.UnitCode);
+        public virtual double GetUnitScale() => Read(nameof(GetUnitScale), definition.UnitScale);
+        public virtual int GetProjectionCode() => Read(nameof(GetProjectionCode), definition.ProjectionCode);
+        public virtual int GetProjectionParameterCount() => Read(nameof(GetProjectionParameterCount), definition.ParameterCount);
+        public virtual double GetProjectionParameter(int index)
         {
             if (index < 1 || index > definition.ParameterCount) throw new ArgumentOutOfRangeException(nameof(index));
             return Read(nameof(GetProjectionParameter) + ":" + index, definition.Parameter);
         }
-        public short GetQuadrant() => Read(nameof(GetQuadrant), definition.Quadrant);
-        public string GetDatum() => Read(nameof(GetDatum), definition.Datum);
-        public string GetEllipsoid() => Read(nameof(GetEllipsoid), definition.Ellipsoid);
-        public double GetOffsetX() => Read(nameof(GetOffsetX), definition.OffsetX);
-        public double GetOffsetY() => Read(nameof(GetOffsetY), definition.OffsetY);
-        public double GetScaleReduction() => Read(nameof(GetScaleReduction), definition.ScaleReduction);
-        public double GetMapScale() => Read(nameof(GetMapScale), definition.MapScale);
-        public double GetOriginLongitude() => Read(nameof(GetOriginLongitude), definition.OriginLongitude);
-        public double GetOriginLatitude() => Read(nameof(GetOriginLatitude), definition.OriginLatitude);
-        public override string ToString() => Read(nameof(ToString), definition.Wkt);
+        public virtual short GetQuadrant() => Read(nameof(GetQuadrant), definition.Quadrant);
+        public virtual string GetDatum() => Read(nameof(GetDatum), definition.Datum);
+        public virtual string GetEllipsoid() => Read(nameof(GetEllipsoid), definition.Ellipsoid);
+        public virtual double GetOffsetX() => Read(nameof(GetOffsetX), definition.OffsetX);
+        public virtual double GetOffsetY() => Read(nameof(GetOffsetY), definition.OffsetY);
+        public virtual double GetScaleReduction() => Read(nameof(GetScaleReduction), definition.ScaleReduction);
+        public virtual double GetMapScale() => Read(nameof(GetMapScale), definition.MapScale);
+        public virtual double GetOriginLongitude() => Read(nameof(GetOriginLongitude), definition.OriginLongitude);
+        public virtual double GetOriginLatitude() => Read(nameof(GetOriginLatitude), definition.OriginLatitude);
+        public new string ToString() => Read(nameof(ToString), definition.Wkt);
     }
 }

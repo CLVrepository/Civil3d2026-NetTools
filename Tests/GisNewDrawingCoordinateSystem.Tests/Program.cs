@@ -248,4 +248,108 @@ Test("null parsed CRS closes earlier acquisitions", () =>
     Reject(() => Verify(Wkt(), Wkt()), "Create returned null");
     CheckReverseDisposal();
 });
+Test("installed hidden ToString exposes native and Object declarations", () =>
+{
+    Type type = typeof(OSGeo.MapGuide.MgCoordinateSystem);
+    var candidates = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+        .Where(method => method.Name == "ToString" && method.GetParameters().Length == 0).ToArray();
+    Check(candidates.Length == 2 && candidates.Any(method => method.DeclaringType == typeof(object)),
+        "The fixture must reproduce the real two-candidate ToString reflection failure.");
+    var selected = GisNewDrawingCoordinateSystem.FindMethod(type, "ToString", typeof(string));
+    Check(selected.DeclaringType == type && !selected.IsVirtual &&
+        (selected.Attributes & System.Reflection.MethodAttributes.NewSlot) == 0, "Select the hidden nonvirtual native WKT method.");
+    Verify(Wkt(), Wkt());
+});
+Test("native integer GetType wins over CLR Type GetType", () =>
+{
+    Type type = typeof(OSGeo.MapGuide.MgCoordinateSystem);
+    var candidates = type.GetMethods().Where(method => method.Name == "GetType" && method.GetParameters().Length == 0).ToArray();
+    Check(candidates.Length == 2, "The fixture must expose native and CLR GetType methods.");
+    var selected = GisNewDrawingCoordinateSystem.FindMethod(type, "GetType", typeof(int));
+    Check(selected.DeclaringType == type && selected.ReturnType == typeof(int) && !selected.IsVirtual,
+        "Native GetType must not bind to System.Object.GetType.");
+});
+Test("Object.ToString cannot substitute for native WKT", () =>
+    Reject(() => GisNewDrawingCoordinateSystem.FindMethod(typeof(NoNativeMethods), "ToString", typeof(string)), "System.Object fallback"));
+Test("Object.GetType cannot substitute for native type", () =>
+    Reject(() => GisNewDrawingCoordinateSystem.FindMethod(typeof(NoNativeMethods), "GetType", typeof(Type)), "System.Object fallback"));
+Test("Object itself is outside native lookup", () =>
+    Reject(() => GisNewDrawingCoordinateSystem.FindMethod(typeof(object), "ToString", typeof(string)), "System.Object fallback"));
+Test("inherited compatible native method resolves", () =>
+{
+    var selected = GisNewDrawingCoordinateSystem.FindMethod(typeof(InheritedNativeMethods), "Read", typeof(string));
+    Check(selected.DeclaringType == typeof(BaseNativeMethods), "The nearest inherited native declaration is required.");
+});
+Test("nearest hidden native declaration resolves deterministically", () =>
+{
+    var selected = GisNewDrawingCoordinateSystem.FindMethod(typeof(HiddenNativeMethods), "Read", typeof(string));
+    Check(selected.DeclaringType == typeof(HiddenNativeMethods), "Do not choose a base declaration by enumeration order.");
+});
+Test("same-level compatible overload ambiguity is rejected", () =>
+    Reject(() => GisNewDrawingCoordinateSystem.FindMethod(typeof(AmbiguousNativeMethods), "Read", typeof(string), "x"), "2 compatible declarations"));
+foreach (string name in new[] { "StaticRead", "GenericRead", "WrongReturn", "PrivateRead" })
+    Test("incompatible native signature rejected: " + name, () =>
+        Reject(() => GisNewDrawingCoordinateSystem.FindMethod(typeof(InvalidNativeMethods), name, typeof(string)), "no compatible native declaration"));
+Test("by-reference native parameter rejected", () =>
+    Reject(() => GisNewDrawingCoordinateSystem.FindMethod(typeof(InvalidNativeMethods), "ByReference", typeof(string), 1), "no compatible native declaration"));
+
+// Each entry is independently grounded in the installed 2026 candidate enumeration.
+// This catches fake ABI drift before another user trial, not only the two failures.
+var abi = new (Type Owner, string Name, Type Return, Type[] Parameters)[]
+{
+    (typeof(OSGeo.MapGuide.MgCoordinateSystemFactory), "GetCatalog", typeof(OSGeo.MapGuide.MgCoordinateSystemCatalog), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystemFactory), "CreateFromCode", typeof(OSGeo.MapGuide.MgCoordinateSystem), new[] { typeof(string) }),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystemFactory), "Create", typeof(OSGeo.MapGuide.MgCoordinateSystem), new[] { typeof(string) }),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystemFactory), "IsValid", typeof(bool), new[] { typeof(string) }),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystemCatalog), "GetMathComparator", typeof(OSGeo.MapGuide.MgCoordinateSystemMathComparator), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystemMathComparator), "GetCompareInternalDatumOldParameters", typeof(bool), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystemMathComparator), "SameCoordinateSystem", typeof(bool), new[] { typeof(OSGeo.MapGuide.MgCoordinateSystem), typeof(OSGeo.MapGuide.MgCoordinateSystem) }),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetCsCode", typeof(string), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "IsUsable", typeof(bool), new[] { typeof(OSGeo.MapGuide.MgCoordinateSystemCatalog) }),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "IsValid", typeof(bool), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "IsGeodetic", typeof(bool), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetProjectionParameterCount", typeof(int), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetProjectionParameter", typeof(double), new[] { typeof(int) }),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetUnitCode", typeof(int), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetUnitScale", typeof(double), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetProjectionCode", typeof(int), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetQuadrant", typeof(short), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetDatum", typeof(string), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetEllipsoid", typeof(string), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetOriginLongitude", typeof(double), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetOriginLatitude", typeof(double), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetOffsetX", typeof(double), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetOffsetY", typeof(double), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetScaleReduction", typeof(double), Type.EmptyTypes),
+    (typeof(OSGeo.MapGuide.MgCoordinateSystem), "GetMapScale", typeof(double), Type.EmptyTypes)
+};
+foreach (var contract in abi)
+    Test("installed native signature and slot: " + contract.Owner.Name + "." + contract.Name, () =>
+    {
+        var declared = contract.Owner.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.DeclaredOnly).Where(method => method.Name == contract.Name && method.ReturnType == contract.Return &&
+                method.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(contract.Parameters)).ToArray();
+        Check(declared.Length == 1 && declared[0].IsVirtual && !declared[0].IsFinal &&
+            (declared[0].Attributes & System.Reflection.MethodAttributes.NewSlot) != 0,
+            "Installed public virtual non-final new-slot signature mismatch.");
+    });
 Console.WriteLine($"All {passed} CRS verification checks passed. Fake API only; Civil 3D native acceptance remains required.");
+
+
+class NoNativeMethods { }
+class BaseNativeMethods { public virtual string Read() => "base"; }
+class InheritedNativeMethods : BaseNativeMethods { }
+class HiddenNativeMethods : BaseNativeMethods { public new string Read() => "derived"; }
+class AmbiguousNativeMethods
+{
+    public string Read(string value) => value;
+    public string Read(object value) => value.ToString()!;
+}
+class InvalidNativeMethods
+{
+    public static string StaticRead() => "static";
+    public string GenericRead<T>() => "generic";
+    public int WrongReturn() => 1;
+    private string PrivateRead() => "private";
+    public string ByReference(ref int value) => value.ToString();
+}
