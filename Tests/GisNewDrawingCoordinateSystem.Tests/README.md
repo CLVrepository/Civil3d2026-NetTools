@@ -40,3 +40,18 @@ Inside Civil 3D 2026, verify the actual LVHEF SDF against the installed dictiona
 At authoring, tree-sitter C# syntax checks and whitespace checks passed. The cloud authoring environment has no .NET SDK or Autodesk runtime, so compilation, execution and native acceptance were not performed there.
 
 The shared fake MapGuide reference uses the same GisTestTargetFramework property as the runner, so a .NET 10-only build does not accidentally restore the reference for a different target. Never deploy either fake Autodesk-named test assembly into Civil 3D.
+
+## Installed managed lifetime contract
+
+The Civil/Map 3D 2026 metadata probe confirmed that all four acquired wrapper types have no interfaces (including `IDisposable`), and each declares public virtual non-final instance `void Dispose()`, overriding `MgObject.Dispose()` through the base chain. Their base chain is `MgGuardDisposable` → `MgDisposable` → `MgObject` → `Object`. The shared fake now follows that contract instead of adding an interface absent from the installed API. The verifier pre-binds the declared return type's disposal method before allocation/acquisition, tracks managed reference identity, and invokes each managed wrapper's method once in reverse acquisition order. Void return is expected and is not routed through the non-null value-reader helper.
+
+Autodesk-authored upstream wrapper glue uses native `Release()` for managed disposal. `GetCatalog` returns an added reference to the cached native catalog; factory `Create`/`CreateFromCode` return detached caller references and `GetMathComparator` allocates a comparator. Releasing these managed references therefore preserves shared native owners. Distinct managed wrappers remain separately owned even if the native definition is cached. No native-pointer deduplication or global catalog deletion is performed.
+
+Sources for ownership (the installed metadata probe, not this upstream mirror, establishes the deployed managed signatures):
+
+- [Factory acquisitions and shared catalog ownership](https://github.com/jumpinjackie/mapguide/blob/28dce9ed7c3d4d8e15b0f25c45f674f0051ce881/MgDev/Common/Geometry/CoordinateSystem/CoordinateSystemFactory.cpp)
+- [Catalog comparator acquisition](https://github.com/jumpinjackie/mapguide/blob/28dce9ed7c3d4d8e15b0f25c45f674f0051ce881/MgDev/Common/CoordinateSystem/CoordSysCatalog.cpp)
+- [Geometry wrapper generation uses native Release](https://github.com/jumpinjackie/mapguide/blob/28dce9ed7c3d4d8e15b0f25c45f674f0051ce881/MgDev/Web/src/DotNetUnmanagedApi/Geometry/GeometryApi.vcxproj)
+- [Managed disposal typemap](https://github.com/jumpinjackie/mapguide/blob/28dce9ed7c3d4d8e15b0f25c45f674f0051ce881/MgDev/Oem/SWIGEx/Lib/csharp/csharp.swg)
+
+The regression suite checks no-interface disposal for every returned wrapper, exact reverse order with distinct wrapper IDs, code-only and WKT paths, repeated catalog acquisitions preserving a modeled shared owner, null returns and cleanup draining all wrappers when any disposal throws. Repeated calls inside an isolated native host remain necessary to verify deployed runtime behavior.

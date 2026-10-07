@@ -36,6 +36,9 @@ namespace GisCoordinateSystemTestSupport
         public static Dictionary<string, FakeDefinition> ParsedDefinitions { get; } = new(StringComparer.Ordinal);
         public static List<string> Calls { get; } = new();
         public static List<(object First, object Second)> Comparisons { get; } = new();
+        public static List<(string Operation, int Id, string Kind)> Lifetime { get; } = new();
+        public static int CachedCatalogReferences { get; private set; } = 1;
+        private static int nextId;
         public static int LiveObjects { get; private set; }
         public static string? ThrowOn { get; set; }
         public static bool ComparatorResult { get; set; } = true;
@@ -43,12 +46,19 @@ namespace GisCoordinateSystemTestSupport
         public static bool CompareDatumParameters { get; set; } = true;
         public static bool WktValid { get; set; } = true;
         public static bool FailDispose { get; set; }
+        public static string? FailDisposeKind { get; set; }
+        public static bool ReturnNullCatalog { get; set; }
+        public static bool ReturnNullComparator { get; set; }
+        public static bool ReturnNullParsed { get; set; }
+        public static bool ReuseManagedDefinition { get; set; }
         public static bool ReturnNullDefinition { get; set; }
 
         static FakeMapGuide() => Reset();
         public static void Reset()
         {
-            if (LiveObjects != 0) throw new InvalidOperationException("A previous verifier leaked native wrappers.");
+            if (LiveObjects != 0 || CachedCatalogReferences != 1) throw new InvalidOperationException("A previous verifier leaked native wrappers or changed the shared catalog owner.");
+            Lifetime.Clear();
+            nextId = 0;
             Calls.Clear();
             Comparisons.Clear();
             Definitions.Clear();
@@ -59,6 +69,11 @@ namespace GisCoordinateSystemTestSupport
             CompareDatumParameters = true;
             WktValid = true;
             FailDispose = false;
+            FailDisposeKind = null;
+            ReturnNullCatalog = false;
+            ReturnNullComparator = false;
+            ReturnNullParsed = false;
+            ReuseManagedDefinition = false;
             ReturnNullDefinition = false;
             foreach (string code in new[] { Lvf, Lvhef })
             {
@@ -80,12 +95,22 @@ namespace GisCoordinateSystemTestSupport
             Calls.Add(method);
             if (ThrowOn == method) throw new InvalidOperationException("Injected Map failure: " + method);
         }
-        internal static void Open(string kind) { Hit(kind + ".ctor"); LiveObjects++; }
-        internal static void Close(string kind)
+        internal static int Open(string kind)
+        {
+            Hit(kind + ".ctor");
+            LiveObjects++;
+            if (kind == "MgCoordinateSystemCatalog") CachedCatalogReferences++;
+            int id = ++nextId;
+            Lifetime.Add(("open", id, kind));
+            return id;
+        }
+        internal static void Close(string kind, int id)
         {
             LiveObjects--;
+            if (kind == "MgCoordinateSystemCatalog") CachedCatalogReferences--;
             Calls.Add(kind + ".Dispose");
-            if (FailDispose) throw new InvalidOperationException("Injected dispose failure.");
+            Lifetime.Add(("dispose", id, kind));
+            if (FailDispose || FailDisposeKind == kind) throw new InvalidOperationException("Injected dispose failure.");
         }
     }
 }
@@ -94,43 +119,52 @@ namespace OSGeo.MapGuide
 {
     using GisCoordinateSystemTestSupport;
 
-    public abstract class MgGuardDisposable : IDisposable
+    // Mirrors installed Map 3D 2026 metadata: these wrappers have no interfaces,
+    // and each derived wrapper declares an override of MgObject.Dispose().
+    public abstract class MgObject { public virtual void Dispose() { } }
+    public abstract class MgDisposable : MgObject { public override void Dispose() => base.Dispose(); }
+    public abstract class MgGuardDisposable : MgDisposable
     {
         private readonly string kind;
+        private readonly int id;
         private bool disposed;
-        protected MgGuardDisposable(string kind) { this.kind = kind; FakeMapGuide.Open(kind); }
-        public void Dispose()
+        protected MgGuardDisposable(string kind) { this.kind = kind; id = FakeMapGuide.Open(kind); }
+        public override void Dispose()
         {
             if (disposed) throw new InvalidOperationException("Double disposal.");
             disposed = true;
-            FakeMapGuide.Close(kind);
+            FakeMapGuide.Close(kind, id);
         }
     }
     public sealed class MgCoordinateSystemFactory : MgGuardDisposable
     {
+        private MgCoordinateSystem? lastDefinition;
         public MgCoordinateSystemFactory() : base(nameof(MgCoordinateSystemFactory)) { }
-        public MgCoordinateSystemCatalog GetCatalog() { FakeMapGuide.Hit(nameof(GetCatalog)); return new(); }
+        public override void Dispose() => base.Dispose();
+        public MgCoordinateSystemCatalog? GetCatalog() { FakeMapGuide.Hit(nameof(GetCatalog)); return FakeMapGuide.ReturnNullCatalog ? null : new(); }
         public MgCoordinateSystem? CreateFromCode(string code)
         {
             FakeMapGuide.Hit(nameof(CreateFromCode) + ":" + code);
             if (FakeMapGuide.ReturnNullDefinition) return null;
-            return new(FakeMapGuide.Definitions[code]);
+            return lastDefinition = new(FakeMapGuide.Definitions[code]);
         }
         public bool IsValid(string wkt) { FakeMapGuide.Hit("Factory.IsValid"); return FakeMapGuide.WktValid; }
-        public MgCoordinateSystem Create(string wkt)
+        public MgCoordinateSystem? Create(string wkt)
         {
             FakeMapGuide.Hit(nameof(Create));
-            return new(FakeMapGuide.ParsedDefinitions[wkt]);
+            return FakeMapGuide.ReturnNullParsed ? null : FakeMapGuide.ReuseManagedDefinition ? lastDefinition : new(FakeMapGuide.ParsedDefinitions[wkt]);
         }
     }
     public sealed class MgCoordinateSystemCatalog : MgGuardDisposable
     {
         public MgCoordinateSystemCatalog() : base(nameof(MgCoordinateSystemCatalog)) { }
-        public MgCoordinateSystemMathComparator GetMathComparator() { FakeMapGuide.Hit(nameof(GetMathComparator)); return new(); }
+        public override void Dispose() => base.Dispose();
+        public MgCoordinateSystemMathComparator? GetMathComparator() { FakeMapGuide.Hit(nameof(GetMathComparator)); return FakeMapGuide.ReturnNullComparator ? null : new(); }
     }
     public sealed class MgCoordinateSystemMathComparator : MgGuardDisposable
     {
         public MgCoordinateSystemMathComparator() : base(nameof(MgCoordinateSystemMathComparator)) { }
+        public override void Dispose() => base.Dispose();
         public bool GetCompareInternalDatumOldParameters() { FakeMapGuide.Hit(nameof(GetCompareInternalDatumOldParameters)); return FakeMapGuide.CompareDatumParameters; }
         public bool SameCoordinateSystem(MgCoordinateSystem first, MgCoordinateSystem second)
         {
@@ -142,7 +176,9 @@ namespace OSGeo.MapGuide
     public sealed class MgCoordinateSystem : MgGuardDisposable
     {
         private readonly FakeDefinition definition;
+        public object NativeIdentity => definition;
         public MgCoordinateSystem(FakeDefinition definition) : base(nameof(MgCoordinateSystem)) { this.definition = definition; }
+        public override void Dispose() => base.Dispose();
         private T Read<T>(string method, T value) { FakeMapGuide.Hit(method); return value; }
         public string GetCsCode() => Read(nameof(GetCsCode), definition.Code);
         public bool IsValid() => Read(nameof(IsValid), definition.Valid);

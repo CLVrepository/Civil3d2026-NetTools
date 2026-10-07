@@ -10,7 +10,8 @@ void Test(string name, Action action)
     try
     {
         action();
-        if (FakeMapGuide.LiveObjects != 0) throw new Exception("Native-wrapper leak.");
+        if (FakeMapGuide.LiveObjects != 0 || FakeMapGuide.CachedCatalogReferences != 1)
+            throw new Exception("Native-wrapper leak or changed shared catalog owner.");
         if (FakeMapGuide.Calls.Any(call => call.StartsWith("Set", StringComparison.Ordinal) || call.Contains("Transform")))
             throw new Exception("An unauthorized native mutation/transform was called.");
         passed++;
@@ -166,4 +167,85 @@ Test("NaN token rejected", () => Hostile(Wkt().Replace("984250.0000", "NaN"), "e
 foreach (string malformed in new[] { "1e", "1e+", "1e-" })
     Test("malformed exponent rejected: " + malformed, () => Hostile(Wkt().Replace("984250.0000", malformed), "missing numeric exponent"));
 Test("control character in quoted text rejected", () => Hostile(Wkt().Replace("\"NAD83\"", "\"NAD\u000183\""), "control character"));
+foreach (Type wrapper in new[] { typeof(OSGeo.MapGuide.MgCoordinateSystemFactory), typeof(OSGeo.MapGuide.MgCoordinateSystemCatalog),
+    typeof(OSGeo.MapGuide.MgCoordinateSystemMathComparator), typeof(OSGeo.MapGuide.MgCoordinateSystem) })
+    Test("installed wrapper disposal contract: " + wrapper.Name, () =>
+    {
+        Check(wrapper.GetInterfaces().Length == 0, "Installed CRS wrappers implement no interfaces, including IDisposable.");
+        var dispose = wrapper.GetMethod("Dispose", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.DeclaredOnly, null, Type.EmptyTypes, null);
+        Check(dispose != null && dispose.ReturnType == typeof(void) && dispose.IsVirtual && !dispose.IsFinal &&
+            dispose.GetBaseDefinition().DeclaringType == typeof(OSGeo.MapGuide.MgObject),
+            "Each installed wrapper declares public virtual non-final void Dispose(), overriding MgObject.");
+        Check(wrapper.BaseType == typeof(OSGeo.MapGuide.MgGuardDisposable) &&
+            wrapper.BaseType?.BaseType == typeof(OSGeo.MapGuide.MgDisposable) &&
+            wrapper.BaseType?.BaseType?.BaseType == typeof(OSGeo.MapGuide.MgObject), "Installed base hierarchy mismatch.");
+        Verify(Wkt(), Wkt());
+    });
+void CheckReverseDisposal()
+{
+    int[] opened = FakeMapGuide.Lifetime.Where(item => item.Operation == "open").Select(item => item.Id).ToArray();
+    int[] disposed = FakeMapGuide.Lifetime.Where(item => item.Operation == "dispose").Select(item => item.Id).ToArray();
+    Check(disposed.SequenceEqual(opened.Reverse()), "Every acquired wrapper must release exactly once in reverse order.");
+}
+Test("public void Dispose handles both WKT fields in reverse ownership order", () =>
+{
+    Verify(Wkt(), Wkt());
+    Check(FakeMapGuide.Lifetime.Count(item => item.Operation == "open") == 6, "Expected six acquired wrappers.");
+    CheckReverseDisposal();
+});
+Test("public void Dispose handles code-only named wrapper", () =>
+{
+    Verify(FakeMapGuide.Lvhef, string.Empty);
+    Check(FakeMapGuide.Lifetime.Count(item => item.Operation == "open") == 5, "Expected named dictionary wrapper.");
+    CheckReverseDisposal();
+});
+Test("same managed wrapper is disposed only once", () =>
+{
+    FakeMapGuide.ReuseManagedDefinition = true;
+    Verify(Wkt(), Wkt());
+    Check(FakeMapGuide.Lifetime.Count(item => item.Operation == "open") == 4, "Expected a reused managed CRS wrapper.");
+    CheckReverseDisposal();
+});
+Test("distinct managed wrappers sharing a native definition each release", () =>
+{
+    Verify(Wkt(), Wkt());
+    var pair = FakeMapGuide.Comparisons[0];
+    Check(!ReferenceEquals(pair.First, pair.Second), "Test requires distinct managed wrappers.");
+    Check(ReferenceEquals(((OSGeo.MapGuide.MgCoordinateSystem)pair.First).NativeIdentity,
+        ((OSGeo.MapGuide.MgCoordinateSystem)pair.Second).NativeIdentity), "Test requires shared native definition identity.");
+    CheckReverseDisposal();
+});
+Test("repeated verification preserves cached native catalog owner", () =>
+{
+    Verify(Wkt(), Wkt());
+    Check(FakeMapGuide.CachedCatalogReferences == 1, "Catalog wrapper disposal must preserve the native static owner.");
+    Verify(Wkt(), Wkt());
+    Check(FakeMapGuide.CachedCatalogReferences == 1 && FakeMapGuide.LiveObjects == 0, "Repeated verification changed catalog lifetime.");
+});
+foreach (string kind in new[] { "MgCoordinateSystemFactory", "MgCoordinateSystemCatalog", "MgCoordinateSystemMathComparator", "MgCoordinateSystem" })
+    Test("one wrapper disposal failure drains all acquisitions: " + kind, () =>
+    {
+        FakeMapGuide.FailDisposeKind = kind;
+        Reject(() => Verify(Wkt(), Wkt()), "fully disposed");
+        CheckReverseDisposal();
+    });
+Test("null catalog closes the already created factory", () =>
+{
+    FakeMapGuide.ReturnNullCatalog = true;
+    Reject(() => Verify(Wkt(), Wkt()), "GetCatalog returned null");
+    CheckReverseDisposal();
+});
+Test("null comparator closes earlier acquisitions", () =>
+{
+    FakeMapGuide.ReturnNullComparator = true;
+    Reject(() => Verify(Wkt(), Wkt()), "GetMathComparator returned null");
+    CheckReverseDisposal();
+});
+Test("null parsed CRS closes earlier acquisitions", () =>
+{
+    FakeMapGuide.ReturnNullParsed = true;
+    Reject(() => Verify(Wkt(), Wkt()), "Create returned null");
+    CheckReverseDisposal();
+});
 Console.WriteLine($"All {passed} CRS verification checks passed. Fake API only; Civil 3D native acceptance remains required.");

@@ -32,9 +32,9 @@ namespace CLV_CivilTools.Gis
                 throw new InvalidDataException("The SDF spatial context has no coordinate-system definition.");
 
             using var scope = new NativeScope();
-            object factory = scope.Own(Activator.CreateInstance(FindFactoryType()));
-            object catalog = scope.Own(Call(factory, "GetCatalog"));
-            object expected = scope.Own(Call(factory, "CreateFromCode", expectedCode));
+            object factory = scope.Create(FindFactoryType());
+            object catalog = scope.Acquire(factory, "GetCatalog");
+            object expected = scope.Acquire(factory, "CreateFromCode", expectedCode);
             if (ReadText(expected, "GetCsCode") != expectedCode)
                 throw new InvalidDataException($"The installed coordinate-system dictionary did not resolve the exact source code '{expectedCode}'.");
             if (!ReadBoolean(expected, "IsUsable", catalog))
@@ -42,7 +42,7 @@ namespace CLV_CivilTools.Gis
             Definition expectedDefinition = ReadDefinition(expected);
             string expectedBody = ReadText(expected, "ToString");
             WktGuard.VerifyEquivalent(expectedBody, expectedBody);
-            object comparator = scope.Own(Call(catalog, "GetMathComparator"));
+            object comparator = scope.Acquire(catalog, "GetMathComparator");
             if (!ReadBoolean(comparator, "GetCompareInternalDatumOldParameters"))
                 throw new InvalidDataException("The installed CRS comparator is not checking datum transformation parameters.");
 
@@ -58,7 +58,7 @@ namespace CLV_CivilTools.Gis
                 {
                     // A supplied code is resolved as that code, never guessed from a
                     // WKT title, filename, profile name or a partial-name search.
-                    object named = scope.Own(Call(factory, "CreateFromCode", observed));
+                    object named = scope.Acquire(factory, "CreateFromCode", observed);
                     observedCode = ReadText(named, "GetCsCode");
                     if (GisNewDrawingProfile.IsSupportedCoordinateSystem(observedCode) && observedCode != expectedCode)
                         throw new InvalidDataException($"Actual SDF coordinate system '{observedCode}' does not match source drawing '{expectedCode}'.");
@@ -97,7 +97,7 @@ namespace CLV_CivilTools.Gis
             }
             if (!ReadBoolean(factory, "IsValid", wkt))
                 throw new InvalidDataException($"{field}: the installed Map coordinate-system factory rejected the complete WKT.");
-            object parsed = scope.Own(Call(factory, "Create", wkt));
+            object parsed = scope.Acquire(factory, "Create", wkt);
             VerifyDefinition(comparator, expected, expectedDefinition, parsed, expectedCode, field);
             return ReadText(parsed, "GetCsCode");
         }
@@ -439,15 +439,20 @@ namespace CLV_CivilTools.Gis
                 "Run inside supported Civil 3D with its coordinate-system dictionary available; no replacement runtime or dictionary is used.");
         }
 
-        private static object Call(object target, string name, params object[] arguments)
+        private static MethodInfo FindMethod(object target, string name, object[] arguments)
         {
-            MethodInfo? method = target.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .FirstOrDefault(candidate => candidate.Name == name && candidate.ReturnType != typeof(Type) &&
-                    candidate.GetParameters().Length == arguments.Length && candidate.GetParameters()
-                        .Select((parameter, index) => parameter.ParameterType.IsInstanceOfType(arguments[index])).All(matches => matches));
-            if (method == null) throw new MissingMethodException(target.GetType().FullName, name);
-            return method.Invoke(target, arguments) ?? throw new InvalidDataException($"Map {name} returned null.");
+            MethodInfo[] matches = target.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(candidate => candidate.Name == name && !candidate.ContainsGenericParameters &&
+                    candidate.ReturnType != typeof(Type) && candidate.GetParameters().Length == arguments.Length &&
+                    candidate.GetParameters().Select((parameter, index) =>
+                        parameter.ParameterType.IsInstanceOfType(arguments[index])).All(isMatch => isMatch)).ToArray();
+            if (matches.Length != 1)
+                throw new MissingMethodException($"Map {target.GetType().FullName}.{name} must expose one exact public instance signature; found {matches.Length}.");
+            return matches[0];
         }
+        private static object Call(object target, string name, params object[] arguments)
+            => FindMethod(target, name, arguments).Invoke(target, arguments)
+                ?? throw new InvalidDataException($"Map {target.GetType().FullName}.{name} returned null.");
         private static string ReadText(object target, string method) => Call(target, method) is string text ? text
             : throw new InvalidDataException($"Map {method} returned an unexpected non-string value.");
         private static bool ReadBoolean(object target, string method, params object[] arguments) => Call(target, method, arguments) is bool value ? value
@@ -468,21 +473,54 @@ namespace CLV_CivilTools.Gis
 
         private sealed class NativeScope : IDisposable
         {
-            private readonly List<IDisposable> owned = new();
-            internal object Own(object? value)
+            private sealed record OwnedWrapper(object Value, MethodInfo DisposeMethod, string Acquisition);
+            private readonly List<OwnedWrapper> owned = new();
+
+            // Map 3D 2026's four managed CRS wrappers expose public void Dispose()
+            // but implement no System.IDisposable interface. Bind the verified
+            // managed method, never native Release/Close or private destructors.
+            // Validate the acquisition's declared wrapper contract BEFORE calling
+            // native code, so a missing disposal API cannot strand a new wrapper.
+            internal object Create(Type type)
             {
-                if (value is not IDisposable disposable)
-                    throw new InvalidDataException("Map did not expose the expected disposable CRS object.");
-                if (!owned.Any(item => ReferenceEquals(item, value))) owned.Add(disposable);
+                MethodInfo dispose = FindDispose(type);
+                return Track(Activator.CreateInstance(type), dispose, type.FullName + " constructor");
+            }
+            internal object Acquire(object target, string name, params object[] arguments)
+            {
+                MethodInfo method = FindMethod(target, name, arguments);
+                MethodInfo dispose = FindDispose(method.ReturnType);
+                return Track(method.Invoke(target, arguments), dispose, target.GetType().FullName + "." + name);
+            }
+            private object Track(object? value, MethodInfo dispose, string acquisition)
+            {
+                if (value == null) throw new InvalidDataException($"Map {acquisition} returned null.");
+                if (!owned.Any(item => ReferenceEquals(item.Value, value))) owned.Add(new OwnedWrapper(value, dispose, acquisition));
                 return value;
+            }
+            private static MethodInfo FindDispose(Type type)
+            {
+                MethodInfo[] matches = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(method => method.Name == "Dispose" && !method.ContainsGenericParameters &&
+                        method.ReturnType == typeof(void) && method.GetParameters().Length == 0).ToArray();
+                if (matches.Length != 1)
+                    throw new InvalidDataException($"Map CRS wrapper '{type.FullName}' must expose one public instance void Dispose(); found {matches.Length}.");
+                return matches[0];
             }
             public void Dispose()
             {
                 var failures = new List<System.Exception>();
                 for (int index = owned.Count - 1; index >= 0; index--)
                 {
-                    try { owned[index].Dispose(); }
-                    catch (System.Exception ex) { failures.Add(ex); }
+                    OwnedWrapper wrapper = owned[index];
+                    // Dispose is void: null from MethodInfo.Invoke is normal here.
+                    // Each acquisition owns only its managed native-reference wrapper;
+                    // releasing a GetCatalog wrapper does not destroy the cached catalog.
+                    try { wrapper.DisposeMethod.Invoke(wrapper.Value, Array.Empty<object>()); }
+                    catch (System.Exception ex)
+                    {
+                        failures.Add(new InvalidOperationException($"Map CRS wrapper disposal failed after {wrapper.Acquisition}.", ex));
+                    }
                 }
                 owned.Clear();
                 if (failures.Count != 0)

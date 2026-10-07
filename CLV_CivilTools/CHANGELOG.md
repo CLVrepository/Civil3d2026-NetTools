@@ -1,3 +1,7 @@
+## 2026-10-07 - Installed Map CRS wrapper disposal contract
+- Corrects the verifier's `IDisposable` assumption: the installed Map 3D 2026 wrappers instead expose public virtual `Dispose()` methods. Binds the exact managed disposal contract before each acquisition and releases caller-owned wrappers in reverse order without touching shared catalog ownership.
+- Regression facade now mirrors the installed no-interface/virtual-wrapper hierarchy. Added alias, distinct-wrapper, shared-catalog, null-return, reverse-order and disposal-failure coverage. Native CRS/SDF acceptance remains pending.
+
 ## 2026-10-07 - Dictionary-verified CRS definitions and anonymous clone identity
 - `CLV-GIS-NEW-DRAWING` accepts a complete SDF CRS definition instead of comparing WKT text to a short code. The source code is resolved through the installed Map dictionary; complete WKT structure/numeric values, native mathematical comparison and exposed unit/projection/datum/ellipsoid properties must agree. WKT titles alone are never proof, and no coordinate transformation or dictionary changes are made.
 - Reuses semantic verification for importer and destination CRS readbacks. Added shared fake MapGuide regression fixtures, including same-title altered-parameter attacks and parser shortcut behavior; these fixtures must never be deployed into Civil 3D.

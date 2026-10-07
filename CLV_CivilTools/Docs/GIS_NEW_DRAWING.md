@@ -86,3 +86,9 @@ Run the coordinate-system suite with:
 Run the updated SDF suite with the same GisTestTargetFramework property so its shared fake runtime targets the same framework. Neither test-only OSGeo.FDO nor OSGeo.MapGuide.Geometry assembly belongs in Civil 3D deployment.
 
 Generated anonymous block names may change across databases. Only verified anonymous definitions are exempt from name collision checks; they must map to distinct new definitions, every selected/nested reference must target the exact mapped definitions, and geometry/attributes/OD plus child topology remain verified. Named block definitions still retain the collision stop.
+
+## Managed CRS wrapper lifetime
+
+A native trial of the CRS verifier stopped at factory acquisition because the installed Map 3D 2026 wrappers do not implement `System.IDisposable`. Installed metadata confirms the factory, catalog, mathematical comparator and coordinate-system wrappers each expose a public parameterless `void Dispose()` instead. The verifier now binds that exact managed method before each acquisition and releases caller-owned wrappers once in reverse order. It does not call protected/native destructors, `Release`, catalog shutdown or dictionary setters. All remaining reflected verifier signatures were also checked against the installed assemblies.
+
+The shared fake runtime mirrors the no-interface disposal contract, with regressions for every wrapper type, null acquisitions, reverse-order release, repeated calls preserving the shared catalog owner, and cleanup continuing after a disposal failure. These tests validate the adapter contract, not native dictionary/SDF acceptance. A separate isolated in-host fixture is required for actual native ownership and CRS acceptance.
