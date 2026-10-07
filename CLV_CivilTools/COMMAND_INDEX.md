@@ -1,3 +1,6 @@
+## 2026-10-07 - Create GIS Drawing
+- `CLV-GIS-NEW-DRAWING` - Q2 > GIS > DATA > `CREATE GIS DRAWING`. From the original source drawing, select an already-exported SDF; creates a separate unsaved drawing from shared Blank (2026).dwt, clones eligible structure geometry/blocks, assigns the exact source CRS and imports Pipes/Structures using one matching IPF. Counts/OD are verified before success; existing R5 preparation remains a separate step. Native acceptance required. See `Docs/GIS_NEW_DRAWING.md`.
+
 ## 2026-10-07 - Managed storm preparation and cleanup R5
 - `CLV-GIS-STORM-GIS` / storm GIS PREP-ALL: revision `2026.10.07-R5` performs managed storm pipe offsets, owned-wall trim at verified straight DI/box outers, and verified point/marker cleanup after structure preparation. It records pipe/structure ownership for reruns; any dependent failure rolls back the pipe/trim/cleanup transaction. No LISP helper is required by this ALL path.
 - `CLV-GIS-STORM-CLEAN-VERIFIED`: model-space point/marker-only cleanup of existing completion-verified structures. Archives all output ownership before removing eligible Structures DBPoints and known uniquely associated marker blocks. Preserves null/STUB and unresolved objects. It does not offset or trim pipes, so existing R4 results need not run ALL again just to remove markers.

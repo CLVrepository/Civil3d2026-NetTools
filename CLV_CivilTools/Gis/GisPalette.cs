@@ -225,6 +225,19 @@ namespace CLV_CivilTools.Gis
             };
             btnCreateData.Click += (s, e) => GisCreateDataPaletteCommands.ShowCreateDataPalette();
 
+            var btnNewGisDrawing = new Button
+            {
+                Text = "CREATE GIS DRAWING",
+                Width = ButtonWidth,
+                Height = ButtonHeight,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font(SystemFonts.DefaultFont.FontFamily, PaletteFontSize, FontStyle.Regular)
+            };
+            // Queue the Session command; cross-document work cannot run in a palette
+            // click handler's document context.
+            btnNewGisDrawing.Click += (s, e) => Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager
+                .MdiActiveDocument?.SendStringToExecute("CLV-GIS-NEW-DRAWING ", true, false, false);
+
             var toolsSection = new Label
             {
                 AutoSize = true,
@@ -315,6 +328,7 @@ namespace CLV_CivilTools.Gis
             panel.Controls.Add(btnLocateParcel);
             panel.Controls.Add(section);
             panel.Controls.Add(btnImport);
+            panel.Controls.Add(btnNewGisDrawing);
             panel.Controls.Add(btnCreateData);
             panel.Controls.Add(referenceSection);
             panel.Controls.Add(btnLoadReferenceLayers);

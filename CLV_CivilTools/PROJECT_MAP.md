@@ -1,3 +1,11 @@
+## 2026-10-07 - Separate GIS drawing setup
+- New `Gis/GisNewDrawingCommands.cs`: Session-context orchestration, explicit source/destination documents, shared-resource preflight, fresh-template destination, strict projection readback, destination-only completion marker and failure discard.
+- New `Gis/GisNewDrawingProfile.cs`: immutable, Autodesk-independent validation of the supplied LVF/LVHEF IPFs and exact UNC resource resolution; `Tests/GisNewDrawingProfile.Tests` contains byte-exact profile fixtures.
+- New `Gis/GisNewDrawingSdf.cs`: read-only native FDO spatial-context/feature/scalar preflight and immutable input hashes; no custom SQLite/binary parser.
+- New `Gis/GisNewDrawingClone.cs`: selected model-space cloning, dependency collision checks, source/destination geometry/block/attribute/OD verification.
+- New `Gis/GisNewDrawingMapApi.cs`: documented Map importer initialization/profile loading, effective-mapping validation, result/OD verification. No guessed mapping repairs or borrowed Map singleton disposal.
+- `Gis/GisPalette.cs`: new `CREATE GIS DRAWING` button queues the Session command. Existing R5 preparation/cleanup files are untouched. Native acceptance checklist: `Docs/GIS_NEW_DRAWING.md`.
+
 ## 2026-10-07 - Managed storm pipeline and durable cleanup R5
 - `Gis/GisStormGisCommands.cs`: calls committed structure preparation, then one synchronous managed transaction for pipe preparation, trim and cleanup. Legacy standalone LISP-backed commands are unchanged.
 - `Gis/GisStormPipePreparation.cs`: preflights positive agreed native InsideDiameter and supported planar geometry; stages native offset sides before database writes; copies/verifies complete OD on every owned wall; preserves source geometry/OD and writes exact side ownership plus post-trim geometry fingerprints onto the retained source. Existing recorded pipes are verified and reused; untracked processed centerlines are rejected.

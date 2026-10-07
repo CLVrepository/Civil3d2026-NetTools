@@ -1,3 +1,7 @@
+## 2026-10-07 - Create a separate GIS drawing
+- Added `CLV-GIS-NEW-DRAWING` / Q2 > GIS > DATA > `CREATE GIS DRAWING`: strict CRS/SDF/profile preflight, shared Blank template, verified survey-geometry/block cloning at native coordinates, and profile-driven Pipes/Structures import with native OD readback. Leaves the result unsaved and does not run R5 conversion.
+- Uses the confirmed UNC template/IPF resources without changing them. Missing or ambiguous CRS/OD mappings fail closed. Native Civil 3D acceptance remains required; see `Docs/GIS_NEW_DRAWING.md`.
+
 ## 2026-10-07 - Managed storm preparation and verified cleanup R5
 - Storm GIS PREP-ALL now runs managed pipe offsets, physical-box wall trimming and verified point/marker cleanup synchronously. These dependent stages share one transaction; review or failure preserves their prior geometry and source entities. The earlier committed structure conversion remains available for review.
 - Preserves the existing feet-based rule: positive InsideDiameter below 1.0 remains a single-line pipe; 1.0 and above gets native positive/negative half-diameter offsets. Both sides receive full native OD copy/readback, while the retained centerline keeps its original identity, geometry and OD. Straight planar lines/lightweight polylines at any bearing are supported; curved/complex inputs require review.
