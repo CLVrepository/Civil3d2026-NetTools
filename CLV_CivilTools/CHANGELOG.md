@@ -1,3 +1,9 @@
+## 2026-10-07 - Dictionary-verified CRS definitions and anonymous clone identity
+- `CLV-GIS-NEW-DRAWING` accepts a complete SDF CRS definition instead of comparing WKT text to a short code. The source code is resolved through the installed Map dictionary; complete WKT structure/numeric values, native mathematical comparison and exposed unit/projection/datum/ellipsoid properties must agree. WKT titles alone are never proof, and no coordinate transformation or dictionary changes are made.
+- Reuses semantic verification for importer and destination CRS readbacks. Added shared fake MapGuide regression fixtures, including same-title altered-parameter attacks and parser shortcut behavior; these fixtures must never be deployed into Civil 3D.
+- Generated anonymous block names are validated through unique new-record IdMapping and exact reference targets. Named-definition collision checks remain strict; mapped block child topology is rechecked after destination activation.
+- Installed dictionary serialization/native original-SDF trial remains required; unsupported or unproved differences fail closed with field/value diagnostics.
+
 ## 2026-10-07 - SDF class identity and setup stage diagnostics
 - Replaced the reader QualifiedName-only gate with declared-schema/class validation and strict reader identity/linkage checks. FDO reader copies may be detached from their schema; a valid detached name no longer requires a fabricated schema prefix. Conflicting identities still stop before destination creation.
 - SDF identity failures include the actual returned names/linkage. Added visible setup stages after SDF selection, before destination creation, during copying and before import.

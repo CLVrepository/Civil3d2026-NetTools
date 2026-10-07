@@ -90,8 +90,7 @@ namespace CLV_CivilTools.Gis
                 HostApplicationServices.WorkingDatabase = destination.Database;
                 using (destination.LockDocument())
                 {
-                    if (!string.Equals(GisNewDrawingMapApi.ReadProjection(), sourceCs, StringComparison.Ordinal))
-                        throw new InvalidOperationException("Destination coordinate-system readback changed before import.");
+                    GisNewDrawingMapApi.VerifyProjection(sourceCs);
                     if (!GisNewDrawingSdf.TryVerifyUnchanged(sdf, out string changedDetail))
                         throw new InvalidOperationException(changedDetail);
                     if (Hash(profileGuard) != profileHash)

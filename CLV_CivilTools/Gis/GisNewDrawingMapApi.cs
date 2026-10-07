@@ -32,8 +32,16 @@ namespace CLV_CivilTools.Gis
                 ?? throw new MissingMemberException(project.GetType().FullName, "Projection");
             if (!property.CanWrite) throw new InvalidOperationException("Map project Projection is read-only in this host.");
             property.SetValue(project, coordinateSystem);
-            if (ReadProjection() != coordinateSystem)
-                throw new InvalidOperationException("Assigned coordinate system did not read back exactly: " + coordinateSystem);
+            VerifyProjection(coordinateSystem);
+        }
+
+        internal static void VerifyProjection(string expectedCode)
+        {
+            try { GisNewDrawingCoordinateSystem.Verify(expectedCode, ReadProjection(), string.Empty); }
+            catch (System.Exception ex)
+            {
+                throw new InvalidOperationException("Destination Map Projection could not be verified against the source drawing: " + ex.Message, ex);
+            }
         }
 
         internal static ImportSummary ImportAndVerify(Document document, GisNewDrawingSdfSnapshot sdf,
@@ -64,8 +72,7 @@ namespace CLV_CivilTools.Gis
             if (skipped != 0) throw new InvalidOperationException($"Map import skipped {skipped} entity(s) because coordinate transformation failed.");
             if (count != sdf.Pipes.Count + sdf.Structures.Count)
                 throw new InvalidOperationException($"Map import count {count} differs from the SDF's {sdf.Pipes.Count} Pipes + {sdf.Structures.Count} Structures.");
-            if (ReadProjection() != profile.SourceCoordinateSystem)
-                throw new InvalidOperationException("Destination coordinate system changed during import.");
+            VerifyProjection(profile.SourceCoordinateSystem);
 
             ObjectId[] imported = ModelSpaceIds(document.Database).Where(id => !before.Contains(id)).ToArray();
             if (imported.Length != count)
@@ -185,8 +192,15 @@ namespace CLV_CivilTools.Gis
                     if (selected != expected.Selected)
                         throw new InvalidOperationException($"IPF selection did not load as expected for {name}: selected={selected}.");
                     if (!selected) continue;
-                    if (Text(Get(layer, "TargetCoordinateSystem")) != profile.SourceCoordinateSystem)
-                        throw new InvalidOperationException("Native incoming coordinate-system assignment differs from the validated SDF/profile: " + name);
+                    try
+                    {
+                        GisNewDrawingCoordinateSystem.Verify(profile.SourceCoordinateSystem,
+                            Text(Get(layer, "TargetCoordinateSystem")), string.Empty);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        throw new InvalidOperationException($"Native incoming CRS for {name}.TargetCoordinateSystem could not be verified: {ex.Message}", ex);
+                    }
                     (object? layerMode, object? layerName) = OutPair(layer, "LayerName");
                     if (Text(layerMode) != "LayerNameDirect" || Text(layerName) != expected.LayerName)
                         throw new InvalidOperationException("Native CAD layer mapping differs from the profile: " + name);

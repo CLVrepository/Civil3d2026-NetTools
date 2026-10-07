@@ -2,6 +2,7 @@
 // the synthetic geometry/file bytes are not an SDF implementation.
 using CLV_CivilTools.Gis;
 using OSGeo.FDO.Commands;
+using GisCoordinateSystemTestSupport;
 
 namespace OSGeo.FDO.ClientServices
 {
@@ -38,13 +39,14 @@ public static class FakeState
 
     public static void Reset()
     {
+        FakeMapGuide.Reset();
         Objects.Clear(); Events.Clear(); Classes.Clear(); Geometries.Clear(); Schemas.Clear();
         FailDescribeSchema = false;
         FailGeometryDecode = false;
         HasReadOnly = HonorsReadOnly = HasFile = OpenSucceeds = true;
         FailSpatialRead = FailFeatureRead = FailReaderClose = FailReaderDispose = false;
         OpenCount = FeatureReadCount = 0;
-        Contexts = new() { ("Default", GisNewDrawingProfile.LvfCoordinateSystem, "PROJCS[\"actual test CRS\"]") };
+        Contexts = new() { ("Default", GisNewDrawingProfile.LvfCoordinateSystem, FakeMapGuide.Wkt(GisNewDrawingProfile.LvfCoordinateSystem)) };
         var pipes = new FakeClassData(GisNewDrawingProfile.PipesInputClass);
         pipes.Rows.Add(Pipe("Pipe 1", 1)); pipes.Rows.Add(Pipe("Pipe 2", 5));
         var structures = new FakeClassData(GisNewDrawingProfile.StructuresInputClass);

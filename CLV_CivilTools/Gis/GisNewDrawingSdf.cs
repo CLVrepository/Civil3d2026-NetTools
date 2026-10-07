@@ -174,11 +174,16 @@ namespace CLV_CivilTools.Gis
                 : contexts.SingleOrDefault(context => context.Name == association);
             if (spatialContext == null)
                 throw new InvalidDataException($"{table.InputClass}.{geometryName} has an unresolved/ambiguous spatial context '{association}'.");
-            if (spatialContext.CoordinateSystem != sourceCrs)
-                throw new InvalidDataException($"{table.InputClass}: actual SDF coordinate system '{spatialContext.CoordinateSystem}' " +
-                    $"does not exactly match source drawing '{sourceCrs}'. Re-export in the correct coordinate system; no filename, profile, WKT-name or alias fallback is allowed.");
             if (string.IsNullOrWhiteSpace(spatialContext.CoordinateSystemWkt))
                 throw new InvalidDataException($"{table.InputClass}: the SDF spatial context has no coordinate-system WKT for verification.");
+            try
+            {
+                GisNewDrawingCoordinateSystem.Verify(sourceCrs, spatialContext.CoordinateSystem, spatialContext.CoordinateSystemWkt);
+            }
+            catch (System.Exception ex)
+            {
+                throw new InvalidDataException($"{table.InputClass}: source/SDF CRS verification failed: {ex.Message}", ex);
+            }
 
             object properties = scope.Own(Get(definition, "Properties"));
             var fields = new List<(string Name, string Getter)>();

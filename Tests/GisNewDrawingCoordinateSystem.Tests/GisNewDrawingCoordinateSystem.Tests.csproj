@@ -3,7 +3,6 @@
     <OutputType>Exe</OutputType>
     <TargetFramework Condition="'$(GisTestTargetFramework)' == ''">net8.0</TargetFramework>
     <TargetFramework Condition="'$(GisTestTargetFramework)' != ''">$(GisTestTargetFramework)</TargetFramework>
-    <AssemblyName>OSGeo.FDO</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -12,10 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="../GisNewDrawingCoordinateSystem.FakeMapGuide/GisNewDrawingCoordinateSystem.FakeMapGuide.csproj" />
     <Compile Include="Program.cs" />
-    <Compile Include="FakeFdo.cs" />
-    <Compile Include="../../CLV_CivilTools/Gis/GisNewDrawingProfile.cs" Link="GisNewDrawingProfile.cs" />
-    <Compile Include="../../CLV_CivilTools/Gis/GisNewDrawingSdf.cs" Link="GisNewDrawingSdf.cs" />
     <Compile Include="../../CLV_CivilTools/Gis/GisNewDrawingCoordinateSystem.cs" Link="GisNewDrawingCoordinateSystem.cs" />
-    <None Include="../GisNewDrawingProfile.Tests/Fixtures/*.ipf" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../../CLV_CivilTools/Gis/GisNewDrawingProfile.cs" Link="GisNewDrawingProfile.cs" />
   </ItemGroup>
 </Project>

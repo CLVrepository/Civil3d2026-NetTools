@@ -30,3 +30,5 @@ Run the completed `CLV-GIS-NEW-DRAWING` command in supported Civil 3D 2026 with 
 - Only read-only `GetSpatialContexts`, `DescribeSchema`, and `Select` command types are used.
 - Source/whitespace checks passed.
 - Compilation and test execution were not run in the Linux authoring environment, which has no .NET SDK or Autodesk runtime. Run the command above before reporting the portable tests as passed. Native Civil 3D acceptance remains separate.
+
+The shared fake MapGuide reference uses the same GisTestTargetFramework property as the runner, so a .NET 10-only build does not accidentally restore the reference for a different target. Never deploy either fake Autodesk-named test assembly into Civil 3D.

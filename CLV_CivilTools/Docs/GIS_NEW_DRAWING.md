@@ -73,3 +73,16 @@ Run `dotnet run --project Tests/GisNewDrawingAppearance.Tests/GisNewDrawingAppea
 SDF selection and its read-only validation occur before the new Blank drawing is created. A subsequent native trial reached the SDF picker and stopped at the class-definition check. The original gate compared the feature reader's QualifiedName to `Civil_Schema:Pipes`, although a reader can return a copied class definition without a schema parent.
 
 The revised preflight anchors each requested class in the exact declared schema first, then checks the reader's exact class name and any supplied qualified/schema/parent identity. It does not accept arbitrary suffix matches or conflicting schema names. Failures report the actual returned identity. Setup stage messages make it clear whether the command is checking files, reading SDF metadata, creating the destination, copying geometry or importing data. The source drawing's CRS is read first; an unassigned blank template never determines the source CRS.
+
+## Dictionary-verified CRS definitions
+
+FDO may return complete WKT from GetCoordinateSystem even when the source drawing reports a short code. Verification now resolves the approved source code through the installed Map/CS-Map dictionary and checks every supplied definition against that independent entry. The bounded WKT1 structural guard preserves numeric meaning while allowing insignificant whitespace, equivalent decimal spellings, the top-level display title and PARAMETER ordering. It runs before native WKT parsing because the native parser can return a dictionary entry by matching names; that shortcut alone is never accepted as evidence. Projection, units, datum, ellipsoid, parameters, offsets, origins, scale and quadrant must also pass native mathematical/property checks. The comparison applies to destination/importer readbacks as well; source profile selection remains the exact two-code whitelist.
+
+This intentionally does not guess unproved WKT aliases, ignore unknown clauses, apply fuzzy numeric tolerances, transform coordinates, change catalog paths or rewrite shared definitions. If installed dictionary serialization/parsed properties disagree, the error identifies the differing field/value and the definition remains unverified. Compilation/fake-runtime tests do not prove compatibility with the original SDF in Civil 3D.
+
+Run the coordinate-system suite with:
+`dotnet run --project Tests/GisNewDrawingCoordinateSystem.Tests/GisNewDrawingCoordinateSystem.Tests.csproj -p:GisTestTargetFramework=net10.0`
+
+Run the updated SDF suite with the same GisTestTargetFramework property so its shared fake runtime targets the same framework. Neither test-only OSGeo.FDO nor OSGeo.MapGuide.Geometry assembly belongs in Civil 3D deployment.
+
+Generated anonymous block names may change across databases. Only verified anonymous definitions are exempt from name collision checks; they must map to distinct new definitions, every selected/nested reference must target the exact mapped definitions, and geometry/attributes/OD plus child topology remain verified. Named block definitions still retain the collision stop.

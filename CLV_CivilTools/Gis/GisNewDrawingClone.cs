@@ -72,9 +72,11 @@ namespace CLV_CivilTools.Gis
         // Only immutable CLR values/ObjectIds survive a transaction. No borrowed
         // DBObject, AttributeReference, Map Records or MapValue wrapper is retained.
         internal sealed record EntityState(ObjectId Id, string Handle, string Kind, string Geometry,
-            GisImportCommands.ObjectDataFingerprintState OdState, string OdFingerprint);
-        internal sealed record DefinitionState(ObjectId Id, string Handle, string Name, IReadOnlyList<ObjectId> Children);
+            GisImportCommands.ObjectDataFingerprintState OdState, string OdFingerprint, BlockReferenceState? Reference);
+        internal sealed record BlockReferenceState(ObjectId BlockTableRecord, ObjectId DynamicBlockTableRecord, bool IsDynamicBlock);
+        internal sealed record DefinitionState(ObjectId Id, string Handle, string Name, bool IsAnonymous, IReadOnlyList<ObjectId> Children);
         internal sealed record ResourceState(ObjectId Id, string Handle, string Kind, string Name, string Signature);
+        private sealed record DefinitionClone(DefinitionState Source, ObjectId DestinationId, IReadOnlyList<ObjectId> Children);
 
         internal static Snapshot Capture(AcDocument source)
         {
@@ -136,20 +138,23 @@ namespace CLV_CivilTools.Gis
 
                 var copies = new Dictionary<ObjectId, ObjectId>();
                 var dependencyCopies = new Dictionary<ObjectId, ObjectId>();
+                var definitionCopies = new Dictionary<ObjectId, DefinitionClone>();
                 if (snapshot.SelectedCount > 0)
                 {
                     using var mapping = new IdMapping();
                     try
                     {
                         // Autodesk defines Ignore as reuse of destination duplicate
-                        // records. Every reachable block definition has already been
-                        // collision-rejected. Only compatible layers/text styles and
-                        // built-in ByLayer/ByBlock/Continuous linetypes may be reused.
+                        // records. Named block collisions were rejected; anonymous
+                        // definitions must map to new records with exact reference
+                        // targets, even if native generated names differ. Only
+                        // compatible layers/text styles and built-in ByLayer/ByBlock/
+                        // Continuous linetypes may be reused.
                         // Never use Replace (changes template) or MangleName (layers).
                         source.Database.WblockCloneObjects(
                             new ObjectIdCollection(snapshot.Entities.Select(entity => entity.Id).ToArray()),
                             destinationModelSpace, mapping, DuplicateRecordCloning.Ignore, false);
-                        VerifyMapping(snapshot, destination.Database, destinationModelSpace, mapping, copies, dependencyCopies);
+                        VerifyMapping(snapshot, destination.Database, destinationModelSpace, mapping, copies, dependencyCopies, definitionCopies);
                     }
                     catch (System.Exception ex)
                     {
@@ -170,6 +175,14 @@ namespace CLV_CivilTools.Gis
                     if (!actualIds.SetEquals(copies.Values))
                         throw new InvalidOperationException("Destination ModelSpace differs from the selected clone set. Unexpected handles: " +
                             string.Join(", ", actualIds.Except(copies.Values).Select(id => id.Handle.ToString())));
+                    foreach (DefinitionClone definition in definitionCopies.Values)
+                    {
+                        var actual = (BlockTableRecord)tr.GetObject(definition.DestinationId, OpenMode.ForRead);
+                        RequireDefinitionIdentity(definition.Source, actual);
+                        if (!definition.Children.SequenceEqual(actual.Cast<ObjectId>()))
+                            throw new InvalidOperationException($"Source block '{definition.Source.Name}', handle {definition.Source.Handle} -> " +
+                                $"destination handle {definition.DestinationId.Handle}: child topology/order changed after destination activation.");
+                    }
                     foreach (EntityState expected in snapshot.Entities)
                     {
                         ObjectId destinationId = copies[expected.Id];
@@ -177,7 +190,7 @@ namespace CLV_CivilTools.Gis
                         {
                             var entity = tr.GetObject(destinationId, OpenMode.ForRead, false) as Entity
                                 ?? throw new InvalidOperationException("Mapped destination is not an Entity.");
-                            EntityState actual = ReadEntity(entity, expected.Kind, tr);
+                            EntityState actual = ReadDestinationEntity(entity, expected, tr, definitionCopies);
                             RequireSame(expected, actual, $"Source handle {expected.Handle} -> destination handle {destinationId.Handle}");
                         }
                         catch (System.Exception ex)
@@ -190,7 +203,7 @@ namespace CLV_CivilTools.Gis
                         ObjectId id = dependencyCopies[expected.Id];
                         try
                         {
-                            EntityState actual = ReadEntity((Entity)tr.GetObject(id, OpenMode.ForRead), expected.Kind, tr);
+                            EntityState actual = ReadDestinationEntity((Entity)tr.GetObject(id, OpenMode.ForRead), expected, tr, definitionCopies);
                             RequireSame(expected, actual, $"Source dependency handle {expected.Handle} -> destination handle {id.Handle}");
                         }
                         catch (System.Exception ex)
@@ -227,14 +240,15 @@ namespace CLV_CivilTools.Gis
                         ?? throw new InvalidOperationException("Source no longer exists as an Entity.");
                     if (entity.OwnerId != snapshot.ModelSpaceId) throw new InvalidOperationException("Source owner changed.");
                     RejectCompletionLinks(entity, tr);
-                    RequireSame(expected, ReadEntity(entity, expected.Kind, tr), "Source handle " + expected.Handle);
+                    RequireSameSource(expected, ReadEntity(entity, expected.Kind, tr), "Source handle " + expected.Handle);
                 }
                 catch (System.Exception ex) { throw Failure("Source handle " + expected.Handle + ": immutable capture no longer matches", ex); }
             }
             foreach (DefinitionState definition in snapshot.Definitions)
             {
                 var current = (BlockTableRecord)tr.GetObject(definition.Id, OpenMode.ForRead, false);
-                if (current.Name != definition.Name || current.IsFromExternalReference || current.IsFromOverlayReference ||
+                if (current.Name != definition.Name || current.IsAnonymous != definition.IsAnonymous ||
+                    current.IsFromExternalReference || current.IsFromOverlayReference || current.IsLayout ||
                     !definition.Children.SequenceEqual(current.Cast<ObjectId>()))
                     throw new InvalidOperationException($"Source block '{definition.Name}', handle {definition.Handle}: dependency definition changed since capture.");
             }
@@ -243,7 +257,7 @@ namespace CLV_CivilTools.Gis
                 try
                 {
                     var current = (Entity)tr.GetObject(expected.Id, OpenMode.ForRead, false);
-                    RequireSame(expected, ReadEntity(current, expected.Kind, tr), "Source dependency handle " + expected.Handle);
+                    RequireSameSource(expected, ReadEntity(current, expected.Kind, tr), "Source dependency handle " + expected.Handle);
                 }
                 catch (System.Exception ex) { throw Failure("Source dependency handle " + expected.Handle + ": capture changed", ex); }
             }
@@ -251,6 +265,13 @@ namespace CLV_CivilTools.Gis
                 if (ReadResource((SymbolTableRecord)tr.GetObject(resource.Id, OpenMode.ForRead), tr).Signature != resource.Signature)
                     throw new InvalidOperationException($"Source {resource.Kind} '{resource.Name}', handle {resource.Handle}: resource changed since capture.");
             tr.Commit();
+        }
+
+        private static void RequireSameSource(EntityState expected, EntityState actual, string context)
+        {
+            if (expected.Reference != actual.Reference)
+                throw new InvalidOperationException(context + ": source block definition targets or dynamic status changed since capture.");
+            RequireSame(expected, actual, context);
         }
 
         private static void RequireSame(EntityState expected, EntityState actual, string context)
@@ -261,13 +282,60 @@ namespace CLV_CivilTools.Gis
                 throw new InvalidOperationException(context + ": complete typed native Object Data differs or is missing. Native OD tables/records are not assumed to survive WblockCloneObjects.");
         }
 
-        private static EntityState ReadEntity(Entity entity, string kind, Transaction tr)
+        private static EntityState ReadEntity(Entity entity, string kind, Transaction tr, string? verifiedAnonymousName = null)
         {
-            string geometry = ReadAt($"Entity handle {entity.Handle}: geometry snapshot", () => GeometrySignature(entity, tr));
+            string geometry = ReadAt($"Entity handle {entity.Handle}: geometry snapshot", () => GeometrySignature(entity, tr, verifiedAnonymousName));
             var state = GisImportCommands.InspectObjectDataFingerprint(entity.ObjectId, out string fingerprint, out string detail);
             if (state == GisImportCommands.ObjectDataFingerprintState.ReadFailed)
                 throw new InvalidOperationException($"Handle {entity.Handle}: native OD cannot be verified: {detail}");
-            return new EntityState(entity.ObjectId, entity.Handle.ToString(), kind, geometry, state, fingerprint);
+            return new EntityState(entity.ObjectId, entity.Handle.ToString(), kind, geometry, state, fingerprint, ReadReference(entity));
+        }
+
+        private static BlockReferenceState? ReadReference(Entity entity)
+            => entity is BlockReference block ? new BlockReferenceState(block.BlockTableRecord,
+                block.IsDynamicBlock ? block.DynamicBlockTableRecord : ObjectId.Null, block.IsDynamicBlock) : null;
+
+        private static EntityState ReadDestinationEntity(Entity entity, EntityState expected, Transaction tr,
+            IReadOnlyDictionary<ObjectId, DefinitionClone> definitionCopies)
+        {
+            string? verifiedAnonymousName = VerifyReferenceTargets(expected, entity, tr, definitionCopies);
+            return ReadEntity(entity, expected.Kind, tr, verifiedAnonymousName);
+        }
+
+        private static string? VerifyReferenceTargets(EntityState expected, Entity entity, Transaction tr,
+            IReadOnlyDictionary<ObjectId, DefinitionClone> definitionCopies)
+        {
+            BlockReferenceState? actual = ReadReference(entity);
+            if (expected.Reference == null && actual == null) return null;
+            string context = $"Source handle {expected.Handle} -> destination handle {entity.Handle}";
+            if (expected.Reference == null || actual == null || expected.Reference.IsDynamicBlock != actual.IsDynamicBlock)
+                throw new InvalidOperationException(context + ": block reference type/dynamic status differs.");
+            DefinitionClone evaluated = RequireMappedDefinition(expected.Reference.BlockTableRecord, actual.BlockTableRecord,
+                "BlockTableRecord", context, tr, definitionCopies);
+            DefinitionClone effective = expected.Reference.IsDynamicBlock
+                ? RequireMappedDefinition(expected.Reference.DynamicBlockTableRecord, actual.DynamicBlockTableRecord,
+                    "DynamicBlockTableRecord", context, tr, definitionCopies)
+                : evaluated;
+            // Never use a shared anonymous sentinel or infer identity from a name.
+            // Only this exact mapped target may use its own captured source name.
+            // Source capture/readback never calls this destination-only path.
+            return effective.Source.IsAnonymous ? effective.Source.Name : null;
+        }
+
+        private static DefinitionClone RequireMappedDefinition(ObjectId sourceId, ObjectId destinationId, string target,
+            string context, Transaction tr, IReadOnlyDictionary<ObjectId, DefinitionClone> definitionCopies)
+        {
+            if (!definitionCopies.TryGetValue(sourceId, out DefinitionClone? mapped) || mapped.DestinationId != destinationId)
+                throw new InvalidOperationException(context + $": {target} does not point to the exact cloned source definition {sourceId.Handle}.");
+            RequireDefinitionIdentity(mapped.Source, (BlockTableRecord)tr.GetObject(destinationId, OpenMode.ForRead));
+            return mapped;
+        }
+
+        private static void RequireDefinitionIdentity(DefinitionState expected, BlockTableRecord actual)
+        {
+            if (actual.IsAnonymous != expected.IsAnonymous || !expected.IsAnonymous && actual.Name != expected.Name ||
+                actual.IsFromExternalReference || actual.IsFromOverlayReference || actual.IsLayout)
+                throw new InvalidOperationException($"Source block '{expected.Name}', handle {expected.Handle} -> destination handle {actual.Handle}: definition identity differs; only verified anonymous generated names may change.");
         }
 
         private static string SelectKind(Entity entity, Transaction tr)
@@ -354,7 +422,8 @@ namespace CLV_CivilTools.Gis
                 if (definition.IsFromExternalReference || definition.IsFromOverlayReference || definition.IsLayout)
                     throw new InvalidOperationException($"Handle {entity.Handle}: external/layout dependency '{definition.Name}', handle {definition.Handle}, cannot be cloned.");
                 ObjectId[] children = definition.Cast<ObjectId>().ToArray();
-                definitions.Add(blockId, new DefinitionState(blockId, definition.Handle.ToString(), definition.Name, Array.AsReadOnly(children)));
+                definitions.Add(blockId, new DefinitionState(blockId, definition.Handle.ToString(), definition.Name,
+                    definition.IsAnonymous, Array.AsReadOnly(children)));
                 path.Add(blockId);
                 foreach (ObjectId child in children)
                     if (!child.IsErased && tr.GetObject(child, OpenMode.ForRead, false) is Entity nested)
@@ -454,7 +523,7 @@ namespace CLV_CivilTools.Gis
         {
             var blocks = (BlockTable)targetTr.GetObject(destination.BlockTableId, OpenMode.ForRead);
             foreach (DefinitionState definition in snapshot.Definitions)
-                if (blocks.Has(definition.Name))
+                if (!definition.IsAnonymous && blocks.Has(definition.Name))
                     throw new InvalidOperationException($"Block definition collision '{definition.Name}': source handle {definition.Handle}, template handle {blocks[definition.Name].Handle}. Definition equivalence is unproven; no Ignore/Replace fallback is allowed.");
             foreach (ResourceState resource in snapshot.Resources)
             {
@@ -490,7 +559,8 @@ namespace CLV_CivilTools.Gis
         }
 
         private static void VerifyMapping(Snapshot snapshot, Database destination, ObjectId modelSpace,
-            IdMapping mapping, Dictionary<ObjectId, ObjectId> copies, Dictionary<ObjectId, ObjectId> dependencyCopies)
+            IdMapping mapping, Dictionary<ObjectId, ObjectId> copies, Dictionary<ObjectId, ObjectId> dependencyCopies,
+            Dictionary<ObjectId, DefinitionClone> definitionCopies)
         {
             var pairs = new Dictionary<ObjectId, IdPair>();
             foreach (IdPair pair in mapping) pairs.Add(pair.Key, pair);
@@ -514,11 +584,17 @@ namespace CLV_CivilTools.Gis
                     throw new InvalidOperationException($"Source dependency handle {dependency.Handle}: missing/invalid/not-cloned IdMapping entry.");
                 dependencyCopies.Add(dependency.Id, pair.Value);
             }
+            var mappedDefinitionIds = new HashSet<ObjectId>();
             foreach (DefinitionState definition in snapshot.Definitions)
             {
-                if (!pairs.TryGetValue(definition.Id, out IdPair pair) || !pair.IsCloned)
+                if (!pairs.TryGetValue(definition.Id, out IdPair pair) || !pair.IsCloned || pair.Value.IsNull ||
+                    !pair.Value.IsValid || pair.Value.IsErased || pair.Value.Database != destination)
                     throw new InvalidOperationException($"Source block '{definition.Name}', handle {definition.Handle}: definition was not cloned as a new record.");
-                var actual = (BlockTableRecord)targetTr.GetObject(pair.Value, OpenMode.ForRead);
+                if (!mappedDefinitionIds.Add(pair.Value))
+                    throw new InvalidOperationException($"Source block '{definition.Name}', handle {definition.Handle}: multiple definitions map to destination handle {pair.Value.Handle}.");
+                if (targetTr.GetObject(pair.Value, OpenMode.ForRead) is not BlockTableRecord actual || actual.OwnerId != destination.BlockTableId)
+                    throw new InvalidOperationException($"Source block '{definition.Name}', handle {definition.Handle}: mapped definition is not owned by the destination BlockTable.");
+                RequireDefinitionIdentity(definition, actual);
                 var expectedChildren = new List<ObjectId>();
                 foreach (ObjectId child in definition.Children)
                 {
@@ -528,6 +604,12 @@ namespace CLV_CivilTools.Gis
                 }
                 if (!expectedChildren.SequenceEqual(actual.Cast<ObjectId>()))
                     throw new InvalidOperationException($"Source block '{definition.Name}', handle {definition.Handle} -> destination handle {pair.Value.Handle}: child geometry topology/order changed.");
+                definitionCopies.Add(definition.Id, new DefinitionClone(definition, pair.Value, Array.AsReadOnly(expectedChildren.ToArray())));
+            }
+            foreach (EntityState expected in snapshot.Entities.Concat(snapshot.DependencyEntities).DistinctBy(entity => entity.Id))
+            {
+                ObjectId id = pairs[expected.Id].Value;
+                VerifyReferenceTargets(expected, (Entity)targetTr.GetObject(id, OpenMode.ForRead), targetTr, definitionCopies);
             }
             foreach (IdPair pair in pairs.Values.Where(pair => pair.IsCloned))
             {
@@ -540,7 +622,7 @@ namespace CLV_CivilTools.Gis
             targetTr.Commit(); sourceTr.Commit();
         }
 
-        private static string GeometrySignature(Entity entity, Transaction tr)
+        private static string GeometrySignature(Entity entity, Transaction tr, string? verifiedAnonymousName = null)
         {
             if (entity is Curve && !IsSupportedCurve(entity) ||
                 entity is BlockReference && entity.GetType() != typeof(BlockReference))
@@ -643,7 +725,7 @@ namespace CLV_CivilTools.Gis
                     for (short i = 0; i < 4; i++) key.Add(trace.GetPointAt(i));
                     key.Add(trace.Normal); key.Add(trace.Thickness); break;
                 case BlockReference block:
-                    key.Add(EffectiveName(block, tr)); key.Add(block.IsDynamicBlock);
+                    key.Add(verifiedAnonymousName ?? EffectiveName(block, tr)); key.Add(block.IsDynamicBlock);
                     foreach (double element in block.BlockTransform.ToArray()) key.Add(element);
                     key.Add(block.Position); key.Add(block.Normal); key.Add(block.Rotation);
                     key.Add(block.ScaleFactors.X); key.Add(block.ScaleFactors.Y); key.Add(block.ScaleFactors.Z);

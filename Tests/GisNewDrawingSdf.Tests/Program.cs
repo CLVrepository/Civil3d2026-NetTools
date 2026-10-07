@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using CLV_CivilTools.Gis;
+using GisCoordinateSystemTestSupport;
 
 int passed = 0, failed = 0;
 string folder = Path.Combine(Path.GetTempPath(), "clv-sdf-tests-" + Guid.NewGuid().ToString("N"));
@@ -24,27 +25,51 @@ try
         Equal("Structure 1", snapshot.Pipes[0].Scalars["StructureStart"]);
         Equal("Stub 1", snapshot.Pipes[0].Scalars["StructureEnd"]);
         Equal(2, snapshot.Structures[0].Scalars.Count);
-        Equal("PROJCS[\"actual test CRS\"]", snapshot.SpatialContexts.Single().CoordinateSystemWkt);
+        Equal(FakeMapGuide.Wkt(GisNewDrawingProfile.LvfCoordinateSystem), snapshot.SpatialContexts.Single().CoordinateSystemWkt);
         True(FakeState.Events.Contains("Open.ReadOnly=TRUE"));
     });
     Run("Provider must expose explicit ReadOnly before any Open", () => { FakeState.HasReadOnly = false; Reject("ReadOnly"); Equal(0, FakeState.OpenCount); });
     Run("Provider must retain ReadOnly=TRUE before any Open", () => { FakeState.HonorsReadOnly = false; Reject("ReadOnly=TRUE"); Equal(0, FakeState.OpenCount); });
     Run("Provider must expose File before any Open", () => { FakeState.HasFile = false; Reject("File"); Equal(0, FakeState.OpenCount); });
     Run("Pending provider connection is rejected", () => { FakeState.OpenSucceeds = false; Reject("ConnectionState_Open"); });
-    foreach (string crs in new[] { GisNewDrawingProfile.LvhefCoordinateSystem, "nv83.ncrs-lvf", "NV83.NCRS.LVF", "", "EPSG:26911" })
+    foreach (string crs in new[] { GisNewDrawingProfile.LvhefCoordinateSystem, "nv83.ncrs-lvf", "NV83.NCRS.LVF", "EPSG:26911" })
     {
         string actual = crs;
-        Run("Native CRS mismatch/alias/unknown rejected: " + actual, () =>
+        Run("Different or unresolved dictionary CRS code rejected: " + actual, () =>
         {
-            FakeState.Contexts[0] = ("Default", actual, "PROJCS[\"NV83.NCRS-LVF\"]");
-            Reject("does not exactly match"); Equal(0, FakeState.FeatureReadCount);
+            FakeState.Contexts[0] = ("Default", actual, FakeMapGuide.Wkt(GisNewDrawingProfile.LvfCoordinateSystem));
+            Reject("CRS verification failed"); Equal(0, FakeState.FeatureReadCount);
         });
     }
     Run("LVHEF succeeds only with exact LVHEF profile", () =>
     {
-        FakeState.Contexts[0] = ("Default", GisNewDrawingProfile.LvhefCoordinateSystem, "PROJCS[\"LVHEF\"]");
+        FakeState.Contexts[0] = ("Default", GisNewDrawingProfile.LvhefCoordinateSystem, FakeMapGuide.Wkt(GisNewDrawingProfile.LvhefCoordinateSystem));
         var snapshot = Read(GisNewDrawingProfile.LvhefCoordinateSystem);
         Equal(GisNewDrawingProfile.LvhefCoordinateSystem, snapshot.CoordinateSystem);
+    });
+    Run("Full WKT in both FDO fields verifies against the source dictionary", () =>
+    {
+        string wkt = FakeMapGuide.Wkt(GisNewDrawingProfile.LvfCoordinateSystem);
+        FakeState.Contexts[0] = ("Default", wkt, wkt);
+        var snapshot = Read(); Equal(GisNewDrawingProfile.LvfCoordinateSystem, snapshot.CoordinateSystem);
+        Equal(wkt, snapshot.SpatialContexts.Single().CoordinateSystem);
+    });
+    Run("Missing name can use independently verified complete WKT", () =>
+    {
+        FakeState.Contexts[0] = ("Default", "", FakeMapGuide.Wkt(GisNewDrawingProfile.LvfCoordinateSystem));
+        Read();
+    });
+    Run("Same-title SDF WKT with changed numeric projection parameter is rejected", () =>
+    {
+        string wkt = FakeMapGuide.Wkt(GisNewDrawingProfile.LvfCoordinateSystem).Replace("984250.0000", "984251.0000");
+        FakeMapGuide.RegisterWkt(wkt, GisNewDrawingProfile.LvfCoordinateSystem);
+        FakeState.Contexts[0] = ("Default", wkt, wkt);
+        Reject("CRS verification failed"); Equal(0, FakeState.FeatureReadCount);
+    });
+    Run("Conflicting code and WKT fields are rejected", () =>
+    {
+        FakeState.Contexts[0] = ("Default", GisNewDrawingProfile.LvfCoordinateSystem, FakeMapGuide.Wkt(GisNewDrawingProfile.LvhefCoordinateSystem));
+        Reject("CRS verification failed"); Equal(0, FakeState.FeatureReadCount);
     });
     Run("Missing spatial contexts fail closed", () => { FakeState.Contexts.Clear(); Reject("no spatial context"); });
     Run("Duplicate spatial-context names fail closed", () => { FakeState.Contexts.Add(FakeState.Contexts[0]); Reject("duplicate spatial-context"); });
@@ -260,6 +285,7 @@ void Run(string name, Action test)
     try
     {
         test();
+        Equal(0, FakeMapGuide.LiveObjects);
         True(FakeState.Objects.All(value => value.DisposeCount == 1), "Every acquired native wrapper must be disposed exactly once.");
         True(FakeState.Objects.OfType<FakeConnection>().All(value => value.CloseCount == 1), "Every acquired connection must be closed.");
         True(FakeState.Objects.OfType<FakeFeatureReader>().All(value => value.CloseCount == 1), "Every acquired feature reader must be closed.");
