@@ -611,10 +611,10 @@ namespace CLV_CivilTools.Gis
                     break;
                 case MText text: AddMText(key, text, tr); break;
                 case Solid solid:
-                    for (int i = 0; i < 4; i++) key.Add(solid.GetPointAt(i));
+                    for (short i = 0; i < 4; i++) key.Add(solid.GetPointAt(i));
                     key.Add(solid.Normal); key.Add(solid.Thickness); break;
                 case Trace trace:
-                    for (int i = 0; i < 4; i++) key.Add(trace.GetPointAt(i));
+                    for (short i = 0; i < 4; i++) key.Add(trace.GetPointAt(i));
                     key.Add(trace.Normal); key.Add(trace.Thickness); break;
                 case BlockReference block:
                     key.Add(EffectiveName(block, tr)); key.Add(block.IsDynamicBlock);
