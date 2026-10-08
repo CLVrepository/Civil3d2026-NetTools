@@ -14,6 +14,8 @@ The original drawing's exact supported CRS is authoritative, and the matching su
 
 Identity cases include missing/duplicate/wrong-case schemas and class declarations, dependent schemas, conflicting declared or reader qualified names and schema links, exact bare names from detached readers, and actual metadata in failures. A bare reader name is accepted only after both exact classes were independently verified in `Civil_Schema` on the same guarded read-only connection, and only if both `FeatureSchema` and `Parent` are null. No suffix, alias, default-schema, or case-insensitive match is used.
 
+Snapshot `FieldTypesByClass` retains every mapped source column's declared FDO `DataType` under the exact class and column names. The helper reuses the declaration already read to choose its scalar getter; it makes no additional native calls or inferences from feature values. Tests cover populated, empty and all-null classes, non-default declared types, unsupported types on empty classes, one native type read per mapped property, and independent immutable copies of both dictionary levels after schema or constructor-input changes. Geometry and unmapped fields are not included.
+
 The supplied IPF fixtures are linked from the neighboring profile-test project without alteration. No packages or Autodesk references are required. Tests use a unique temporary directory and remove it on completion.
 
 ## Native Civil 3D acceptance

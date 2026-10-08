@@ -177,14 +177,14 @@ namespace CLV_CivilTools.Gis
             {
                 ValidateSelectedTable(table);
                 // These observed table-level values contradict the explicit column OD mappings.
-                // Preserve and report them: do not rewrite, infer native Map behavior or reject
-                // the supplied profiles solely because of this documented ambiguity.
+                // Preserve/report the input bytes. The runtime will activate only
+                // the validated explicit columns, then require native OD readback.
                 if (table.ObjectDataName.Length == 0 || table.CreateObjectData == "NoODTable" ||
                     table.DataMappingType == "ImportMappingInvalid")
                 {
                     diagnostics.Add($"{table.InputClass}: explicit MappedToOD columns target {table.LayerName}, while " +
                         $"ObjectDataName='{table.ObjectDataName}', CreateObjectData='{table.CreateObjectData}', " +
-                        $"DataMappingType='{table.DataMappingType}'. Original settings are preserved; native OD readback is required.");
+                        $"DataMappingType='{table.DataMappingType}'. The shared profile is unchanged; its explicit columns will be activated for this import and native OD readback is required.");
                 }
             }
             return new GisNewDrawingProfile(sourceCrs, loadedProfileName, tables, diagnostics);

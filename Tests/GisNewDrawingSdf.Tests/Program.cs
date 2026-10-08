@@ -208,6 +208,90 @@ try
     });
     Run("Missing mapped field fails before reading features", () => { Pipes().MissingProperty = "Length"; Reject("Missing mapped property"); Equal(0, FakeState.FeatureReadCount); });
     Run("Unsupported scalar type is not converted lossily", () => { Pipes().UnsupportedTypeProperty = "Length"; Reject("unsupported FDO scalar type"); });
+    Run("Declared mapped field types are retained with exact class and field keys", () =>
+    {
+        var snapshot = Read();
+        Equal(2, snapshot.FieldTypesByClass.Count);
+        var pipes = snapshot.FieldTypesByClass[GisNewDrawingProfile.PipesInputClass];
+        var structures = snapshot.FieldTypesByClass[GisNewDrawingProfile.StructuresInputClass];
+        Equal(9, pipes.Count); Equal(2, structures.Count);
+        foreach (string field in new[] { "Name", "PartSizeName", "StructureStart", "StructureEnd" })
+            Equal("DataType_String", pipes[field]);
+        foreach (string field in new[] { "InsideDiameter", "Length", "Slope", "StartInvert", "EndInvert" })
+            Equal("DataType_Double", pipes[field]);
+        Equal("DataType_String", structures["Name"]); Equal("DataType_String", structures["PartSizeName"]);
+        True(!snapshot.FieldTypesByClass.ContainsKey("civil_schema:Pipes"));
+        True(!pipes.ContainsKey("name")); True(!pipes.ContainsKey("Geometry"));
+        var properties = FakeState.Objects.OfType<FakeDataProperty>().ToArray();
+        Equal(11, properties.Length);
+        True(properties.All(property => property.DataTypeReadCount == 1), "Retaining field types must not read native DataType twice.");
+    });
+    Run("Zero-row classes retain declared mapped types without inspecting values", () =>
+    {
+        Pipes().Rows.Clear(); Structures().Rows.Clear();
+        Pipes().DataTypes["Length"] = "DataType_Int32";
+        Pipes().DataTypes["Slope"] = "DataType_Single";
+        var snapshot = Read();
+        Equal(0, snapshot.PipeCount); Equal(0, snapshot.StructureCount);
+        Equal(9, snapshot.FieldTypesByClass[GisNewDrawingProfile.PipesInputClass].Count);
+        Equal(2, snapshot.FieldTypesByClass[GisNewDrawingProfile.StructuresInputClass].Count);
+        Equal("DataType_Int32", snapshot.FieldTypesByClass[GisNewDrawingProfile.PipesInputClass]["Length"]);
+        Equal("DataType_Single", snapshot.FieldTypesByClass[GisNewDrawingProfile.PipesInputClass]["Slope"]);
+        Equal("DataType_String", snapshot.FieldTypesByClass[GisNewDrawingProfile.StructuresInputClass]["Name"]);
+    });
+    Run("All-null fields retain declared types independently of scalar values", () =>
+    {
+        foreach (var source in FakeState.Classes.Values)
+            foreach (var row in source.Rows)
+                foreach (string field in row.Keys.Where(field => field != "Geometry").ToArray()) row[field] = null;
+        Pipes().DataTypes["Length"] = "DataType_Int64";
+        Pipes().DataTypes["Slope"] = "DataType_Boolean";
+        Pipes().DataTypes["StartInvert"] = "DataType_DateTime";
+        var snapshot = Read();
+        Equal(2, snapshot.PipeCount); Equal(2, snapshot.StructureCount);
+        True(snapshot.Pipes.Concat(snapshot.Structures).All(feature => feature.Scalars.Values.All(value => value == null)));
+        Equal("DataType_Int64", snapshot.FieldTypesByClass[GisNewDrawingProfile.PipesInputClass]["Length"]);
+        Equal("DataType_Boolean", snapshot.FieldTypesByClass[GisNewDrawingProfile.PipesInputClass]["Slope"]);
+        Equal("DataType_DateTime", snapshot.FieldTypesByClass[GisNewDrawingProfile.PipesInputClass]["StartInvert"]);
+        Equal("DataType_String", snapshot.FieldTypesByClass[GisNewDrawingProfile.StructuresInputClass]["Name"]);
+    });
+    Run("Unsupported declaration is rejected even for a zero-row class", () =>
+    {
+        Pipes().Rows.Clear(); Pipes().DataTypes["Length"] = "DataType_Decimal";
+        Reject("unsupported FDO scalar type"); Equal(0, FakeState.FeatureReadCount);
+    });
+    Run("Field type snapshot survives fake schema changes and is read-only at both levels", () =>
+    {
+        var snapshot = Read();
+        Pipes().DataTypes["Length"] = "DataType_Int32";
+        Structures().DataTypes["Name"] = "DataType_Double";
+        FakeState.Classes.Clear();
+        Equal("DataType_Double", snapshot.FieldTypesByClass[GisNewDrawingProfile.PipesInputClass]["Length"]);
+        Equal("DataType_String", snapshot.FieldTypesByClass[GisNewDrawingProfile.StructuresInputClass]["Name"]);
+        var classes = (IDictionary<string, IReadOnlyDictionary<string, string>>)snapshot.FieldTypesByClass;
+        var fields = (IDictionary<string, string>)snapshot.FieldTypesByClass[GisNewDrawingProfile.PipesInputClass];
+        Throws<NotSupportedException>(() => classes.Remove(GisNewDrawingProfile.PipesInputClass));
+        Throws<NotSupportedException>(() => classes[GisNewDrawingProfile.PipesInputClass] = new Dictionary<string, string>());
+        Throws<NotSupportedException>(() => fields["Length"] = "DataType_Int32");
+        Throws<NotSupportedException>(() => fields.Remove("Name"));
+    });
+    Run("Snapshot constructor defensively copies both field-type dictionary levels", () =>
+    {
+        var source = Read();
+        var pipeFields = new Dictionary<string, string>(source.FieldTypesByClass[GisNewDrawingProfile.PipesInputClass], StringComparer.Ordinal);
+        var structureFields = new Dictionary<string, string>(source.FieldTypesByClass[GisNewDrawingProfile.StructuresInputClass], StringComparer.Ordinal);
+        var classes = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal)
+        {
+            [GisNewDrawingProfile.PipesInputClass] = pipeFields,
+            [GisNewDrawingProfile.StructuresInputClass] = structureFields
+        };
+        var snapshot = new GisNewDrawingSdfSnapshot(source.FilePath, source.FileLength, source.LastWriteTimeUtc,
+            source.FileSha256, source.CoordinateSystem, source.Pipes, source.Structures, classes);
+        pipeFields["Length"] = "DataType_Int32"; structureFields.Clear(); classes.Clear();
+        Equal(2, snapshot.FieldTypesByClass.Count);
+        Equal("DataType_Double", snapshot.FieldTypesByClass[GisNewDrawingProfile.PipesInputClass]["Length"]);
+        Equal("DataType_String", snapshot.FieldTypesByClass[GisNewDrawingProfile.StructuresInputClass]["Name"]);
+    });
     Run("Null mapped scalars are preserved", () =>
     {
         Pipes().Rows[0]["Slope"] = null; Structures().Rows[0]["Name"] = null;

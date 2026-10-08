@@ -49,13 +49,17 @@ namespace CLV_CivilTools.Gis
             AddExpected(structures, sdf.Structures, "Structures");
             if (pipes.Count + structures.Count == 0)
                 throw new InvalidOperationException("The selected SDF contains no Pipes or Structures to import.");
+            IReadOnlyList<GisNewDrawingObjectDataTableSchema> existingSchemas = ReadTargetOdSchemas(profile);
+            IReadOnlyList<GisNewDrawingObjectDataClassPlan> odPlans = GisNewDrawingObjectDataPlan.Build(
+                profile, sdf.FieldTypesByClass, existingSchemas);
+            VerifyMappedSourceValues(sdf, odPlans);
             object importer = Get(Application(), "Importer");
             Invoke(importer, "Init", profile.FormatName, sdf.FilePath);
             // LoadImportFormat returns SCHEMA CHANGED, not success. Exceptions indicate
             // failure, and all input-layer/column wrappers are acquired after this call.
             object? changed = Invoke(importer, "LoadImportFormat", profilePath);
             if (changed is not bool) throw new InvalidOperationException("LoadImportFormat returned an unexpected result.");
-            VerifyEffectiveProfile(importer, profile, document);
+            ConfigureAndVerifyProfile(importer, profile, odPlans, document);
 
             HashSet<ObjectId> before = ModelSpaceIds(document.Database);
             object result = Invoke(importer, "Import", true)
@@ -66,6 +70,7 @@ namespace CLV_CivilTools.Gis
             if (count != sdf.Pipes.Count + sdf.Structures.Count)
                 throw new InvalidOperationException($"Map import count {count} differs from the SDF's {sdf.Pipes.Count} Pipes + {sdf.Structures.Count} Structures.");
             VerifyProjection(profile.SourceCoordinateSystem);
+            VerifyImportedOdSchemas(profile, sdf, odPlans);
 
             ObjectId[] imported = ModelSpaceIds(document.Database).Where(id => !before.Contains(id)).ToArray();
             if (imported.Length != count)
@@ -79,7 +84,8 @@ namespace CLV_CivilTools.Gis
                 if ((!isPipe && entity.Layer != "Structures") || (isPipe ? entity is not Curve : entity is not DBPoint))
                     throw new InvalidOperationException($"Unexpected imported object {id.Handle}: {entity.GetType().Name} on {entity.Layer}.");
                 string tableName = isPipe ? "Pipes" : "Structures";
-                IReadOnlyDictionary<string, object?> values = ReadSingleRecord(id, tableName);
+                GisNewDrawingObjectDataClassPlan odPlan = odPlans.Single(plan => plan.TableName == tableName);
+                IReadOnlyDictionary<string, object?> values = ReadSingleRecord(id, odPlan);
                 if (!values.TryGetValue("Name", out object? nameValue) || nameValue is not string name || string.IsNullOrEmpty(name))
                     throw new InvalidOperationException($"Imported {tableName} object {id.Handle} has no nonempty OD Name.");
                 Dictionary<string, GisNewDrawingSdfFeature> expected = isPipe ? pipes : structures;
@@ -162,7 +168,8 @@ namespace CLV_CivilTools.Gis
                     throw new InvalidOperationException($"SDF {name} has an empty or duplicate Name '{feature.Name}'; identities cannot be verified unambiguously.");
         }
 
-        private static void VerifyEffectiveProfile(object importer, GisNewDrawingProfile profile, Document document)
+        private static void ConfigureAndVerifyProfile(object importer, GisNewDrawingProfile profile,
+            IReadOnlyList<GisNewDrawingObjectDataClassPlan> odPlans, Document document)
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
             // Reassert only the profile's explicit no-clipping setting. A viewport-sized
@@ -199,21 +206,28 @@ namespace CLV_CivilTools.Gis
                     string layerName = Text(layerMapping.Text);
                     if (layerMode != "LayerNameDirect" || layerName != expected.LayerName)
                         throw new InvalidOperationException("Native CAD layer mapping differs from the profile: " + name);
+                    GisNewDrawingObjectDataClassPlan odPlan = odPlans.Single(plan => plan.InputClass == name);
+                    GisNewDrawingNativeOutputs.EnumTextOutput loadedMapping = GisNewDrawingNativeOutputs.ReadPair(layer, "DataMapping");
+                    document.Editor.WriteMessage($"\nOD setup: {name}; loaded {loadedMapping.Mode} / '{Text(loadedMapping.Text)}'; " +
+                        $"applying {odPlan.MappingMode} / '{odPlan.TableName}' from the profile's explicit column mappings.");
+                    // New mode creates the table during Import, not here. Existing
+                    // mode was approved only after exact schema/type comparison.
+                    // No shared IPF or existing table definition is edited.
+                    Invoke(layer, "SetDataMapping", Enum.Parse(loadedMapping.Mode.GetType(), odPlan.MappingMode), odPlan.TableName);
+                    ConfigureColumns(layer, expected, odPlan);
                     GisNewDrawingNativeOutputs.EnumTextOutput tableMapping = GisNewDrawingNativeOutputs.ReadPair(layer, "DataMapping");
                     string mode = Text(tableMapping.Mode);
                     string tableName = Text(tableMapping.Text);
-                    document.Editor.WriteMessage($"\nEffective mapping: {name} -> {layerName}; OD {mode} / '{tableName}'.");
-                    if (!IsOdMapping(mode) || tableName != expected.LayerName)
-                        throw new InvalidOperationException($"The supplied profile loaded {name} with OD mapping {mode} / '{tableName}'. " +
-                            $"Expected a native Object Data mapping to {expected.LayerName}. No import was run and the profile was not changed. " +
-                            "Inspect/resave the working MAPIMPORT profile with Object Data enabled before retrying.");
+                    if (mode != odPlan.MappingMode || tableName != odPlan.TableName)
+                        throw new InvalidOperationException($"Native OD setup for {name} did not retain {odPlan.MappingMode} / '{odPlan.TableName}': " +
+                            $"read {mode} / '{tableName}'. No import was run.");
                     if (expected.LayerName == "Structures")
                     {
                         GisNewDrawingNativeOutputs.EnumTextOutput pointMapping = GisNewDrawingNativeOutputs.ReadPair(layer, "PointToBlockMapping");
                         if (Text(pointMapping.Mode) != "MapPointToPoint")
                             throw new InvalidOperationException("The Structures profile does not import native DBPoints.");
                     }
-                    VerifyColumns(layer, expected);
+                    VerifyColumns(layer, expected, odPlan);
                 }
                 finally { DisposeOwned(layer); }
             }
@@ -221,38 +235,142 @@ namespace CLV_CivilTools.Gis
                 if (!seen.Contains(table.InputClass)) throw new InvalidOperationException("SDF is missing selected input class " + table.InputClass);
         }
 
-        private static void VerifyColumns(object layer, GisNewDrawingProfileTable expected)
+        private static void ConfigureColumns(object layer, GisNewDrawingProfileTable expected, GisNewDrawingObjectDataClassPlan plan)
         {
-            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var exactNames = new HashSet<string>(StringComparer.Ordinal);
+            // Acquire columns after SetDataMapping initializes its defaults. All
+            // incoming columns are covered, including fields absent from the IPF.
+            foreach (object column in Enumerate(layer))
+            {
+                string name = "<unread>";
+                try
+                {
+                    name = Text(Get(column, "ColumnName"));
+                    if (string.IsNullOrEmpty(name) || !seen.Add(name))
+                        throw new InvalidOperationException("Blank, duplicate or case-colliding input column: " + name);
+                    exactNames.Add(name);
+                    GisNewDrawingObjectDataFieldPlan? field = plan.Fields.SingleOrDefault(item => item.SourceName == name);
+                    // New mode auto-maps all source fields. Explicitly remove the
+                    // unmapped fields and retain only the validated IPF allowlist.
+                    Invoke(column, "SetColumnDataMapping", field?.OutputName ?? string.Empty);
+                }
+                catch (System.Exception ex)
+                {
+                    throw new InvalidOperationException($"Runtime OD mapping failed for {expected.InputClass}.{name}.", ex);
+                }
+                finally { DisposeOwned(column); }
+            }
+            foreach (GisNewDrawingObjectDataFieldPlan field in plan.Fields)
+                if (!exactNames.Contains(field.SourceName))
+                    throw new InvalidOperationException($"SDF lacks exact mapped field {expected.InputClass}.{field.SourceName}.");
+        }
+
+        private static void VerifyColumns(object layer, GisNewDrawingProfileTable expected, GisNewDrawingObjectDataClassPlan plan)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var exactNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (object column in Enumerate(layer))
             {
                 try
                 {
                     string name = Text(Get(column, "ColumnName"));
-                    if (!seen.Add(name)) throw new InvalidOperationException("Duplicate native input column: " + name);
+                    if (string.IsNullOrEmpty(name) || !seen.Add(name))
+                        throw new InvalidOperationException("Blank, duplicate or case-colliding native input column: " + name);
+                    exactNames.Add(name);
                     GisNewDrawingNativeOutputs.EnumTextOutput columnMapping = GisNewDrawingNativeOutputs.ReadColumnMapping(column);
                     string actualOutput = Text(columnMapping.Text);
                     string actualMode = Text(columnMapping.Mode);
-                    GisNewDrawingProfileColumn? planned = expected.Columns.SingleOrDefault(item => item.ColumnName == name);
-                    bool mapped = !string.IsNullOrEmpty(actualOutput) && actualMode != "NoImportMapping";
-                    if (planned?.IsMappedToObjectData == true)
-                    {
-                        if (!mapped || !IsOdMapping(actualMode) || actualOutput != planned.OutputColumnName)
-                            throw new InvalidOperationException($"Native OD column mapping differs for {expected.InputClass}.{name}: {actualMode} -> '{actualOutput}'.");
-                    }
-                    else if (mapped)
-                        throw new InvalidOperationException($"Unexpected mapped input column {expected.InputClass}.{name}.");
+                    GisNewDrawingObjectDataPlan.VerifyColumnMapping(plan, name, actualMode, actualOutput);
                 }
                 finally { DisposeOwned(column); }
             }
             foreach (GisNewDrawingProfileColumn column in expected.MappedColumns)
-                if (!seen.Contains(column.ColumnName)) throw new InvalidOperationException($"SDF lacks mapped field {expected.InputClass}.{column.ColumnName}.");
+                if (!exactNames.Contains(column.ColumnName)) throw new InvalidOperationException($"SDF lacks mapped field {expected.InputClass}.{column.ColumnName}.");
         }
 
-        private static bool IsOdMapping(string name) => name == "NewObjectDataOnly" || name == "ExistingObjectDataOnly";
-
-        private static IReadOnlyDictionary<string, object?> ReadSingleRecord(ObjectId id, string tableName)
+        private static IReadOnlyList<GisNewDrawingObjectDataTableSchema> ReadTargetOdSchemas(GisNewDrawingProfile profile)
         {
+            object project = Project();
+            object drawingSet = Get(project, "DrawingSet"); // borrowed project singleton
+            if (Convert.ToInt32(Get(drawingSet, "AllDrawingsCount"), CultureInfo.InvariantCulture) != 0)
+                throw new InvalidOperationException("The new GIS drawing has attached Map drawings. Local OD table ownership is ambiguous; no mappings or attached tables were changed.");
+            object tables = Get(project, "ODTables"); // borrowed host container
+            object names = Invoke(tables, "GetTableNames") ?? throw new InvalidOperationException("Native OD table inventory is unavailable.");
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var schemas = new List<GisNewDrawingObjectDataTableSchema>();
+            try
+            {
+                foreach (object item in Enumerate(names))
+                {
+                    if (item is not string name || string.IsNullOrWhiteSpace(name) || !seen.Add(name))
+                        throw new InvalidOperationException("Native OD table inventory has a blank, duplicate or case-colliding name.");
+                    if (!profile.SelectedTables.Any(table => string.Equals(table.LayerName, name, StringComparison.OrdinalIgnoreCase))) continue;
+                    object? table = null, definitions = null;
+                    try
+                    {
+                        table = Invoke(tables, "get_Item", name) ?? throw new InvalidOperationException("Native OD table is unavailable: " + name);
+                        string actualName = Text(Get(table, "Name"));
+                        if (actualName != name) throw new InvalidOperationException($"OD table inventory '{name}' resolves to '{actualName}'.");
+                        definitions = Get(table, "FieldDefinitions");
+                        int count = Convert.ToInt32(Get(definitions, "Count"), CultureInfo.InvariantCulture);
+                        if (count < 0 || count > 10000) throw new InvalidOperationException("Native OD field count exceeds the schema verification limit.");
+                        var fields = new List<GisNewDrawingObjectDataFieldSchema>();
+                        for (int index = 0; index < count; index++)
+                        {
+                            object definition = Invoke(definitions, "get_Item", index) ?? throw new InvalidOperationException("OD field definition is unavailable.");
+                            try { fields.Add(new GisNewDrawingObjectDataFieldSchema(Text(Get(definition, "Name")), Text(Get(definition, "Type")))); }
+                            finally { DisposeOwned(definition); }
+                        }
+                        schemas.Add(new GisNewDrawingObjectDataTableSchema(actualName, fields));
+                    }
+                    finally { DisposeOwned(definitions); DisposeOwned(table); }
+                }
+            }
+            finally { DisposeOwned(names); }
+            foreach (GisNewDrawingProfileTable table in profile.SelectedTables)
+            {
+                bool exists = Invoke(tables, "IsTableDefined", table.LayerName) is bool present ? present
+                    : throw new InvalidOperationException("Native OD table existence result is invalid.");
+                if (exists != schemas.Any(schema => string.Equals(schema.TableName, table.LayerName, StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidOperationException("Native OD table inventory and accessible-table lookup disagree for " + table.LayerName);
+            }
+            return Array.AsReadOnly(schemas.ToArray());
+        }
+
+        private static void VerifyMappedSourceValues(GisNewDrawingSdfSnapshot sdf, IReadOnlyList<GisNewDrawingObjectDataClassPlan> plans)
+        {
+            foreach (GisNewDrawingObjectDataClassPlan plan in plans)
+            {
+                IReadOnlyList<GisNewDrawingSdfFeature> features = plan.InputClass == GisNewDrawingProfile.PipesInputClass ? sdf.Pipes : sdf.Structures;
+                foreach (GisNewDrawingSdfFeature feature in features)
+                    foreach (GisNewDrawingObjectDataFieldPlan field in plan.Fields)
+                        if (!feature.Scalars.TryGetValue(field.SourceName, out object? value) || value == null)
+                            throw new InvalidOperationException($"{plan.InputClass} '{feature.Name}' has a missing/null mapped {field.SourceName} value. " +
+                                "This workflow cannot prove null-preserving OD import; no default value was substituted.");
+            }
+        }
+
+        private static void VerifyImportedOdSchemas(GisNewDrawingProfile profile, GisNewDrawingSdfSnapshot sdf,
+            IReadOnlyList<GisNewDrawingObjectDataClassPlan> originalPlans)
+        {
+            IReadOnlyList<GisNewDrawingObjectDataTableSchema> schemas = ReadTargetOdSchemas(profile);
+            // Rebuilding validates every materialized table's exact names/types.
+            GisNewDrawingObjectDataPlan.Build(profile, sdf.FieldTypesByClass, schemas);
+            foreach (GisNewDrawingObjectDataClassPlan plan in originalPlans)
+            {
+                int count = plan.InputClass == GisNewDrawingProfile.PipesInputClass ? sdf.Pipes.Count : sdf.Structures.Count;
+                bool exists = schemas.Any(schema => schema.TableName == plan.TableName);
+                if (!exists && (count != 0 || plan.MappingMode == "ExistingObjectDataOnly"))
+                    throw new InvalidOperationException($"Required imported OD table '{plan.TableName}' is missing.");
+                // Documented native behavior: a new table is created only when its
+                // first entity is imported. A zero-row new class can have no table.
+            }
+        }
+
+        private static IReadOnlyDictionary<string, object?> ReadSingleRecord(ObjectId id, GisNewDrawingObjectDataClassPlan plan)
+        {
+            string tableName = plan.TableName;
             object tables = Get(Project(), "ODTables"); // borrowed; never dispose
             object? table = null, records = null, definitions = null;
             try
@@ -284,6 +402,9 @@ namespace CLV_CivilTools.Gis
                                 value = Invoke(record, "get_Item", i) ?? throw new InvalidOperationException("OD value missing.");
                                 string field = Text(Get(definition, "Name"));
                                 string kind = Text(Get(value, "Type"));
+                                GisNewDrawingObjectDataFieldPlan? expectedField = plan.Fields.SingleOrDefault(item => item.OutputName == field);
+                                if (expectedField == null || kind != expectedField.ObjectDataType)
+                                    throw new InvalidOperationException($"Imported {tableName}.{field} has OD value type '{kind}', expected '{expectedField?.ObjectDataType ?? "<unmapped>"}'.");
                                 object scalar = kind switch
                                 {
                                     "Character" => Get(value, "StrValue"),

@@ -1,7 +1,8 @@
 # GIS new-drawing profile preflight tests
 
 This zero-package console runner links the actual production
-`CLV_CivilTools/Gis/GisNewDrawingProfile.cs` without Autodesk dependencies.
+`CLV_CivilTools/Gis/GisNewDrawingProfile.cs` and
+`CLV_CivilTools/Gis/GisNewDrawingObjectDataPlan.cs` without Autodesk dependencies.
 
 Run from the repository root with a .NET 8 SDK/runtime:
 
@@ -35,6 +36,23 @@ document-size limits, providers, duplicate/unknown settings, namespace tricks,
 source filename/path/connection overrides, spatial/attribute filters, class and
 column conflicts, and unsupported block/classification/unique-key settings.
 
+The pure runtime OD plan tests cover exact explicit-field allowlists, schema-
+derived types independent of feature rows, New versus compatible Existing table
+selection, reordered existing fields, independent choices for the two targets,
+unrelated tables, missing/extra schema fields and classes, duplicate/case-aliased
+names, incompatible existing types, rejection of unapproved FDO conversions,
+failure without a partial plan, and immutable snapshots. Approved FDO mappings
+are String to Character, Int16/Int32 to Integer, and Single/Double to Real.
+Byte, Int64, Boolean, DateTime, and other unsupported types are rejected.
+
+Column readback tests exercise both New and Existing plans. Exact mapped fields
+require the planned mode and output name. Every other native column, including a
+case-only source alias, must have empty output and either `NoImportMapping` or
+the planned layer mode, matching the native API's documented column semantics.
+Unexpected modes, outputs, case changes, and whitespace outputs are rejected.
+The native caller must additionally check that all required exact source names
+were present; accepting a cleared alias does not satisfy that requirement.
+
 LoadedProfileName is metadata only: the helper preserves it and never follows
 that path or loads an alternate profile. Actual deployment paths are the two
 explicit server profiles, with the observed period in the LVHEF filename.
@@ -43,5 +61,8 @@ These tests do not prove native Map importer behavior, SDF record counts or
 schema, coordinate conversion, AutoCAD document creation, OD attachment, native
 geometry, save/undo, or template compatibility. The supplied IPFs say
 `NoODTable` / `ImportMappingInvalid` despite explicit `MappedToOD` columns;
-production deliberately reports and preserves that ambiguity. Native import
-must verify actual OD results before claiming success.
+profile parsing deliberately reports and preserves that ambiguity. The pure
+runtime plan interprets only the explicit column mappings and does not change
+either fixture. Native import must apply and read back the plan, then verify
+actual schemas and OD results before claiming success. These tests do not prove
+when Map creates a new table or how it handles empty input classes or null values.

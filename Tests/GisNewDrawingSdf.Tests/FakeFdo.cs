@@ -79,6 +79,7 @@ public sealed class FakeClassData
     public string? ReaderParent { get; set; } = "Civil_Schema";
     public string? MissingProperty { get; set; }
     public string? UnsupportedTypeProperty { get; set; }
+    public Dictionary<string, string> DataTypes { get; } = new(StringComparer.Ordinal);
     public List<Dictionary<string, object?>> Rows { get; } = new();
 }
 public abstract class FakeDisposable : IDisposable
@@ -268,17 +269,19 @@ public sealed class FakeProperties : FakeDisposable
     public FakeProperties(FakeClassData data) { this.data = data; }
     public FakeDataProperty this[string name] => name == data.MissingProperty
         ? throw new KeyNotFoundException("Missing mapped property " + name)
-        : new(name, name == data.UnsupportedTypeProperty);
+        : new(name, name == data.UnsupportedTypeProperty, data.DataTypes.GetValueOrDefault(name));
 }
 public sealed class FakeDataProperty : FakeDisposable
 {
-    public FakeDataProperty(string name, bool unsupported)
+    private readonly string dataType;
+    public FakeDataProperty(string name, bool unsupported, string? declaredType)
     {
-        DataType = unsupported ? "DataType_Decimal" : name is "Name" or "PartSizeName" or "StructureStart" or "StructureEnd"
-            ? "DataType_String" : "DataType_Double";
+        dataType = declaredType ?? (unsupported ? "DataType_Decimal" : name is "Name" or "PartSizeName" or "StructureStart" or "StructureEnd"
+            ? "DataType_String" : "DataType_Double");
     }
     public string PropertyType => "PropertyType_DataProperty";
-    public string DataType { get; }
+    public int DataTypeReadCount { get; private set; }
+    public string DataType { get { DataTypeReadCount++; return dataType; } }
 }
 
 namespace OSGeo.FDO.Geometry

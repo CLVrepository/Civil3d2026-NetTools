@@ -1,3 +1,8 @@
+## 2026-10-08 - Activate the profile's explicit Object Data fields
+- The native profile load reported `NoImportMapping` despite explicit `MappedToOD` columns. The importer now sets the Pipes/Structures table mapping for this import, keeps only the exact profile field allowlist, and verifies the effective table/column settings before import. Shared IPFs remain byte-unchanged.
+- Field types come from the FDO schema even for empty classes. Existing local tables are reused only with exact compatible field names/types; attached Map drawings, incompatible schemas, unsupported conversions and null mapped scalar values stop the operation. New tables follow the native importer's deferred creation on the first imported entity.
+- Post-import checks verify table definitions, typed records and original scalar values in addition to the existing counts/identity/XYZ checks. Adds active pure OD planning/readback tests and schema-snapshot regressions. Tests/full build and native acceptance remain unrun for this update.
+
 ## 2026-10-08 - Read native import mapping outputs correctly
 - Fixes null enum-output pointers in `LayerName`, `DataMapping`, `PointToBlockMapping` and `ColumnDataMapping`. The dedicated reader validates each getter signature, supplies initialized writable storage, validates the returned enum and releases storage in finally.
 - Retains actual profile/layer/OD/column/point-mode validation. No mapping setter or default is substituted for native readback, and input wrappers remain acquired after profile loading. Automated import and discard-on-failure behavior are unchanged.
@@ -1910,4 +1915,3 @@ CHANGELOG
 - Corrected first-page `BY:`, `P.R. BY:`, and `PAGE X OF Y` placement by retaining the original leading tab runs from the City Surveyor template.
 - APN and date replacement now changes only the placeholder text nodes and leaves all original header layout controls intact.
 - Page-number fields are inserted after the preserved template tabs and inherit the original PAGE run formatting.
-

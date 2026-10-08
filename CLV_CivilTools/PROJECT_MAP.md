@@ -2,10 +2,11 @@
 - `Gis/GisNewDrawingCommands.cs`: Session-context orchestration, source/destination documents, shared-resource preflight, fresh-template destination, destination-only completion marker and failure discard.
 - `Gis/GisNewDrawingCoordinateSystem.cs`: active source-code policy; accepts the original drawing's LVF/LVHEF assignment, assigns that code once and verifies readback. It contains no SDF CRS, WKT or MapGuide dictionary logic.
 - `Gis/GisNewDrawingProfile.cs`: immutable validation of the supplied LVF/LVHEF IPFs and exact UNC resource selection; profile tests retain the two byte-exact supplied IPFs.
+- `Gis/GisNewDrawingObjectDataPlan.cs`: active immutable runtime OD plans from exact profile columns and FDO field types, compatible existing-table checks, and native column-readback rules. The profile test runner links this helper.
 - `Gis/GisNewDrawingSdf.cs`: read-only native FDO schema, raw feature/scalar/XYZ snapshots and immutable input hashes. It does not query spatial contexts or SDF CRS metadata.
 - `Gis/GisNewDrawingClone.cs`: selected model-space cloning, dependency collision checks, source/destination geometry/block/attribute/OD verification.
 - `Gis/GisNewDrawingAppearance.cs`: active method-specific color/transparency/linetype snapshot guards used by clone verification.
-- `Gis/GisNewDrawingMapApi.cs`: source-code drawing assignment, incoming/from import-code override, profile loading, effective OD mapping and raw-coordinate/result verification.
+- `Gis/GisNewDrawingMapApi.cs`: source-code drawing assignment, incoming/from import-code override, profile loading, explicit runtime OD activation, native schema/mapping readback and raw-coordinate/result verification.
 - `Gis/GisNewDrawingNativeOutputs.cs`: active exact-signature reader for the four import-setting enum outputs, with correctly owned pointer storage; it reads actual mappings without invoking setters.
 - `Gis/GisPalette.cs`: `CREATE GIS DRAWING` queues the Session command. Existing R5 preparation/cleanup files are untouched. Native acceptance checklist: `Docs/GIS_NEW_DRAWING.md`.
 - `Tests/GisNewDrawingProfile.Tests`, `GisNewDrawingAppearance.Tests`, `GisNewDrawingSdf.Tests`, `GisNewDrawingCoordinateSystem.Tests` and `GisNewDrawingNativeOutputs.Tests` all exercise active code. They sit outside the production project and are not deployment dependencies.

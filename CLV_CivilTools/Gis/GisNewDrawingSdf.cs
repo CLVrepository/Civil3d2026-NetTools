@@ -52,6 +52,7 @@ namespace CLV_CivilTools.Gis
                 string hash = Hash(guard);
                 IReadOnlyList<GisNewDrawingSdfFeature> pipes;
                 IReadOnlyList<GisNewDrawingSdfFeature> structures;
+                var fieldTypesByClass = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
                 using (var native = new NativeScope())
                 {
                     Assembly assembly = FindHostFdoAssembly();
@@ -88,16 +89,18 @@ namespace CLV_CivilTools.Gis
                     // membership independently before accepting either feature reader.
                     VerifyClassDeclarations(connection, commandType, profile.SelectedTables);
                     pipes = ReadFeatures(connection, commandType, geometryFactory, profile.SelectedTables.Single(table =>
-                        table.InputClass == GisNewDrawingProfile.PipesInputClass));
+                        table.InputClass == GisNewDrawingProfile.PipesInputClass), out var pipeFieldTypes);
+                    fieldTypesByClass.Add(GisNewDrawingProfile.PipesInputClass, pipeFieldTypes);
                     structures = ReadFeatures(connection, commandType, geometryFactory, profile.SelectedTables.Single(table =>
-                        table.InputClass == GisNewDrawingProfile.StructuresInputClass));
+                        table.InputClass == GisNewDrawingProfile.StructuresInputClass), out var structureFieldTypes);
+                    fieldTypesByClass.Add(GisNewDrawingProfile.StructuresInputClass, structureFieldTypes);
                 }
                 // No success result escapes until readers/commands/connection have
                 // closed/disposed and the original bytes have been checked again.
                 if (length != guard.Length || modified != File.GetLastWriteTimeUtc(fullPath) || hash != Hash(guard))
                     throw new InvalidDataException("The SDF changed during preflight. Import was not started.");
                 snapshot = new GisNewDrawingSdfSnapshot(fullPath, length, modified, hash,
-                    profile.SourceCoordinateSystem, pipes, structures);
+                    profile.SourceCoordinateSystem, pipes, structures, fieldTypesByClass);
                 detail = string.Empty;
                 return true;
             }
@@ -128,7 +131,7 @@ namespace CLV_CivilTools.Gis
         }
 
         private static IReadOnlyList<GisNewDrawingSdfFeature> ReadFeatures(object connection, Type commandType, object geometryFactory,
-            GisNewDrawingProfileTable table)
+            GisNewDrawingProfileTable table, out IReadOnlyDictionary<string, string> fieldTypes)
         {
             using var scope = new NativeScope();
             object command = scope.Own(Call(connection, "CreateCommand", Enum.Parse(commandType, "CommandType_Select")));
@@ -146,6 +149,7 @@ namespace CLV_CivilTools.Gis
                 throw new InvalidDataException($"{table.InputClass} has no default geometric property.");
             object properties = scope.Own(Get(definition, "Properties"));
             var fields = new List<(string Name, string Getter)>();
+            var declaredTypes = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (GisNewDrawingProfileColumn column in table.MappedColumns)
             {
                 object property = scope.Own(GetItem(properties, column.ColumnName));
@@ -153,6 +157,9 @@ namespace CLV_CivilTools.Gis
                     throw new InvalidDataException($"{table.InputClass}.{column.ColumnName} is not an FDO scalar data property.");
                 string dataType = Text(Get(property, "DataType"));
                 fields.Add((column.ColumnName, ScalarGetter(dataType, table.InputClass + "." + column.ColumnName)));
+                // Retain the declaration already read for getter selection, even
+                // when the class is empty or every value in this field is null.
+                declaredTypes.Add(column.ColumnName, dataType);
             }
             if (!fields.Any(field => field.Name == "Name") || !fields.Any(field => field.Name == "PartSizeName"))
                 throw new InvalidDataException($"{table.InputClass}: Name and PartSizeName must both be mapped.");
@@ -185,6 +192,7 @@ namespace CLV_CivilTools.Gis
                     DecodeGeometry(geometryFactory, geometryBytes, table.InputClass);
                 result.Add(new GisNewDrawingSdfFeature(values, geometryBytes, type, coordinates));
             }
+            fieldTypes = declaredTypes;
             return Array.AsReadOnly(result.ToArray());
         }
 
@@ -450,7 +458,8 @@ namespace CLV_CivilTools.Gis
     internal sealed class GisNewDrawingSdfSnapshot
     {
         internal GisNewDrawingSdfSnapshot(string path, long length, DateTime modified, string hash, string sourceCoordinateSystem,
-            IEnumerable<GisNewDrawingSdfFeature> pipes, IEnumerable<GisNewDrawingSdfFeature> structures)
+            IEnumerable<GisNewDrawingSdfFeature> pipes, IEnumerable<GisNewDrawingSdfFeature> structures,
+            IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> fieldTypesByClass)
         {
             FilePath = path;
             FileLength = length;
@@ -459,6 +468,10 @@ namespace CLV_CivilTools.Gis
             CoordinateSystem = sourceCoordinateSystem;
             Pipes = Array.AsReadOnly(pipes.ToArray());
             Structures = Array.AsReadOnly(structures.ToArray());
+            FieldTypesByClass = new ReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>(
+                fieldTypesByClass.ToDictionary(pair => pair.Key,
+                    pair => (IReadOnlyDictionary<string, string>)new ReadOnlyDictionary<string, string>(
+                        new Dictionary<string, string>(pair.Value, StringComparer.Ordinal)), StringComparer.Ordinal));
         }
         internal string FilePath { get; }
         internal long FileLength { get; }
@@ -466,6 +479,7 @@ namespace CLV_CivilTools.Gis
         internal string FileSha256 { get; }
         // Authoritative original drawing/profile CRS, not a verified SDF CRS.
         internal string CoordinateSystem { get; }
+        internal IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> FieldTypesByClass { get; }
         internal IReadOnlyList<GisNewDrawingSdfFeature> Pipes { get; }
         internal IReadOnlyList<GisNewDrawingSdfFeature> Structures { get; }
         internal int PipeCount => Pipes.Count;

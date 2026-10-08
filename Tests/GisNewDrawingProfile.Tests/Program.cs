@@ -226,6 +226,224 @@ Run("Repeated preflight is deterministic and non-mutating", () =>
     Equal(lvf, File.ReadAllText(lvfPath));
 });
 
+foreach ((string xml, string crs) in new[]
+{
+    (lvf, GisNewDrawingProfile.LvfCoordinateSystem),
+    (lvhef, GisNewDrawingProfile.LvhefCoordinateSystem)
+})
+{
+    Run(crs + ": runtime OD plan creates only the explicit mapped fields", () =>
+    {
+        var profile = Parse(xml, crs);
+        var plans = GisNewDrawingObjectDataPlan.Build(profile, SourceSchemas(), Array.Empty<GisNewDrawingObjectDataTableSchema>());
+        Equal(2, plans.Count);
+        True(plans.All(plan => plan.MappingMode == "NewObjectDataOnly"));
+        Equal("Civil_Schema:Pipes,Civil_Schema:Structures", string.Join(",", plans.Select(plan => plan.InputClass)));
+        Equal("Pipes,Structures", string.Join(",", plans.Select(plan => plan.TableName)));
+        Equal("Name,InsideDiameter,Length,Slope,StartInvert,EndInvert,StructureStart,StructureEnd,PartSizeName",
+            string.Join(",", plans[0].Fields.Select(field => field.SourceName)));
+        Equal("Name,PartSizeName", string.Join(",", plans[1].Fields.Select(field => field.SourceName)));
+        Equal("Character,Real,Real,Real,Real,Real,Character,Character,Character",
+            string.Join(",", plans[0].Fields.Select(field => field.ObjectDataType)));
+        True(plans.SelectMany(plan => plan.Fields).All(field => field.SourceName == field.OutputName));
+        Equal(11, plans.Sum(plan => plan.Fields.Count));
+        True(profile.SelectedTables.All(table => table.ObjectDataName == "" && table.CreateObjectData == "NoODTable" &&
+            table.DataMappingType == "ImportMappingInvalid"));
+        Equal(xml, File.ReadAllText(crs == GisNewDrawingProfile.LvfCoordinateSystem ? lvfPath : lvhefPath));
+    });
+}
+Run("Runtime OD plan reuses compatible existing tables regardless of field order", () =>
+{
+    var existing = ExistingSchemas().Select(table => new GisNewDrawingObjectDataTableSchema(table.TableName, table.Fields.Reverse()));
+    var plans = Plan(existing: existing);
+    True(plans.All(plan => plan.MappingMode == "ExistingObjectDataOnly"));
+    Equal("Name", plans[0].Fields[0].OutputName);
+    Equal("Name", plans[1].Fields[0].OutputName);
+});
+Run("Runtime OD plan chooses New and Existing independently", () =>
+{
+    var plans = Plan(existing: ExistingSchemas().Where(table => table.TableName == "Structures"));
+    Equal("NewObjectDataOnly", plans[0].MappingMode);
+    Equal("ExistingObjectDataOnly", plans[1].MappingMode);
+});
+Run("Unrelated OD tables do not add mappings or fields", () =>
+{
+    var plans = Plan(existing: new[] { new GisNewDrawingObjectDataTableSchema("Other", new[] { new GisNewDrawingObjectDataFieldSchema("Position", "Point") }) });
+    True(plans.All(plan => plan.MappingMode == "NewObjectDataOnly"));
+    Equal(11, plans.Sum(plan => plan.Fields.Count));
+});
+Run("Runtime field order follows the explicit IPF mapping order", () =>
+{
+    var root = XDocument.Parse(lvf).Root!;
+    var pipes = Table(root, "Pipes");
+    XElement[] columns = pipes.Elements("ProfileColumn").Reverse().ToArray();
+    pipes.Elements("ProfileColumn").Remove(); pipes.Add(columns);
+    var plans = GisNewDrawingObjectDataPlan.Build(Parse(root.ToString(), GisNewDrawingProfile.LvfCoordinateSystem),
+        SourceSchemas(), ExistingSchemas());
+    Equal("PartSizeName", plans[0].Fields[0].SourceName);
+    Equal("Name", plans[0].Fields[^1].SourceName);
+});
+foreach ((string sourceType, string expectedType) in new[]
+{
+    ("DataType_String", "Character"), ("DataType_Int16", "Integer"), ("DataType_Int32", "Integer"),
+    ("DataType_Single", "Real"), ("DataType_Double", "Real")
+})
+{
+    Run("Runtime OD type comes from FDO schema: " + sourceType, () =>
+    {
+        var source = SourceSchemas(); PipeSchema(source)["Length"] = sourceType;
+        var field = Plan(source).Single(plan => plan.TableName == "Pipes").Fields.Single(item => item.SourceName == "Length");
+        Equal(sourceType, field.SourceDataType); Equal(expectedType, field.ObjectDataType);
+    });
+}
+foreach (string sourceType in new[]
+{
+    "DataType_Byte", "DataType_Int64", "DataType_Boolean", "DataType_DateTime", "DataType_Decimal",
+    "DataType_BLOB", "DataType_CLOB", "DataType_Unknown", "datatype_string", ""
+})
+{
+    Run("Runtime OD rejects unapproved schema conversion: " + sourceType, () =>
+    {
+        var source = SourceSchemas(); PipeSchema(source)["Length"] = sourceType;
+        PlanRejected(() => Plan(source), "no approved lossless Object Data mapping");
+    });
+}
+Run("Runtime OD rejects a missing source class even without feature rows", () =>
+{
+    var source = SourceSchemas(); source.Remove(GisNewDrawingProfile.StructuresInputClass);
+    PlanRejected(() => Plan(source), "exactly the selected profile input classes");
+});
+Run("Runtime OD rejects extra source classes", () =>
+{
+    var source = SourceSchemas(); source.Add("Civil_Schema:Points", new Dictionary<string, string>());
+    PlanRejected(() => Plan(source), "exactly the selected profile input classes");
+});
+Run("Runtime OD rejects a case alias even with a case-insensitive source dictionary", () =>
+{
+    var source = new Dictionary<string, IReadOnlyDictionary<string, string>>(SourceSchemas(), StringComparer.OrdinalIgnoreCase);
+    var pipes = source[GisNewDrawingProfile.PipesInputClass]; source.Remove(GisNewDrawingProfile.PipesInputClass);
+    source.Add("civil_schema:pipes", pipes);
+    PlanRejected(() => Plan(source), "exactly the selected profile input classes");
+});
+Run("Runtime OD rejects case-colliding source classes", () =>
+{
+    var source = SourceSchemas(); source.Add("civil_schema:pipes", source[GisNewDrawingProfile.PipesInputClass]);
+    PlanRejected(() => Plan(source), "case-colliding");
+});
+Run("Runtime OD rejects missing source field schema", () =>
+{
+    var source = SourceSchemas(); PipeSchema(source).Remove("Length");
+    PlanRejected(() => Plan(source), "exactly the explicitly mapped profile fields");
+});
+Run("Runtime OD rejects extra source field schema instead of mapping it", () =>
+{
+    var source = SourceSchemas(); PipeSchema(source).Add("OutsideDiameter", "DataType_Double");
+    PlanRejected(() => Plan(source), "exactly the explicitly mapped profile fields");
+});
+Run("Runtime OD rejects case-aliased source fields", () =>
+{
+    var source = SourceSchemas(); PipeSchema(source).Remove("Name"); PipeSchema(source).Add("name", "DataType_String");
+    PlanRejected(() => Plan(source), "exactly the explicitly mapped profile fields");
+});
+Run("Runtime OD rejects case-colliding source fields", () =>
+{
+    var source = SourceSchemas(); PipeSchema(source).Add("name", "DataType_String");
+    PlanRejected(() => Plan(source), "case-colliding");
+});
+foreach (string duplicateName in new[] { "Pipes", "pipes" })
+{
+    Run("Runtime OD rejects duplicate or case-colliding existing tables: " + duplicateName, () =>
+        PlanRejected(() => Plan(existing: ExistingSchemas().Append(new GisNewDrawingObjectDataTableSchema(duplicateName,
+            ExistingSchemas()[0].Fields))), "case-colliding"));
+}
+Run("Runtime OD rejects a case-only existing table alias", () =>
+    PlanRejected(() => Plan(existing: new[] { new GisNewDrawingObjectDataTableSchema("pipes", ExistingSchemas()[0].Fields) }), "case aliases"));
+foreach ((string description, Func<IReadOnlyList<GisNewDrawingObjectDataFieldSchema>, IEnumerable<GisNewDrawingObjectDataFieldSchema>> mutate, string error) in
+    new (string, Func<IReadOnlyList<GisNewDrawingObjectDataFieldSchema>, IEnumerable<GisNewDrawingObjectDataFieldSchema>>, string)[]
+{
+    ("missing field", fields => fields.Skip(1), "field names must exactly match"),
+    ("extra field", fields => fields.Append(new("OutsideDiameter", "Real")), "field names must exactly match"),
+    ("case-aliased field", fields => fields.Select(field => field.Name == "Name" ? new("name", field.ObjectDataType) : field), "field names must exactly match"),
+    ("duplicate field", fields => fields.Append(new("Name", "Character")), "case-colliding"),
+    ("case-colliding field", fields => fields.Append(new("name", "Character")), "case-colliding"),
+    ("wrong numeric type", fields => fields.Select(field => field.Name == "Length" ? new("Length", "Integer") : field), "differs from schema-derived"),
+    ("wrong character type", fields => fields.Select(field => field.Name == "Name" ? new("Name", "Real") : field), "differs from schema-derived")
+})
+{
+    Run("Runtime OD rejects an existing table with " + description, () =>
+        PlanRejected(() => Plan(existing: new[] { new GisNewDrawingObjectDataTableSchema("Pipes", mutate(ExistingSchemas()[0].Fields)) }), error));
+}
+Run("Incompatible second target returns no partial runtime plan", () =>
+{
+    IReadOnlyList<GisNewDrawingObjectDataClassPlan>? result = null;
+    var existing = ExistingSchemas();
+    existing[1] = new("Structures", new[] { new GisNewDrawingObjectDataFieldSchema("Name", "Integer"), new("PartSizeName", "Character") });
+    PlanRejected(() => result = Plan(existing: existing), "Structures.Name");
+    True(result == null);
+});
+Run("Runtime OD plan and existing schemas snapshot caller collections", () =>
+{
+    var source = SourceSchemas();
+    var suppliedFields = ExistingSchemas()[0].Fields.ToList();
+    var existing = new List<GisNewDrawingObjectDataTableSchema> { new("Pipes", suppliedFields) };
+    suppliedFields.Clear();
+    Equal(9, existing[0].Fields.Count); ReadOnly(existing[0].Fields);
+    var plans = Plan(source, existing);
+    PipeSchema(source)["Name"] = "DataType_Int64";
+    source.Clear(); existing.Clear();
+    Equal("DataType_String", plans[0].Fields[0].SourceDataType);
+    Equal("ExistingObjectDataOnly", plans[0].MappingMode);
+    Equal(2, plans.Count); ReadOnly(plans);
+    foreach (var plan in plans) ReadOnly(plan.Fields);
+});
+
+foreach (bool existing in new[] { false, true })
+{
+    var plans = Plan(existing: existing ? ExistingSchemas() : Array.Empty<GisNewDrawingObjectDataTableSchema>());
+    var pipes = plans.Single(plan => plan.TableName == "Pipes");
+    string mode = pipes.MappingMode;
+    string otherMode = existing ? "NewObjectDataOnly" : "ExistingObjectDataOnly";
+    Run(mode + ": all exact mapped columns pass readback", () =>
+    {
+        foreach (var plan in plans)
+            foreach (var field in plan.Fields)
+                GisNewDrawingObjectDataPlan.VerifyColumnMapping(plan, field.SourceName, mode, field.OutputName);
+    });
+    foreach (string sourceName in new[] { "OutsideDiameter", "ExtraNativeColumn", "name" })
+    {
+        foreach (string clearedMode in new[] { "NoImportMapping", mode })
+        {
+            Run(mode + ": cleared " + sourceName + " accepts " + clearedMode, () =>
+                GisNewDrawingObjectDataPlan.VerifyColumnMapping(pipes, sourceName, clearedMode, ""));
+            Run(mode + ": unmapped " + sourceName + " rejects nonempty output with " + clearedMode, () =>
+                PlanRejected(() => GisNewDrawingObjectDataPlan.VerifyColumnMapping(pipes, sourceName, clearedMode, "Name"),
+                    "unmapped native column must have empty output"));
+        }
+        Run(mode + ": cleared " + sourceName + " rejects another OD mode", () =>
+            PlanRejected(() => GisNewDrawingObjectDataPlan.VerifyColumnMapping(pipes, sourceName, otherMode, ""),
+                "unmapped native column must have empty output"));
+    }
+    foreach (string wrongMode in new[] { "NoImportMapping", otherMode, "", "UnexpectedMapping", mode.ToLowerInvariant() })
+    {
+        Run(mode + ": mapped field rejects mode '" + wrongMode + "'", () =>
+            PlanRejected(() => GisNewDrawingObjectDataPlan.VerifyColumnMapping(pipes, "Name", wrongMode, "Name"), "differs from planned"));
+    }
+    foreach (string wrongOutput in new[] { "", "name", "PartSizeName", "Name " })
+    {
+        Run(mode + ": mapped field rejects output '" + wrongOutput + "'", () =>
+            PlanRejected(() => GisNewDrawingObjectDataPlan.VerifyColumnMapping(pipes, "Name", mode, wrongOutput), "differs from planned"));
+    }
+    foreach (string wrongMode in new[] { "", "UnexpectedMapping", "noimportmapping" })
+    {
+        Run(mode + ": unmapped field rejects mode '" + wrongMode + "'", () =>
+            PlanRejected(() => GisNewDrawingObjectDataPlan.VerifyColumnMapping(pipes, "ExtraNativeColumn", wrongMode, ""),
+                "unmapped native column must have empty output"));
+    }
+    Run(mode + ": unmapped field output must be empty rather than whitespace", () =>
+        PlanRejected(() => GisNewDrawingObjectDataPlan.VerifyColumnMapping(pipes, "ExtraNativeColumn", mode, " "),
+            "unmapped native column must have empty output"));
+}
+
 Console.WriteLine($"GisNewDrawingProfile: {passed} passed; {failed} failed.");
 return failed == 0 ? 0 : 1;
 
@@ -252,6 +470,49 @@ static void Rejected(string xml, string? crs, string expectedDetail)
     True(!GisNewDrawingProfile.TryParse(xml, crs, out var profile, out string detail), "Unexpected preflight success.");
     True(profile == null, "Rejected profile must not leak a usable plan.");
     True(detail.Contains(expectedDetail, StringComparison.Ordinal), $"Expected '{expectedDetail}' in '{detail}'.");
+}
+IReadOnlyList<GisNewDrawingObjectDataClassPlan> Plan(
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? source = null,
+    IEnumerable<GisNewDrawingObjectDataTableSchema>? existing = null)
+    => GisNewDrawingObjectDataPlan.Build(Parse(lvf, GisNewDrawingProfile.LvfCoordinateSystem),
+        source ?? SourceSchemas(), existing ?? Array.Empty<GisNewDrawingObjectDataTableSchema>());
+static Dictionary<string, IReadOnlyDictionary<string, string>> SourceSchemas() => new(StringComparer.Ordinal)
+{
+    [GisNewDrawingProfile.PipesInputClass] = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["Name"] = "DataType_String", ["InsideDiameter"] = "DataType_Double", ["Length"] = "DataType_Double",
+        ["Slope"] = "DataType_Double", ["StartInvert"] = "DataType_Double", ["EndInvert"] = "DataType_Double",
+        ["StructureStart"] = "DataType_String", ["StructureEnd"] = "DataType_String", ["PartSizeName"] = "DataType_String"
+    },
+    [GisNewDrawingProfile.StructuresInputClass] = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["Name"] = "DataType_String", ["PartSizeName"] = "DataType_String"
+    }
+};
+static Dictionary<string, string> PipeSchema(Dictionary<string, IReadOnlyDictionary<string, string>> source)
+    => (Dictionary<string, string>)source[GisNewDrawingProfile.PipesInputClass];
+static GisNewDrawingObjectDataTableSchema[] ExistingSchemas() => new[]
+{
+    new GisNewDrawingObjectDataTableSchema("Pipes", new[]
+    {
+        new GisNewDrawingObjectDataFieldSchema("Name", "Character"), new("InsideDiameter", "Real"), new("Length", "Real"),
+        new("Slope", "Real"), new("StartInvert", "Real"), new("EndInvert", "Real"), new("StructureStart", "Character"),
+        new("StructureEnd", "Character"), new("PartSizeName", "Character")
+    }),
+    new GisNewDrawingObjectDataTableSchema("Structures", new[]
+    {
+        new GisNewDrawingObjectDataFieldSchema("Name", "Character"), new("PartSizeName", "Character")
+    })
+};
+static void PlanRejected(Action action, string expectedDetail)
+{
+    try { action(); }
+    catch (InvalidDataException ex)
+    {
+        True(ex.Message.Contains(expectedDetail, StringComparison.Ordinal), $"Expected '{expectedDetail}' in '{ex.Message}'.");
+        return;
+    }
+    throw new Exception("Unexpected runtime OD plan success.");
 }
 static XElement Table(XElement root, string name)
     => root.Elements("ProfileTable").Single(table => table.Element("UniqueName")!.Value == "Civil_Schema:" + name);
