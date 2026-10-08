@@ -37,14 +37,29 @@ AutoCAD session, network data, installation, or publication are required.
 - Simulated actual getter failures retain the precise property stage and the
   original exception, including individual RGB channels, Alpha and nested
   linetype classification/TextAt. ReadAt success preserves its original result.
+- Resource comparisons retain exact canonical values independently of display
+  text. Strict source verification compares description and symbol-name values
+  ordinally. Cross-drawing verification ignores only Description values and
+  compares SymbolName values with OrdinalIgnoreCase, without trimming.
+- Missing, extra, duplicate, invalid, or differently classified properties fail
+  closed in both modes, including description fields. Property order does not
+  matter, field names remain exact, and all field differences are returned.
+- Pattern length, dash count, alignment, shape/text payloads, font filenames and
+  paths, font descriptors, FlagBits (including 64), color, transparency, and layer
+  state remain exact. A built-in resource name does not bypass these checks.
+- Diagnostic text is quoted, escaped and truncated without changing comparison
+  values. Entity symbol keys use invariant uppercase only; resource values keep
+  their original spelling for strict source checks.
 
 ## Verification boundary
 
-These portable tests prove the pure helper's gating and snapshot behavior. They
-use simulated native failures and the same ReadAt adapter pattern as
+These portable tests prove the pure helper's gating, snapshot and field-comparison
+behavior. They use simulated native failures and the same ReadAt adapter pattern as
 GisNewDrawingClone; they do not compile or execute that Autodesk-facing class.
 They therefore do not verify Autodesk enum values, the availability or safety of
 native name-presence flags, color reconstruction, native linetype style/shape
-classification, capture completion, clone equivalence, OD, entity geometry,
-rollback, saving, or deployment. Native build and controlled Civil 3D capture
-trials remain required, especially for the reported eInvalidKey failure.
+classification, correct adapter field names/roles, capture completion, clone
+equivalence, OD, entity geometry, rollback, saving, or deployment. Native build and controlled Civil 3D capture
+trials remain required, especially for the reported eInvalidKey and Continuous
+resource-collision failures. Passing helper tests alone does not establish which
+native source/template fields differ or prove successful cloning.

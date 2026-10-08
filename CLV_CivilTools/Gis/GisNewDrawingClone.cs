@@ -72,7 +72,7 @@ namespace CLV_CivilTools.Gis
             GisImportCommands.ObjectDataFingerprintState OdState, string OdFingerprint, BlockReferenceState? Reference);
         internal sealed record BlockReferenceState(ObjectId BlockTableRecord, ObjectId DynamicBlockTableRecord, bool IsDynamicBlock);
         internal sealed record DefinitionState(ObjectId Id, string Handle, string Name, bool IsAnonymous, IReadOnlyList<ObjectId> Children);
-        internal sealed record ResourceState(ObjectId Id, string Handle, string Kind, string Name, string Signature);
+        internal sealed record ResourceState(ObjectId Id, string Handle, string Kind, string Name, IReadOnlyList<ResourceProperty> Properties);
         private sealed record DefinitionClone(DefinitionState Source, ObjectId DestinationId, IReadOnlyList<ObjectId> Children);
 
         internal static Snapshot Capture(AcDocument source)
@@ -180,6 +180,7 @@ namespace CLV_CivilTools.Gis
                             throw new InvalidOperationException($"Source block '{definition.Source.Name}', handle {definition.Source.Handle} -> " +
                                 $"destination handle {definition.DestinationId.Handle}: child topology/order changed after destination activation.");
                     }
+                    VerifyDestinationResources(snapshot, destination.Database, tr);
                     foreach (EntityState expected in snapshot.Entities)
                     {
                         ObjectId destinationId = copies[expected.Id];
@@ -208,7 +209,6 @@ namespace CLV_CivilTools.Gis
                             throw Failure($"Source dependency handle {expected.Handle} -> destination handle {id.Handle}: geometry/OD readback failed", ex);
                         }
                     }
-                    VerifyDestinationResources(snapshot, destination.Database, tr);
                     tr.Commit();
                 }
                 return new Result(copies);
@@ -259,8 +259,13 @@ namespace CLV_CivilTools.Gis
                 catch (System.Exception ex) { throw Failure("Source dependency handle " + expected.Handle + ": capture changed", ex); }
             }
             foreach (ResourceState resource in snapshot.Resources)
-                if (ReadResource((SymbolTableRecord)tr.GetObject(resource.Id, OpenMode.ForRead), tr).Signature != resource.Signature)
-                    throw new InvalidOperationException($"Source {resource.Kind} '{resource.Name}', handle {resource.Handle}: resource changed since capture.");
+            {
+                ResourceState current = ReadResource((SymbolTableRecord)tr.GetObject(resource.Id, OpenMode.ForRead), tr);
+                IReadOnlyList<string> differences = FindResourceDifferences(resource.Properties, current.Properties, strictSource: true);
+                if (differences.Count != 0)
+                    throw new InvalidOperationException($"Source {resource.Kind} '{resource.Name}', handle {resource.Handle}: resource changed since capture. " +
+                        ResourceDifferences(differences));
+            }
             tr.Commit();
         }
 
@@ -454,67 +459,99 @@ namespace CLV_CivilTools.Gis
         private static ResourceState ReadResourceCore(SymbolTableRecord record, Transaction tr)
         {
             string context = $"Resource handle {record.Handle} ({record.GetType().Name})";
-            var key = new Key();
-            key.Add(record.GetType().Name); key.Add(record.Name);
+            var properties = new List<ResourceProperty>();
+            void Add(string name, object? value, ResourcePropertyRole role = ResourcePropertyRole.Value)
+            {
+                var key = new Key();
+                key.Add(value);
+                string display = value switch
+                {
+                    null => "<null>",
+                    double number => number.ToString("R", CultureInfo.InvariantCulture),
+                    bool boolean => boolean ? "true" : "false",
+                    _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "<null>"
+                };
+                properties.Add(new ResourceProperty(name, key.ToString(), display, role));
+            }
+            void ColorProperties(string prefix, ColorValue value)
+            {
+                Add(prefix + ".Mode", value.Mode); Add(prefix + ".Aci", value.Aci);
+                Add(prefix + ".Red", value.Red); Add(prefix + ".Green", value.Green); Add(prefix + ".Blue", value.Blue);
+                Add(prefix + ".HasBookName", value.HasBookName); Add(prefix + ".BookName", value.BookName);
+                Add(prefix + ".HasColorName", value.HasColorName); Add(prefix + ".ColorName", value.ColorName);
+            }
+            Add("RecordType", record.GetType().Name);
+            Add("Name", record.Name, ResourcePropertyRole.SymbolName);
             string kind;
             if (record is LayerTableRecord layer)
             {
                 kind = "layer";
-                AddColor(key, ReadAt(context + ".Color", () => layer.Color), context + ".Color");
-                key.Add(layer.IsOff); key.Add(layer.IsFrozen); key.Add(layer.IsLocked);
-                key.Add(layer.IsPlottable); key.Add(layer.LineWeight);
-                AddTransparency(key, ReadAt(context + ".Transparency", () => layer.Transparency), context + ".Transparency");
-                key.Add(ReadAt(context + ".PlotStyleName", () => layer.PlotStyleName)); key.Add(layer.ViewportVisibilityDefault);
-                key.Add(((LinetypeTableRecord)tr.GetObject(layer.LinetypeObjectId, OpenMode.ForRead)).Name);
-                // Viewport overrides and non-global materials are not proven by this
-                // resource comparison, so do not silently reuse such layer records.
-                key.Add(layer.HasOverrides);
+                ColorProperties("Color", ReadNativeColor(ReadAt(context + ".Color", () => layer.Color), context + ".Color"));
+                Add("IsOff", layer.IsOff); Add("IsFrozen", layer.IsFrozen); Add("IsLocked", layer.IsLocked);
+                Add("IsPlottable", layer.IsPlottable); Add("LineWeight", layer.LineWeight);
+                TransparencyValue transparency = ReadNativeTransparency(ReadAt(context + ".Transparency", () => layer.Transparency), context + ".Transparency");
+                Add("Transparency.Mode", transparency.Mode); Add("Transparency.Alpha", transparency.Alpha);
+                Add("PlotStyleName", ReadAt(context + ".PlotStyleName", () => layer.PlotStyleName), ResourcePropertyRole.SymbolName);
+                Add("ViewportVisibilityDefault", layer.ViewportVisibilityDefault);
+                Add("LinetypeName", ((LinetypeTableRecord)tr.GetObject(layer.LinetypeObjectId, OpenMode.ForRead)).Name, ResourcePropertyRole.SymbolName);
+                // Keep the existing viewport/material safety boundaries. A matching
+                // built-in name never bypasses the captured appearance properties.
+                Add("HasOverrides", layer.HasOverrides);
                 RequireBuiltInMaterial(layer.MaterialId, layer.Handle.ToString(), tr);
-                key.Add(layer.MaterialId.IsNull ? "" : ((Material)tr.GetObject(layer.MaterialId, OpenMode.ForRead)).Name);
+                Add("MaterialName", layer.MaterialId.IsNull ? "" : ((Material)tr.GetObject(layer.MaterialId, OpenMode.ForRead)).Name,
+                    ResourcePropertyRole.SymbolName);
             }
             else if (record is TextStyleTableRecord style)
             {
                 kind = "text style";
-                key.Add(style.FileName); key.Add(style.BigFontFileName); key.Add(style.FlagBits);
-                key.Add(style.IsShapeFile); key.Add(style.IsVertical); key.Add(style.ObliquingAngle);
-                key.Add(style.TextSize); key.Add(style.XScale);
+                Add("FileName", style.FileName); Add("BigFontFileName", style.BigFontFileName);
+                // These are text-generation/mirroring flags, not DXF group-70
+                // referenced/bookkeeping bits. Keep their full rendering value.
+                Add("FlagBits", style.FlagBits);
+                Add("IsShapeFile", style.IsShapeFile); Add("IsVertical", style.IsVertical); Add("ObliquingAngle", style.ObliquingAngle);
+                Add("TextSize", style.TextSize); Add("XScale", style.XScale);
                 var font = style.Font;
-                key.Add(font.TypeFace); key.Add(font.Bold); key.Add(font.Italic); key.Add(font.CharacterSet); key.Add(font.PitchAndFamily);
-                key.Add(style.Annotative);
+                Add("Font.TypeFace", font.TypeFace); Add("Font.Bold", font.Bold); Add("Font.Italic", font.Italic);
+                Add("Font.CharacterSet", font.CharacterSet); Add("Font.PitchAndFamily", font.PitchAndFamily);
+                Add("Annotative", style.Annotative);
             }
             else if (record is LinetypeTableRecord line)
             {
                 kind = "linetype";
-                key.Add(line.Comments); key.Add(line.PatternLength); key.Add(line.NumDashes); key.Add(line.IsScaledToFit);
+                // Description text belongs to the strict source snapshot but does
+                // not alter rendering when an equivalent destination record is reused.
+                Add("Comments", line.Comments, ResourcePropertyRole.Description);
+                Add("PatternLength", line.PatternLength); Add("NumDashes", line.NumDashes); Add("IsScaledToFit", line.IsScaledToFit);
                 for (int i = 0; i < line.NumDashes; i++)
                 {
                     int index = i;
-                    string elementContext = context + $" dash[{index}]";
-                    key.Add(ReadAt(elementContext + ".DashLengthAt", () => line.DashLengthAt(index)));
+                    string prefix = $"Dash[{index}]";
+                    string elementContext = context + " " + prefix;
+                    Add(prefix + ".Length", ReadAt(elementContext + ".DashLengthAt", () => line.DashLengthAt(index)));
                     ObjectId styleId = ReadAt(elementContext + ".ShapeStyleAt", () => line.ShapeStyleAt(index));
                     int shapeNumber = ReadAt(elementContext + ".ShapeNumberAt", () => line.ShapeNumberAt(index));
-                    // ShapeStyleAt is null for a plain dash. ShapeNumberAt is zero
-                    // for text/no shape. Native TextAt is not applicable to plain
-                    // dashes or shape elements: never invoke it for those cases.
                     LinetypeElement element = ReadAt(elementContext + ": classify", () =>
                         ReadLinetypeElement(!styleId.IsNull, shapeNumber,
                             () => ReadAt(elementContext + ".TextAt", () => line.TextAt(index))));
-                    key.Add(element.Kind); key.Add(element.ShapeNumber); key.Add(element.Text);
+                    Add(prefix + ".Kind", element.Kind); Add(prefix + ".ShapeNumber", element.ShapeNumber); Add(prefix + ".Text", element.Text);
                     if (element.Kind != LinetypeElementKind.PlainDash)
                     {
-                        key.Add(ReadAt(elementContext + ".ShapeOffsetAt", () => line.ShapeOffsetAt(index)));
-                        key.Add(ReadAt(elementContext + ".ShapeRotationAt", () => line.ShapeRotationAt(index)));
-                        key.Add(ReadAt(elementContext + ".ShapeScaleAt", () => line.ShapeScaleAt(index)));
-                        key.Add(ReadAt(elementContext + ".ShapeIsUcsOrientedAt", () => line.ShapeIsUcsOrientedAt(index)));
-                        key.Add(ReadAt(elementContext + ".ShapeIsUprightAt", () => line.ShapeIsUprightAt(index)));
-                        key.Add(ReadAt(elementContext + ".ShapeStyle.Name", () =>
-                            ((TextStyleTableRecord)tr.GetObject(styleId, OpenMode.ForRead)).Name));
+                        Add(prefix + ".Offset", ReadAt(elementContext + ".ShapeOffsetAt", () => line.ShapeOffsetAt(index)));
+                        Add(prefix + ".Rotation", ReadAt(elementContext + ".ShapeRotationAt", () => line.ShapeRotationAt(index)));
+                        Add(prefix + ".Scale", ReadAt(elementContext + ".ShapeScaleAt", () => line.ShapeScaleAt(index)));
+                        Add(prefix + ".IsUcsOriented", ReadAt(elementContext + ".ShapeIsUcsOrientedAt", () => line.ShapeIsUcsOrientedAt(index)));
+                        Add(prefix + ".IsUpright", ReadAt(elementContext + ".ShapeIsUprightAt", () => line.ShapeIsUprightAt(index)));
+                        Add(prefix + ".StyleName", ReadAt(elementContext + ".ShapeStyle.Name", () =>
+                            ((TextStyleTableRecord)tr.GetObject(styleId, OpenMode.ForRead)).Name), ResourcePropertyRole.SymbolName);
                     }
                 }
             }
             else throw new InvalidOperationException($"Handle {record.Handle}: unsupported symbol dependency {record.GetType().Name}.");
-            return new ResourceState(record.ObjectId, record.Handle.ToString(), kind, record.Name, key.ToString());
+            return new ResourceState(record.ObjectId, record.Handle.ToString(), kind, record.Name, Array.AsReadOnly(properties.ToArray()));
         }
+
+        private static string ResourceDifferences(IReadOnlyList<string> differences)
+            => string.Join("; ", differences.Take(8)) + (differences.Count > 8 ? $"; {differences.Count - 8} additional difference(s)." : ".");
 
         private static void PreflightDependencies(Snapshot snapshot, Transaction sourceTr, Database destination, Transaction targetTr)
         {
@@ -534,8 +571,13 @@ namespace CLV_CivilTools.Gis
                 bool unsafeLayer = resource.Kind == "layer" &&
                     (((LayerTableRecord)sourceTr.GetObject(resource.Id, OpenMode.ForRead)).HasOverrides ||
                      ((LayerTableRecord)targetTr.GetObject(existingId, OpenMode.ForRead)).HasOverrides);
-                if (resource.Signature != existing.Signature || unsafeLayer || resource.Kind == "linetype" && !builtInLinetype)
-                    throw new InvalidOperationException($"{resource.Kind} collision '{resource.Name}': source handle {resource.Handle}, template handle {existingId.Handle}. Reusing this record would change or leave unverified source appearance; no clone was attempted.");
+                var differences = FindResourceDifferences(resource.Properties, existing.Properties, strictSource: false).ToList();
+                if (unsafeLayer) differences.Add("Viewport overrides cannot be proven equivalent for reuse");
+                if (resource.Kind == "linetype" && !builtInLinetype)
+                    differences.Add("Reuse of non-built-in linetypes is unsupported even when captured fields match");
+                if (differences.Count != 0)
+                    throw new InvalidOperationException($"{resource.Kind} collision '{resource.Name}': source handle {resource.Handle}, template handle {existingId.Handle}. " +
+                        ResourceDifferences(differences) + " No clone was attempted.");
             }
         }
 
@@ -550,8 +592,10 @@ namespace CLV_CivilTools.Gis
                     throw new InvalidOperationException($"Source {expected.Kind} '{expected.Name}', handle {expected.Handle}: resource missing from destination.");
                 ObjectId id = table[expected.Name];
                 ResourceState actual = ReadResource((SymbolTableRecord)tr.GetObject(id, OpenMode.ForRead), tr);
-                if (expected.Signature != actual.Signature)
-                    throw new InvalidOperationException($"Source {expected.Kind} '{expected.Name}', handle {expected.Handle} -> destination handle {id.Handle}: resource definition differs.");
+                IReadOnlyList<string> differences = FindResourceDifferences(expected.Properties, actual.Properties, strictSource: false);
+                if (differences.Count != 0)
+                    throw new InvalidOperationException($"Source {expected.Kind} '{expected.Name}', handle {expected.Handle} -> destination handle {id.Handle}: resource appearance differs. " +
+                        ResourceDifferences(differences));
             }
         }
 
@@ -626,9 +670,9 @@ namespace CLV_CivilTools.Gis
                 throw new InvalidOperationException($"Handle {entity.Handle}: derived curve/block type {entity.GetType().FullName} needs its own complete geometry verifier.");
             var key = new Key();
             string context = $"Entity handle {entity.Handle} ({entity.GetType().Name})";
-            key.Add(entity.GetType().FullName); key.Add(entity.Layer);
+            key.Add(entity.GetType().FullName); key.AddSymbolName(entity.Layer);
             AddColor(key, ReadAt(context + ".Color", () => entity.Color), context + ".Color");
-            key.Add(entity.Linetype); key.Add(entity.LinetypeScale);
+            key.AddSymbolName(entity.Linetype); key.Add(entity.LinetypeScale);
             key.Add(entity.LineWeight); key.Add(entity.Visible);
             AddTransparency(key, ReadAt(context + ".Transparency", () => entity.Transparency), context + ".Transparency");
             switch (entity)
@@ -748,10 +792,10 @@ namespace CLV_CivilTools.Gis
                         value.Add(attribute.Height); value.Add(attribute.WidthFactor); value.Add(attribute.Oblique);
                         value.Add(attribute.HorizontalMode); value.Add(attribute.VerticalMode); value.Add(attribute.Invisible);
                         value.Add(attribute.IsMirroredInX); value.Add(attribute.IsMirroredInY); value.Add(attribute.IsMTextAttribute);
-                        value.Add(attribute.Layer);
+                        value.AddSymbolName(attribute.Layer);
                         AddColor(value, ReadAt($"Attribute handle {attribute.Handle}.Color", () => attribute.Color),
                             $"Attribute handle {attribute.Handle}.Color");
-                        value.Add(((TextStyleTableRecord)tr.GetObject(attribute.TextStyleId, OpenMode.ForRead)).Name);
+                        value.AddSymbolName(((TextStyleTableRecord)tr.GetObject(attribute.TextStyleId, OpenMode.ForRead)).Name);
                         if (attribute.IsMTextAttribute)
                         {
                             using MText text = attribute.MTextAttribute;
@@ -773,7 +817,7 @@ namespace CLV_CivilTools.Gis
             key.Add(text.Normal); key.Add(text.Rotation); key.Add(text.Height); key.Add(text.WidthFactor);
             key.Add(text.Oblique); key.Add(text.Thickness); key.Add(text.HorizontalMode); key.Add(text.VerticalMode);
             key.Add(text.IsMirroredInX); key.Add(text.IsMirroredInY);
-            key.Add(((TextStyleTableRecord)tr.GetObject(text.TextStyleId, OpenMode.ForRead)).Name);
+            key.AddSymbolName(((TextStyleTableRecord)tr.GetObject(text.TextStyleId, OpenMode.ForRead)).Name);
         }
 
         private static void AddMText(Key key, MText text, Transaction tr)
@@ -790,10 +834,10 @@ namespace CLV_CivilTools.Gis
             AddTransparency(key, ReadAt($"MText handle {text.Handle}.BackgroundTransparency", () => text.BackgroundTransparency),
                 $"MText handle {text.Handle}.BackgroundTransparency");
             key.Add(text.ShowBorders);
-            key.Add(((TextStyleTableRecord)tr.GetObject(text.TextStyleId, OpenMode.ForRead)).Name);
+            key.AddSymbolName(((TextStyleTableRecord)tr.GetObject(text.TextStyleId, OpenMode.ForRead)).Name);
         }
 
-        private static void AddColor(Key key, Autodesk.AutoCAD.Colors.Color color, string context)
+        private static ColorValue ReadNativeColor(Autodesk.AutoCAD.Colors.Color color, string context)
         {
             Autodesk.AutoCAD.Colors.ColorMethod method = ReadAt(context + ".ColorMethod", () => color.ColorMethod);
             ColorMode mode = method switch
@@ -813,18 +857,29 @@ namespace CLV_CivilTools.Gis
                 () => ReadAt(context + ".BookName", () => color.BookName),
                 () => ReadAt(context + ".HasColorName", () => color.HasColorName),
                 () => ReadAt(context + ".ColorName", () => color.ColorName));
+            return value;
+        }
+
+        private static void AddColor(Key key, Autodesk.AutoCAD.Colors.Color color, string context)
+        {
+            ColorValue value = ReadNativeColor(color, context);
             key.Add(value.Mode); key.Add(value.Aci); key.Add(value.Red); key.Add(value.Green); key.Add(value.Blue);
             key.Add(value.HasBookName); key.Add(value.BookName); key.Add(value.HasColorName); key.Add(value.ColorName);
         }
 
-        private static void AddTransparency(Key key, Autodesk.AutoCAD.Colors.Transparency transparency, string context)
+        private static TransparencyValue ReadNativeTransparency(Autodesk.AutoCAD.Colors.Transparency transparency, string context)
         {
             TransparencyMode mode = ReadAt(context + ": method", () => GetTransparencyMode(
                 ReadAt(context + ".IsInvalid", () => transparency.IsInvalid),
                 ReadAt(context + ".IsByLayer", () => transparency.IsByLayer),
                 ReadAt(context + ".IsByBlock", () => transparency.IsByBlock),
                 ReadAt(context + ".IsByAlpha", () => transparency.IsByAlpha)));
-            TransparencyValue value = ReadTransparency(mode, () => ReadAt(context + ".Alpha", () => transparency.Alpha));
+            return ReadTransparency(mode, () => ReadAt(context + ".Alpha", () => transparency.Alpha));
+        }
+
+        private static void AddTransparency(Key key, Autodesk.AutoCAD.Colors.Transparency transparency, string context)
+        {
+            TransparencyValue value = ReadNativeTransparency(transparency, context);
             key.Add(value.Mode); key.Add(value.Alpha);
         }
 
@@ -833,6 +888,10 @@ namespace CLV_CivilTools.Gis
         private sealed class Key
         {
             private readonly StringBuilder value = new();
+            // Native symbol tables are case-insensitive. Only reference-name
+            // tokens use this; literal text/font/color payloads remain unchanged.
+            // Resource snapshots keep exact source names for immutability checks.
+            internal void AddSymbolName(string name) => Add(SymbolNameKey(name));
             internal void Add(object? item)
             {
                 string token;

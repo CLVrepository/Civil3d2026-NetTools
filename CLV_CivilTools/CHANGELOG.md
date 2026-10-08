@@ -1,3 +1,8 @@
+## 2026-10-08 - Compare clone resources by rendering properties
+- Separates exact source-resource snapshots from cross-drawing appearance comparison. Linetype description text no longer causes an otherwise equivalent built-in linetype to collide; source rechecks still preserve that metadata exactly.
+- Compares symbol identities case-insensitively in resource and entity references, while keeping literal text, font paths, color names, text-generation flags, patterns and shape settings exact. Matching handles in different databases are not identity evidence.
+- Real collisions now report named property/value differences. Named block and non-built-in linetype reuse restrictions remain. The latest Continuous failure did not expose its differing field; actual native acceptance and executable regressions remain unverified.
+
 ## 2026-10-08 - Preserve new-drawing failure diagnostics
 - Retains the failed operation stage and exception until the temporary drawing is discarded and the source context is restored. Reports exception types, inner details/stack and native AutoCAD status through the surviving active editor; cleanup failures are reported separately.
 - Clarifies that discarded incomplete drawings were never saved, and successful output remains open under its actual new-drawing name for SAVEAS. No input/profile/geometry checks were loosened. The latest native trial's underlying failure remains unidentified until the corrected diagnostic path is exercised.

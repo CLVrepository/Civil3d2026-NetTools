@@ -51,6 +51,16 @@ The IPFs contain `MappedToOD` column entries alongside table-level `NoODTable`, 
 
 Clone checks continue to distinguish inherited/ACI/RGB color and transparency modes without invoking unsupported getters. Generated anonymous block names may change between drawings only when exact IdMapping/reference/geometry/topology checks establish their identity. Named block collisions remain guarded.
 
+## Built-in resource collisions
+
+An empty Blank drawing still has built-in records such as Continuous, ByLayer, ByBlock, layer 0 and Standard. The command checks their captured rendering properties before reusing a compatible record; their names alone are not an exemption, and equal handles from separate databases are not compared as identity.
+
+Linetype Comments is a description shown in dialogs, not its pattern definition. It remains part of exact source-unchanged checks but is excluded from cross-drawing appearance comparison. Symbol-name case follows native case-insensitive table identity consistently in resource and entity references. Pattern length/count, scaling, every dash/shape/text setting and style dependency remain checked. Text-style FlagBits controls mirrored text and remains exact, as do font paths, font descriptors, text content and color/book names. No filename-only or blanket built-in fallback is used.
+
+A genuine conflict reports the differing property names and source/target values before cloning, or during destination readback if cloning changed a resource. Named block collisions and non-built-in linetype reuse remain unsupported. Existing material/viewport-override restrictions are unchanged; this does not add support for richer resource types.
+
+The latest native trial identified a Continuous collision before any clone but did not expose the actual differing field. Description/name-case acceptance is based on the documented contracts; the trial must still verify the actual definitions and output. The original shared template is never edited.
+
 ## Validation
 
 Run the existing profile, appearance, SDF, source-coordinate policy and storm regression suites, then build the actual plugin against installed Civil 3D 2026/Map assemblies. For a .NET 10-only test executor, use `-p:TargetFramework=net10.0 -p:GisTestTargetFramework=net10.0`. Do not retarget the production project as part of this feature.

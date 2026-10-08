@@ -331,6 +331,166 @@ Run("ReadAt success returns the original result and invokes once", () =>
 Run("ReadAt does not turn a successful null into an invented value", () =>
     Equal<string?>(null, ReadAt<string?>("optional value", () => null)));
 
+Run("Resource descriptions may differ only across drawings", () =>
+{
+    var source = new[] { Property("Comments", "Solid line", ResourcePropertyRole.Description) };
+    var target = new[] { Property("Comments", "", ResourcePropertyRole.Description) };
+    Equal(0, FindResourceDifferences(source, target, strictSource: false).Count);
+    IReadOnlyList<string> differences = FindResourceDifferences(source, target, strictSource: true);
+    Equal(1, differences.Count);
+    Contains("Comments", differences[0]);
+    Contains("Solid line", differences[0]);
+});
+
+foreach (string field in new[] { "Name", "Linetype.Name", "ShapeStyle.Name" })
+{
+    Run($"Resource symbol {field} ignores only case across drawings", () =>
+    {
+        var source = new[] { Property(field, "Continuous", ResourcePropertyRole.SymbolName) };
+        var target = new[] { Property(field, "CONTINUOUS", ResourcePropertyRole.SymbolName) };
+        Equal(0, FindResourceDifferences(source, target, strictSource: false).Count);
+        Equal(1, FindResourceDifferences(source, target, strictSource: true).Count);
+        Equal(1, FindResourceDifferences(source,
+            new[] { Property(field, "Continuous ", ResourcePropertyRole.SymbolName) }, strictSource: false).Count);
+        Equal(1, FindResourceDifferences(source,
+            new[] { Property(field, "Dashed", ResourcePropertyRole.SymbolName) }, strictSource: false).Count);
+        Equal("Continuous", source[0].Value);
+    });
+}
+
+// No built-in names, zero-dash state, flags, fonts, or colors excuse a payload
+// difference. The adapter supplies exact canonical values for these fields.
+foreach ((string field, string original, string changed) in new[]
+{
+    ("PatternLength", "double:0", "double:0.0000000001"),
+    ("NumDashes", "Int32:0", "Int32:1"),
+    ("IsScaledToFit", "bool:0", "bool:1"),
+    ("dash[0].Length", "double:0.5", "double:-0.5"),
+    ("dash[0].ShapeNumber", "Int32:1", "Int32:2"),
+    ("dash[0].ShapeScale", "double:1", "double:2"),
+    ("dash[0].Text", "GAS", "gas"),
+    ("dash[0].Text", " GAS", "GAS"),
+    ("FileName", "Arial.ttf", "arial.ttf"),
+    ("FileName", @"C:\Fonts\simplex.shx", "simplex.shx"),
+    ("BigFontFileName", "bigfont.shx", ""),
+    ("Font.TypeFace", "Arial", "Arial Narrow"),
+    ("Font.Bold", "bool:0", "bool:1"),
+    ("Font.Italic", "bool:0", "bool:1"),
+    ("Font.CharacterSet", "Int32:0", "Int32:2"),
+    ("Font.PitchAndFamily", "Int32:0", "Int32:34"),
+    ("FlagBits", "Byte:0", "Byte:2"),
+    ("FlagBits", "Byte:0", "Byte:4"),
+    ("FlagBits", "Byte:0", "Byte:64"),
+    ("TextSize", "double:0", "double:2.5"),
+    ("XScale", "double:1", "double:0.8"),
+    ("IsShapeFile", "bool:0", "bool:1"),
+    ("IsVertical", "bool:0", "bool:1"),
+    ("Annotative", "False", "True"),
+    ("Color.Mode", "ByLayer", "Aci"),
+    ("Color.Aci", "Int32:7", "Int32:1"),
+    ("Color.Rgb", "17,34,51", "17,34,52"),
+    ("Color.BookName", "Book A", "Book B"),
+    ("Color.ColorName", "Blue", "blue"),
+    ("Transparency.Alpha", "Byte:0", "Byte:255"),
+    ("IsFrozen", "bool:0", "bool:1")
+})
+{
+    Run($"Resource {field} remains exact: {original} versus {changed}", () =>
+    {
+        var source = new[] { Property("Name", "Continuous", ResourcePropertyRole.SymbolName), Property(field, original) };
+        var target = new[] { source[0], Property(field, changed) };
+        foreach (bool strict in new[] { false, true })
+        {
+            IReadOnlyList<string> differences = FindResourceDifferences(source, target, strict);
+            Equal(1, differences.Count);
+            Contains(field, differences[0]);
+        }
+    });
+}
+
+foreach (bool strict in new[] { false, true })
+{
+    foreach (ResourcePropertyRole role in Enum.GetValues<ResourcePropertyRole>())
+    {
+        Run($"Missing, extra and duplicate {role} properties fail; strict={strict}", () =>
+        {
+            ResourceProperty value = Property("field", "value", role);
+            ResourceProperty[] none = Array.Empty<ResourceProperty>();
+            Contains("missing target property", FindResourceDifferences(new[] { value }, none, strict).Single());
+            Contains("extra target property", FindResourceDifferences(none, new[] { value }, strict).Single());
+            Contains("duplicate source property", FindResourceDifferences(new[] { value, value }, new[] { value }, strict).Single());
+            Contains("duplicate target property", FindResourceDifferences(new[] { value }, new[] { value, value }, strict).Single());
+            Equal(2, FindResourceDifferences(new[] { value, value }, new[] { value, value }, strict).Count);
+        });
+    }
+    Run($"Roles must match before value allowances; strict={strict}", () =>
+    {
+        foreach (ResourcePropertyRole sourceRole in Enum.GetValues<ResourcePropertyRole>())
+            foreach (ResourcePropertyRole targetRole in Enum.GetValues<ResourcePropertyRole>())
+                if (sourceRole != targetRole)
+                    Contains("property role differs", FindResourceDifferences(
+                        new[] { Property("Name", "same", sourceRole) },
+                        new[] { Property("Name", "same", targetRole) }, strict).Single());
+    });
+    Run($"Field names remain exact and reordering is harmless; strict={strict}", () =>
+    {
+        var source = new[] { Property("A", "first"), Property("a", "second") };
+        Equal(0, FindResourceDifferences(source, source.Reverse(), strict).Count);
+        Equal(2, FindResourceDifferences(new[] { source[0] }, new[] { Property("a", "first") }, strict).Count);
+    });
+    Run($"Invalid property snapshots fail closed; strict={strict}", () =>
+    {
+        foreach (ResourceProperty invalid in new[]
+        {
+            null!, Property("", "value"), Property("field", null!),
+            Property("field", "value", (ResourcePropertyRole)99)
+        })
+            True(FindResourceDifferences(new[] { invalid }, new[] { invalid }, strict).Count > 0);
+    });
+    Run($"All differing fields are returned; strict={strict}", () =>
+    {
+        var source = new[] { Property("PatternLength", "0"), Property("NumDashes", "0"), Property("FlagBits", "0") };
+        var target = new[] { Property("PatternLength", "1"), Property("NumDashes", "1"), Property("FlagBits", "2") };
+        IReadOnlyList<string> differences = FindResourceDifferences(source, target, strict);
+        Equal(3, differences.Count);
+        foreach (ResourceProperty property in source) True(differences.Any(value => value.Contains(property.Name, StringComparison.Ordinal)));
+    });
+}
+
+Run("Resource display spelling never participates in comparison", () =>
+{
+    var source = new[] { new ResourceProperty("Font", "canonical", "first presentation") };
+    Equal(0, FindResourceDifferences(source, new[] { source[0] with { Display = "different presentation" } }, true).Count);
+    Equal(1, FindResourceDifferences(source, new[] { source[0] with { Value = "different canonical" } }, false).Count);
+});
+Run("Diagnostic escaping and truncation never alter canonical comparison", () =>
+{
+    string prefix = new string('x', 250);
+    var source = new[] { Property("Comments", prefix + "\nA", ResourcePropertyRole.Description) };
+    var target = new[] { Property("Comments", prefix + "\nB", ResourcePropertyRole.Description) };
+    Equal(FormatResourceDisplay(source[0].Display), FormatResourceDisplay(target[0].Display));
+    Equal(1, FindResourceDifferences(source, target, true).Count);
+    Equal(0, FindResourceDifferences(source, target, false).Count);
+    Equal(prefix + "\nA", source[0].Value);
+    string display = FormatResourceDisplay("quote\" slash\\\r\n\t\0\u001b\u2028\u2029\u202e");
+    Equal("\"quote\\\" slash\\\\\\r\\n\\t\\u0000\\u001B\\u2028\\u2029\\u202E\"", display);
+    True(!display.Any(char.IsControl));
+    string truncated = FormatResourceDisplay(prefix);
+    True(truncated.Length <= 160);
+    True(truncated.EndsWith("...\"", StringComparison.Ordinal));
+    Equal("\"\"", FormatResourceDisplay(""));
+    Equal("<null>", FormatResourceDisplay(null));
+});
+Run("Entity symbol keys fold case invariantly without trimming or modifying resource values", () =>
+{
+    Equal("CONTINUOUS", SymbolNameKey("Continuous"));
+    Equal("STANDARD", SymbolNameKey("standard"));
+    Equal(" V-SURV ", SymbolNameKey(" v-surv "));
+    Equal(SymbolNameKey("ByLayer"), SymbolNameKey("BYLAYER"));
+    NotEqual(SymbolNameKey("style"), SymbolNameKey("style "));
+    Throws<ArgumentNullException>(() => SymbolNameKey(null!));
+});
+
 Console.WriteLine($"\n{passed} passed; {failed} failed.");
 return failed == 0 ? 0 : 1;
 
@@ -365,6 +525,8 @@ static T Throws<T>(Action action) where T : Exception
     catch (Exception error) { throw new Exception($"Expected {typeof(T).Name}, got {error.GetType().Name}.", error); }
     throw new Exception($"Expected {typeof(T).Name}; no exception was thrown.");
 }
+static ResourceProperty Property(string name, string value, ResourcePropertyRole role = ResourcePropertyRole.Value)
+    => new ResourceProperty(name, value, value, role);
 
 sealed class ColorProbe
 {
