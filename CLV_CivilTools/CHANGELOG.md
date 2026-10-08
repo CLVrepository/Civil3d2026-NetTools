@@ -1,3 +1,8 @@
+## 2026-10-08 - Register copied geometry for initial display
+- Setup-only trial `16e46b4` completed and verified 42 survey objects, but they appeared only after saving/closing/reopening. The new drawing now marks only its verified cloned entities graphics-modified, queues graphics while transaction-resident, commits, and then regenerates/updates the screen after releasing the document lock.
+- Reuses the existing storm-preparation display sequence without changing geometry, visibility, layers, transparency or dynamic state. Display-only failures produce a warning and preserve the verified unsaved result; layer locks are respected. Setup/copy failures retain their discard behavior.
+- Automatic import remains removed. Static review is complete; executable tests/full build and immediate native display remain unrun for this correction.
+
 ## 2026-10-08 - Keep GIS drawing setup and use manual MAPIMPORT
 - User-directed fallback after the final automatic trial: `CLV-GIS-NEW-DRAWING` now creates Blank, matches source units/CRS, clones and verifies eligible survey objects, and leaves the destination active and unsaved with the matching IPF path and manual MAPIMPORT/SAVEAS steps. No SDF selection, preflight or automatic import remains.
 - Final automatic commit `c15fbce` stopped before Import because mapped `Civil_Schema:Pipes.Name` returned `Name` without writing its enum output. Copy verification had passed; the incomplete drawing was discarded and no output was saved. Further automatic-import debugging is paused.

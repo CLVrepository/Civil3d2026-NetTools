@@ -91,6 +91,7 @@ namespace CLV_CivilTools.Gis
                 AcadApp.DocumentManager.MdiActiveDocument = destination;
                 stage = "selecting the copied destination working database";
                 HostApplicationServices.WorkingDatabase = destination.Database;
+                var displayWarnings = new List<string>();
                 stage = "locking the destination drawing for setup verification";
                 using (destination.LockDocument())
                 {
@@ -100,18 +101,38 @@ namespace CLV_CivilTools.Gis
                         throw new InvalidOperationException("The copied drawing's insertion units differ from the source.");
                     if (Hash(templateGuard) != templateHash)
                         throw new InvalidOperationException("The shared Blank template changed during setup.");
+                    // Native cloning preserved the database objects, but a later
+                    // REGEN alone did not make their initial graphics appear.
+                    // Register only the verified destination copies, while they
+                    // are transaction-resident, just as the storm prep path does.
+                    try { QueueClonedGraphics(destination.Database, cloned.Ids.Values); }
+                    catch (System.Exception graphicsError)
+                    {
+                        // In particular, do not unlock a source-derived layer to
+                        // perform a display-only write. The copied data is valid.
+                        displayWarnings.Add("Could not register the copied objects for initial display: " + DescribeFailure(graphicsError));
+                    }
                     stage = "recording setup completion for manual import";
                     SetSetupState(destination.Database, "SETUP_READY_MANUAL_IMPORT", source.Name, profilePath, sourceCs);
-                    stage = "regenerating the prepared drawing";
-                    destination.Editor.Regen();
-                    complete = true;
-                    stage = "reporting the prepared unsaved drawing";
-                    destination.Editor.WriteMessage($"\nCLV-GIS-NEW-DRAWING setup complete: {cloned.CopiedCount} survey object(s) copied and verified at original coordinates. " +
-                        $"Coordinate system: {sourceCs}.\nNew drawing: {destination.Name}. It is active and unsaved.\n" +
-                        "Next: run MAPIMPORT, select your exported SDF, and load this matching profile:\n" +
-                        profilePath + "\nComplete MAPIMPORT manually, then use SAVEAS to choose the drawing name and folder. " +
-                        "Run the existing GIS preparation command after importing the network.");
                 }
+                complete = true;
+                // Refresh only after the graphics transaction and final document
+                // lock have closed. A display-only failure must retain the verified
+                // unsaved drawing and its manual-import handoff.
+                stage = "refreshing the prepared drawing display";
+                try { destination.Editor.Regen(); destination.Editor.UpdateScreen(); }
+                catch (System.Exception graphicsError)
+                {
+                    displayWarnings.Add("Could not refresh the prepared drawing display: " + DescribeFailure(graphicsError));
+                }
+                stage = "reporting the prepared unsaved drawing";
+                destination.Editor.WriteMessage($"\nCLV-GIS-NEW-DRAWING setup complete: {cloned.CopiedCount} survey object(s) copied and verified at original coordinates. " +
+                    $"Coordinate system: {sourceCs}.\nNew drawing: {destination.Name}. It is active and unsaved.\n" +
+                    "Next: run MAPIMPORT, select your exported SDF, and load this matching profile:\n" +
+                    profilePath + "\nComplete MAPIMPORT manually, then use SAVEAS to choose the drawing name and folder. " +
+                    "Run the existing GIS preparation command after importing the network.");
+                foreach (string warning in displayWarnings)
+                    destination.Editor.WriteMessage("\nDISPLAY WARNING: {0}\nThe copied geometry remains verified and this drawing is still open and unsaved.", warning);
             }
             catch (System.Exception ex)
             {
@@ -202,6 +223,21 @@ namespace CLV_CivilTools.Gis
                 if (current is Autodesk.AutoCAD.Runtime.Exception native)
                     detail += "\nNative AutoCAD ErrorStatus: " + native.ErrorStatus;
             return detail;
+        }
+
+        private static void QueueClonedGraphics(Database database, IEnumerable<ObjectId> copiedIds)
+        {
+            using Transaction graphics = database.TransactionManager.StartTransaction();
+            foreach (ObjectId id in copiedIds.Distinct())
+            {
+                if (id.IsNull || !id.IsValid || id.IsErased || id.Database != database)
+                    throw new InvalidOperationException("A verified clone is unavailable for destination graphics registration.");
+                var entity = graphics.GetObject(id, OpenMode.ForWrite, false) as Entity
+                    ?? throw new InvalidOperationException("A verified clone is not an Entity during graphics registration.");
+                entity.RecordGraphicsModified(true);
+            }
+            graphics.TransactionManager.QueueForGraphicsFlush();
+            graphics.Commit();
         }
 
         private static void WriteDiagnostic(Document source, string message)

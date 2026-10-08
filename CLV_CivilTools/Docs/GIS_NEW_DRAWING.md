@@ -28,6 +28,8 @@ The copy path retains its existing source snapshots, dependency checks, geometry
 
 If drawing creation, assignment, copying or setup verification fails, the command attempts to discard only its freshly created incomplete drawing and restore the source context. The cause and any cleanup error remain visible in the surviving editor. If disposal fails, the remaining drawing is explicitly reported incomplete and must be closed without saving. Once setup completes, the command has ended; a later manual MAPIMPORT operation does not trigger this command's discard logic.
 
+After verifying the copied data, the command marks only those destination entities graphics-modified and queues their graphics inside a destination transaction. It commits and releases the document lock before REGEN and UpdateScreen. This follows the existing storm-preparation graphics sequence. Entity visibility, layer on/frozen/locked state, transparency and dynamic properties remain unchanged. A graphics-only failure is reported as a display warning while retaining the verified unsaved drawing; layer locks are never overridden for refresh. Autodesk documents [graphics modification on entity close](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_Entity_RecordGraphicsModified__MarshalAsUnmanagedType_U1__bool.html) and [queuing modified transaction-resident entities](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_TransactionManager_QueueForGraphicsFlush.html).
+
 The destination-only `CLV_GIS_NEW_DRAWING_V2` Xrecord records `SETUP_READY_MANUAL_IMPORT`. It marks verified drawing setup, not verified network import. Existing conversion commands do not interpret that record.
 
 ## Why automatic import is paused
@@ -38,7 +40,9 @@ On 2026-10-08 the user directed that automatic-import debugging stop and request
 
 ## Validation
 
-The setup-only change has static review and reference checks. Its executable tests, full plugin build and native completion path remain unrun in the authoring environment because the .NET SDK and Autodesk runtime are unavailable. Successful copy stages in earlier trials do not establish a complete pass for this update.
+The user ran setup-only commit `16e46b4`: it reported 42 copied/verified survey objects and an active unsaved drawing with the source CRS. The objects were initially invisible but appeared after saving, closing and reopening; this is the user's corrected observation. That supports an initial graphics-registration gap rather than lost stored geometry. The previous path performed REGEN without explicitly registering the clones' graphics.
+
+The display correction has static review and reference checks. Its executable tests, full plugin build and initial native display remain unrun in the authoring environment because the .NET SDK and Autodesk runtime are unavailable. Native acceptance must confirm that the objects now appear immediately without saving/reopening.
 
 Retained relevant tests:
 
