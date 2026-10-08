@@ -22,9 +22,9 @@ Shared files are read-only inputs. No mapped drive, copied profile, new LISP hel
 4. Clone eligible geometry and dependencies at native coordinates. Verify geometry, attributes, dynamic state, Object Data, mapped definitions and child topology. Incompatible named definitions stop the operation instead of replacing existing resources.
 5. Initialize the native importer and load the one matching IPF. For each selected input layer, explicitly set its incoming/from coordinate-system code to the source drawing's code and read it back. The destination already has that same code.
 6. Import Pipes and Structures, then compare entity counts, unique identities, mapped OD and every vertex XYZ against the raw SDF snapshot. Require zero transformation skips and an absolute coordinate difference no greater than 0.000001 drawing units. Unexpected transformed/scaled output fails verification.
-7. Leave the verified drawing open and unsaved. Review/save it before running the existing GIS preparation command.
+7. Leave the verified drawing open and unsaved. The completion message identifies its drawing name. Use SAVEAS to choose a file name and folder before running the existing GIS preparation command.
 
-The source is unchanged. File sharing guards and before/after hashes detect changed inputs. Failure or cancellation after destination creation attempts to discard only this command's fresh drawing and return to the original. If disposal fails, the remaining drawing is explicitly reported incomplete and must be closed without saving. A destination-only `CLV_GIS_NEW_DRAWING_V1` Xrecord records setup status; existing conversion commands do not interpret it.
+The source is unchanged. File sharing guards and before/after hashes detect changed inputs. Failure or cancellation after destination creation attempts to discard only this command's fresh drawing and return to the original. If disposal fails, the remaining drawing is explicitly reported incomplete and must be closed without saving. Failure reporting is deferred until cleanup/restoration completes, so the failed operation stage and captured exception remain visible in the surviving document instead of being lost with a discarded drawing. A discarded attempt creates no saved output file. Cleanup failures supplement the original report. A destination-only `CLV_GIS_NEW_DRAWING_V1` Xrecord records setup status; existing conversion commands do not interpret it.
 
 ## Coordinate handling
 
@@ -33,8 +33,6 @@ The simplified workflow uses Map `ActiveProject.Projection` for drawing assignme
 Autodesk Map 3D 2026 documents `InputLayer.TargetCoordinateSystem` as the read/write coordinate system that incoming data is transformed **from**, corresponding to the Coordinate System column in the Import dialog. Its name does not mean the drawing's output CRS. The command explicitly sets it to the source drawing's code after `LoadImportFormat`, so incoming interpretation and destination assignment agree. `OriginalCoordinateSys` is documented unimplemented and is not used.
 
 Both supplied IPFs enable coordinate conversion; they remain unchanged. The .NET importer does not expose a separate global conversion toggle. Giving input and destination the same source code establishes the intended identity import, and raw XYZ readback verifies the result. The filename alone is never treated as proof that imported coordinates stayed unchanged. No transform function, dictionary edit or SDF metadata write is performed by this command.
-
-The user-referenced Google Earth and CLB menu LISP routines were not available in the repository or the inspected Library candidates, so their exact implementation has not been claimed as reviewed or reused. The documented Map drawing-assignment API is already used by the command.
 
 ## Preserved data checks and limits
 

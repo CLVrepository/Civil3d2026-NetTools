@@ -56,9 +56,6 @@ namespace CLV_CivilTools.Gis
             internal IReadOnlyList<ResourceState> Resources { get; }
             internal IReadOnlyList<EntityState> DependencyEntities { get; }
             internal int SelectedCount => Entities.Count;
-            internal int CurveCount => Entities.Count(entity => entity.Kind == "curve");
-            internal int StructureBlockCount => Entities.Count(entity => entity.Kind == "structure block");
-            internal int MarkerCount => Entities.Count(entity => entity.Kind == "marker");
         }
 
         internal sealed class Result

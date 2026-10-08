@@ -10,7 +10,7 @@ For a .NET 10-only executor use `-p:TargetFramework=net10.0 -p:GisTestTargetFram
 
 These package-free tests link the production policy/profile code. They test the exact two supported source codes, missing/unsupported source refusal before writes, one assignment followed by readback, replacement of empty/mismatched/malformed incoming labels, readback mismatches, and setter/reader failures. No MapGuide runtime or fake assembly is referenced or loaded.
 
-The old dictionary/WKT comparison and reflection-wrapper suite were removed because the user's intended workflow does not require SDF CRS validation. MapGuide parser/dictionary ownership tests are no longer relevant to this command. This does not claim that incoming SDF labels are correct; the user-selected SDF's raw coordinates are intentionally interpreted in the original drawing's assigned CRS.
+The user-selected SDF's raw coordinates are intentionally interpreted in the original drawing's assigned CRS. These tests do not certify embedded SDF coordinate-system labels.
 
 The importer still verifies every imported vertex against the raw SDF XYZ coordinates (absolute tolerance 0.000001 drawing units), as well as counts, identities and mapped OD. A native transform/scale that changes coordinates therefore fails verification and the incomplete new drawing is discarded. These portable tests cannot establish native import behavior or end-to-end acceptance.
 

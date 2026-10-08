@@ -365,12 +365,5 @@ namespace CLV_CivilTools.Gis
             finally { DisposeOwned(enumerator); }
         }
         private static void DisposeOwned(object? value) { if (value is IDisposable disposable) disposable.Dispose(); }
-        internal static string ErrorMessage(System.Exception exception)
-        {
-            var messages = new List<string>();
-            for (System.Exception? current = exception; current != null; current = current.InnerException)
-                if (current is not TargetInvocationException && !messages.Contains(current.Message)) messages.Add(current.Message);
-            return string.Join(" | ", messages);
-        }
     }
 }

@@ -1,7 +1,14 @@
+## 2026-10-08 - Preserve new-drawing failure diagnostics
+- Retains the failed operation stage and exception until the temporary drawing is discarded and the source context is restored. Reports exception types, inner details/stack and native AutoCAD status through the surviving active editor; cleanup failures are reported separately.
+- Clarifies that discarded incomplete drawings were never saved, and successful output remains open under its actual new-drawing name for SAVEAS. No input/profile/geometry checks were loosened. The latest native trial's underlying failure remains unidentified until the corrected diagnostic path is exercised.
+- Includes the requested cleanup of three unused snapshot counters and stale workflow notes. Active helpers/tests remain; the unused MapGuide fixture and fake project are absent.
+
 ## 2026-10-08 - Source drawing controls GIS import coordinates
 - Simplifies `CLV-GIS-NEW-DRAWING` to use the original drawing's assigned LVF/LVHEF code, assign it once to the new Blank drawing, and load the one matching supplied IPF. Explicitly sets each selected incoming import layer to that same code.
 - Removes mandatory SDF CRS/WKT/spatial-context verification and the MapGuide dictionary/reflection machinery. Raw SDF feature/schema/OD checks, file guards, clone preservation and post-import XYZ/count/OD verification remain.
 - Replaces the obsolete semantic-CRS fake/tests with source-code assignment/readback regressions, including missing source handling and arbitrary embedded SDF CRS labels. Shared IPFs and existing R5 commands are unchanged. Full native workflow acceptance remains pending.
+
+The MapGuide-specific CRS work in the next three historical entries was superseded by the source-authoritative workflow above; that implementation and fake project are no longer in the codebase. Anonymous-block identity verification remains active.
 
 ## 2026-10-07 - Native CRS hidden-method resolution
 - Resolves each reflected CRS member at the nearest compatible declaring class with an exact return type. Handles the installed wrapper's hidden nonvirtual `ToString()` and integer `GetType()` without accepting inherited `System.Object` methods or arbitrary overload order.

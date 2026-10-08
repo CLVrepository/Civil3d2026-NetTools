@@ -1,10 +1,13 @@
-## 2026-10-07 - Separate GIS drawing setup
-- New `Gis/GisNewDrawingCommands.cs`: Session-context orchestration, explicit source/destination documents, shared-resource preflight, fresh-template destination, strict projection readback, destination-only completion marker and failure discard.
-- New `Gis/GisNewDrawingProfile.cs`: immutable, Autodesk-independent validation of the supplied LVF/LVHEF IPFs and exact UNC resource resolution; `Tests/GisNewDrawingProfile.Tests` contains byte-exact profile fixtures.
-- New `Gis/GisNewDrawingSdf.cs`: read-only native FDO spatial-context/feature/scalar preflight and immutable input hashes; no custom SQLite/binary parser.
-- New `Gis/GisNewDrawingClone.cs`: selected model-space cloning, dependency collision checks, source/destination geometry/block/attribute/OD verification.
-- New `Gis/GisNewDrawingMapApi.cs`: documented Map importer initialization/profile loading, effective-mapping validation, result/OD verification. No guessed mapping repairs or borrowed Map singleton disposal.
-- `Gis/GisPalette.cs`: new `CREATE GIS DRAWING` button queues the Session command. Existing R5 preparation/cleanup files are untouched. Native acceptance checklist: `Docs/GIS_NEW_DRAWING.md`.
+## 2026-10-08 - Separate GIS drawing setup
+- `Gis/GisNewDrawingCommands.cs`: Session-context orchestration, source/destination documents, shared-resource preflight, fresh-template destination, destination-only completion marker and failure discard.
+- `Gis/GisNewDrawingCoordinateSystem.cs`: active source-code policy; accepts the original drawing's LVF/LVHEF assignment, assigns that code once and verifies readback. It contains no SDF CRS, WKT or MapGuide dictionary logic.
+- `Gis/GisNewDrawingProfile.cs`: immutable validation of the supplied LVF/LVHEF IPFs and exact UNC resource selection; profile tests retain the two byte-exact supplied IPFs.
+- `Gis/GisNewDrawingSdf.cs`: read-only native FDO schema, raw feature/scalar/XYZ snapshots and immutable input hashes. It does not query spatial contexts or SDF CRS metadata.
+- `Gis/GisNewDrawingClone.cs`: selected model-space cloning, dependency collision checks, source/destination geometry/block/attribute/OD verification.
+- `Gis/GisNewDrawingAppearance.cs`: active method-specific color/transparency/linetype snapshot guards used by clone verification.
+- `Gis/GisNewDrawingMapApi.cs`: source-code drawing assignment, incoming/from import-code override, profile loading, effective OD mapping and raw-coordinate/result verification.
+- `Gis/GisPalette.cs`: `CREATE GIS DRAWING` queues the Session command. Existing R5 preparation/cleanup files are untouched. Native acceptance checklist: `Docs/GIS_NEW_DRAWING.md`.
+- `Tests/GisNewDrawingProfile.Tests`, `GisNewDrawingAppearance.Tests`, `GisNewDrawingSdf.Tests` and `GisNewDrawingCoordinateSystem.Tests` all exercise active code. They sit outside the production project and are not deployment dependencies.
 
 ## 2026-10-07 - Managed storm pipeline and durable cleanup R5
 - `Gis/GisStormGisCommands.cs`: calls committed structure preparation, then one synchronous managed transaction for pipe preparation, trim and cleanup. Legacy standalone LISP-backed commands are unchanged.

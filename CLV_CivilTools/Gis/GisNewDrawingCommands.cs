@@ -28,6 +28,9 @@ namespace CLV_CivilTools.Gis
             if (source == null) return;
             Document? destination = null;
             bool complete = false;
+            string stage = "locking the source drawing";
+            System.Exception? failure = null;
+            string? failedStage = null;
             Database originalWorkingDatabase = HostApplicationServices.WorkingDatabase;
             _running = true;
             try
@@ -37,17 +40,22 @@ namespace CLV_CivilTools.Gis
                 UnitsValue sourceUnits;
                 using (source.LockDocument())
                 {
+                    stage = "selecting the source working database";
                     HostApplicationServices.WorkingDatabase = source.Database;
+                    stage = "reading the source drawing coordinate system";
                     sourceCs = GisNewDrawingMapApi.ReadProjection();
                     GisNewDrawingCoordinateSystem.RequireSourceCode(sourceCs);
                     if (!GisNewDrawingProfile.TryResolveProfilePath(sourceCs, out _, out string csDetail))
                         throw new InvalidOperationException(csDetail);
                     sourceUnits = source.Database.Insunits;
+                    stage = "capturing source survey geometry and blocks";
                     sourceSnapshot = GisNewDrawingClone.Capture(source);
                 }
 
+                stage = "selecting the exported SDF";
                 string? sdfPath = SelectSdf(source);
                 if (sdfPath == null) return;
+                stage = "checking the SDF, template and import profile files";
                 source.Editor.WriteMessage("\nGIS setup: checking the selected SDF, shared template and matching import profile...");
                 if (!GisNewDrawingProfile.TryResolveProfilePath(sourceCs, out string profilePath, out string pathDetail))
                     throw new InvalidOperationException(pathDetail);
@@ -60,8 +68,10 @@ namespace CLV_CivilTools.Gis
                 using var profileGuard = new FileStream(profilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
                 using var templateGuard = new FileStream(GisNewDrawingProfile.TemplatePath, FileMode.Open, FileAccess.Read, FileShare.Read);
                 string profileHash = Hash(profileGuard);
+                stage = "validating the matching import profile";
                 if (!GisNewDrawingProfile.TryLoad(profilePath, sourceCs, out GisNewDrawingProfile? profile, out string profileDetail) || profile == null)
                     throw new InvalidOperationException(profileDetail);
+                stage = "reading SDF schema and raw network features";
                 source.Editor.WriteMessage("\nGIS setup: reading SDF schema and raw network features (read-only)...");
                 if (!GisNewDrawingSdf.TryRead(sdfPath, profile, out GisNewDrawingSdfSnapshot? sdf, out string sdfDetail) || sdf == null)
                     throw new InvalidOperationException(sdfDetail);
@@ -74,89 +84,171 @@ namespace CLV_CivilTools.Gis
 
                 // Session context is required for Add/activation/CloseAndDiscard.
                 source.Editor.WriteMessage("\nGIS setup: preflight passed; creating the new Blank (2026) drawing...");
+                stage = "opening the Blank template as a new drawing";
                 destination = DocumentCollectionExtension.Add(AcadApp.DocumentManager, GisNewDrawingProfile.TemplatePath);
+                stage = "activating the new drawing";
                 AcadApp.DocumentManager.MdiActiveDocument = destination;
+                stage = "selecting the new drawing working database";
                 HostApplicationServices.WorkingDatabase = destination.Database;
+                stage = "locking the new drawing";
                 using (destination.LockDocument())
                 {
+                    stage = "checking the Blank template model space";
                     RequireEmptyModelSpace(destination.Database);
                     // WblockCloneObjects does not scale coordinates. Match insertion-unit
                     // metadata to the source as well, including an explicit Unitless value.
+                    stage = "matching the new drawing insertion units";
                     destination.Database.Insunits = sourceUnits;
+                    stage = "assigning the source coordinate system to the new drawing";
                     GisNewDrawingMapApi.AssignProjection(sourceCs);
+                    stage = "recording the initial new-drawing setup state";
                     SetSetupState(destination.Database, "INCOMPLETE", source.Name, sdfPath, profilePath, sourceCs);
                 }
+                stage = "copying and verifying survey linework and blocks";
                 destination.Editor.WriteMessage("\nGIS setup: copying and verifying survey linework and blocks at their original coordinates...");
                 GisNewDrawingClone.Result cloned = GisNewDrawingClone.CloneAndVerify(source, destination, sourceSnapshot);
+                stage = "activating the copied destination drawing";
                 AcadApp.DocumentManager.MdiActiveDocument = destination;
+                stage = "selecting the copied destination working database";
                 HostApplicationServices.WorkingDatabase = destination.Database;
+                stage = "locking the destination drawing for import";
                 using (destination.LockDocument())
                 {
+                    stage = "verifying the destination coordinate system and unchanged inputs";
                     GisNewDrawingMapApi.VerifyProjection(sourceCs);
                     if (!GisNewDrawingSdf.TryVerifyUnchanged(sdf, out string changedDetail))
                         throw new InvalidOperationException(changedDetail);
                     if (Hash(profileGuard) != profileHash)
                         throw new InvalidOperationException("The import profile changed after preflight.");
 
+                    stage = "loading the profile and importing/verifying Pipes and Structures";
                     destination.Editor.WriteMessage("\nGIS setup: loading the selected profile and importing/verifying Pipes and Structures...");
                     GisNewDrawingMapApi.ImportSummary imported = GisNewDrawingMapApi.ImportAndVerify(
                         destination, sdf, profilePath, profile);
+                    stage = "checking source files after import";
                     if (!GisNewDrawingSdf.TryVerifyUnchanged(sdf, out changedDetail))
                         throw new InvalidOperationException(changedDetail);
                     if (Hash(profileGuard) != profileHash)
                         throw new InvalidOperationException("The shared import profile changed during import.");
+                    stage = "recording verified setup completion";
                     SetSetupState(destination.Database, "VERIFIED", source.Name, sdfPath, profilePath, sourceCs);
+                    stage = "regenerating the verified drawing";
                     destination.Editor.Regen();
                     complete = true;
+                    stage = "reporting the verified unsaved drawing";
                     destination.Editor.WriteMessage($"\nCLV-GIS-NEW-DRAWING verified: {cloned.CopiedCount} survey object(s) copied at original coordinates; " +
                         $"{imported.Pipes} pipe(s) and {imported.Structures} structure point(s) imported with verified Object Data. " +
-                        $"Coordinate system: {sourceCs}.\nThe new drawing is unsaved. Review/save it, then run the existing GIS preparation command.");
+                        $"Coordinate system: {sourceCs}.\nNew drawing: {destination.Name}. No output file has been saved. " +
+                        "Use SAVEAS to choose its name and folder, then run the existing GIS preparation command.");
                 }
             }
             catch (System.Exception ex)
             {
-                WriteDiagnostic(source, "\nCLV-GIS-NEW-DRAWING stopped: " + GisNewDrawingMapApi.ErrorMessage(ex));
+                // Keep the primary cause until the temporary document has been
+                // closed/restored. A write through an inactive source Editor can
+                // succeed without remaining visible after that document switch.
+                failure = ex;
+                failedStage = stage;
             }
             finally
             {
-                if (!complete)
-                {
-                    try
-                    {
-                        AcadApp.DocumentManager.MdiActiveDocument = source;
-                        HostApplicationServices.WorkingDatabase = source.Database;
-                        if (destination != null)
-                        {
-                            // Only this command's freshly created drawing is discarded.
-                            destination.CloseAndDiscard();
-                            WriteDiagnostic(source, "\nIncomplete new GIS drawing discarded. Source drawing and input files were not changed.");
-                        }
-                    }
-                    catch (System.Exception closeError)
-                    {
-                        WriteDiagnostic(source, "\nThe incomplete new drawing could not be discarded: " + closeError.Message +
-                            ". It is not verified; close it without saving. Do not run GIS preparation on it.");
-                    }
-                }
+                // Reset re-entry protection even if host cleanup or formatting fails.
                 try
                 {
-                    HostApplicationServices.WorkingDatabase = complete && destination != null ? destination.Database : originalWorkingDatabase;
-                }
-                catch (System.Exception restoreError)
-                {
-                    WriteDiagnostic(source, "\nCould not restore the working database: " + restoreError.Message);
+                    var cleanupNotes = new List<string>();
+                    if (!complete)
+                    {
+                        bool sourceActive = false;
+                        bool sourceDatabaseCurrent = false;
+                        try
+                        {
+                            AcadApp.DocumentManager.MdiActiveDocument = source;
+                            sourceActive = AcadApp.DocumentManager.MdiActiveDocument == source;
+                            if (!sourceActive) throw new InvalidOperationException("The source did not become the active document.");
+                        }
+                        catch (System.Exception activationError)
+                        {
+                            cleanupNotes.Add("\nCould not reactivate the source drawing: " + activationError);
+                        }
+                        if (sourceActive)
+                        {
+                            try
+                            {
+                                HostApplicationServices.WorkingDatabase = source.Database;
+                                sourceDatabaseCurrent = HostApplicationServices.WorkingDatabase == source.Database;
+                                if (!sourceDatabaseCurrent) throw new InvalidOperationException("The source did not become the working database.");
+                            }
+                            catch (System.Exception databaseError)
+                            {
+                                cleanupNotes.Add("\nCould not select the source working database: " + databaseError);
+                            }
+                        }
+                        if (destination != null)
+                        {
+                            if (sourceActive && sourceDatabaseCurrent)
+                            {
+                                try
+                                {
+                                    // Only this command's freshly created drawing is discarded.
+                                    destination.CloseAndDiscard();
+                                    cleanupNotes.Add("\nIncomplete new GIS drawing discarded. No output file was saved; the source drawing and input files were not changed.");
+                                }
+                                catch (System.Exception closeError)
+                                {
+                                    cleanupNotes.Add("\nThe incomplete new drawing could not be discarded: " + closeError +
+                                        ". It is not verified; close it without saving. Do not run GIS preparation on it.");
+                                }
+                            }
+                            else cleanupNotes.Add("\nThe incomplete new drawing remains open because the source context could not be restored. " +
+                                "Close it without saving; do not run GIS preparation on it.");
+                        }
+                    }
+                    try
+                    {
+                        HostApplicationServices.WorkingDatabase = complete && destination != null ? destination.Database : originalWorkingDatabase;
+                    }
+                    catch (System.Exception restoreError)
+                    {
+                        cleanupNotes.Add("\nCould not restore the working database: " + restoreError);
+                    }
+                    // Report after all cleanup/restoration. On the normal failure
+                    // path the source is active, so this survives destination disposal.
+                    // Secondary cleanup errors supplement the original cause.
+                    if (failure != null)
+                        WriteDiagnostic(source, $"\nCLV-GIS-NEW-DRAWING stopped while {failedStage}:\n" + DescribeFailure(failure));
+                    foreach (string note in cleanupNotes) WriteDiagnostic(source, note);
                 }
                 finally { _running = false; }
             }
         }
 
+        private static string DescribeFailure(System.Exception error)
+        {
+            // ToString retains exception types, complete inner details and stack
+            // traces. Preserve native AutoCAD status separately when supplied.
+            string detail = error.ToString();
+            for (System.Exception? current = error; current != null; current = current.InnerException)
+                if (current is Autodesk.AutoCAD.Runtime.Exception native)
+                    detail += "\nNative AutoCAD ErrorStatus: " + native.ErrorStatus;
+            return detail;
+        }
+
         private static void WriteDiagnostic(Document source, string message)
         {
-            try { source.Editor.WriteMessage(message); }
+            // Source is active after normal failure cleanup. If restoration itself
+            // failed, report in the remaining active document instead of silently
+            // writing to an inactive editor. No document is closed after this flush.
+            Document? active = null;
+            try { active = AcadApp.DocumentManager.MdiActiveDocument; }
+            catch { /* Try the captured source if the document manager is unavailable. */ }
+            try { (active ?? source).Editor.WriteMessage("{0}", message); }
             catch
             {
-                try { AcadApp.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(message); }
-                catch { /* A document may have closed during host error recovery. */ }
+                if (active != null && active != source)
+                {
+                    try { source.Editor.WriteMessage("{0}", message); }
+                    catch { /* A document may have closed during host error recovery. */ }
+                }
             }
         }
 
