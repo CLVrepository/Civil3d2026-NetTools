@@ -1,3 +1,6 @@
+## 2026-10-08 - Sewer connection endpoints
+- `CLV-GIS-SSWR-GIS` additionally supports exact corrected-sewer `-CONN` Structures names as retained open tie-ins of unknown physical type. It preserves the connection point/OD and pipe endpoint, clips only verified manhole ends, and still holds conflicting utility or ambiguous/missing identities. No additional prompt or command was added.
+
 ## 2026-10-08 - Managed sewer preparation
 - `CLV-GIS-SSWR-GIS` - Q2 > GIS > GIS TOOLS > ADD TO DATABASE > SEWER > GIS PREP - ALL. Uses managed evaluated circular manholes, full native OD verification and straight-pipe clipping to OUTER walls. Under 12 inches keeps one line; 12 inches and above keeps the centerline plus both half-diameter offsets. No LISP or broad cleanup is queued by this ALL route.
 - SEWER now also has CREATE GIS DRAWING first, invoking the same `CLV-GIS-NEW-DRAWING` setup/save/reopen and manual-MAPIMPORT handoff used under STORM DRAIN. See `Docs/SEWER_GIS_PREP.md` for preparation limits, retained review objects and native trial steps.

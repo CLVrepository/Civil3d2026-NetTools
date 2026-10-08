@@ -1,3 +1,13 @@
+## 2026-10-08 - Retain explicit sewer connection endpoints S3
+- Recognizes an exact sewer `-CONN` structure name as a tie-in to the existing network, without assuming a pipe, manhole, diameter or radius. A unique imported Structures identity and compatible pipe endpoint XYZ remain required. The connection POINT/full native OD stay in place; the original pipe endpoint and offset-wall terminals are not clipped there. The other end still clips to a verified manhole outer circle.
+- A connection does not require PartSizeName to exist or contain a physical type. Explicit storm/sewer conflicts, duplicate/missing identities and coordinate mismatches still stop the batch. Existing exact null/STUB rules and Storm behavior are unchanged.
+- Includes the reviewed S2 dictionary correction and diagnostic evidence. The user corrected the mistaken STRM connection name in the source and re-exported; no drawing-data repair or automatic rename is performed by this tool. Executable tests/build/native S3 acceptance remain unrun.
+
+## 2026-10-08 - Fix sewer dynamic-dictionary enumeration S2
+- Corrects the first native Sewer ALL failure: dynamic metadata capture now snapshots AutoCAD's typed dictionary entries before sorting. The non-generic LINQ Cast path returned System.Collections.DictionaryEntry and rejected all six reported manholes before conversion.
+- Utility review now prints the exact storm/sewer evidence, source layer, identity indices and native table/record/field locations. The FBC conflict from the first trial remains unidentified until its OD or expanded log is read; no utility rule is weakened or forced.
+- Preflight remains read-only and the failed trial applied no sewer geometry or cleanup. Setup/save/reopen/manual MAPIMPORT was separately confirmed working by the user. Static checks and independent review completed; C# tests/full build/native S2 acceptance remain unrun.
+
 ## 2026-10-08 - Managed sewer GIS PREP - ALL
 - Adds CREATE GIS DRAWING first under SEWER, followed by GIS PREP - ALL, matching the Storm button labels. Drawing setup/save/reopen remains shared and manual MAPIMPORT remains separate.
 - Sewer ALL now prepares the evaluated circular manholes and straight pipes in one managed transaction. It uses the legacy feet-based cutoff: under 12 inches retains one line; at least 12 inches retains the centerline and both offsets. Every processed pipe line is clipped to the actual manhole OUTER circle, including small pipes and large centerlines. Existing sewer layer/linetype standards are retained.

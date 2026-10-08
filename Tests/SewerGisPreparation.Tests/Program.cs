@@ -3,6 +3,111 @@ using CLV_CivilTools.Gis;
 int passed = 0;
 int failed = 0;
 
+Run("Exact sewer CONN names identify open tie-ins without a physical type", () =>
+{
+    foreach (string name in new[] { "L24-00066-SSWR-64+88-CONN", "SSMH-EXIST-CONN", " sewer-existing-conn " })
+        Check(SewerPreparationRules.IsExplicitSewerConnectionName(name));
+});
+Run("CONN suffix does not loosen other names or resolve utility conflicts", () =>
+{
+    foreach (string? name in new string?[] { null, "", "-CONN", "PROJECT-CONN", "SSWR-CONNECTION",
+        "SSWR-CONN-01", "SSWR-CONN_EXTRA", "SSWR-CONN-MH", "SSWR-STUB", "STRM-64+88-CONN",
+        "SSWR-STRM-64+88-CONN", "SSWR-SD_PIPE-CONN", "SEWERSON-CONN" })
+        Check(!SewerPreparationRules.IsExplicitSewerConnectionName(name));
+});
+Run("Physical part information is optional only for the explicit sewer connection reader", () =>
+{
+    Check(SewerPreparationRules.MayOmitStructurePartSizeName(true, "L24-00066-SSWR-64+88-CONN"));
+    Check(!SewerPreparationRules.MayOmitStructurePartSizeName(false, "L24-00066-SSWR-64+88-CONN"));
+    foreach (string name in new[] { "SSMH-01", "SSWR-STUB", "STRM-64+88-CONN", "SSWR-STRM-CONN", "PROJECT-CONN" })
+        Check(!SewerPreparationRules.MayOmitStructurePartSizeName(true, name));
+});
+Run("Original FBC mixed endpoint is held and the corrected sewer identity remains a candidate", () =>
+{
+    string[] names = { "L24-00066-SSWR - Pipe - (8)", "L24-00066-SSMH-01", "L24-00066-STRM-64+88-CONN" };
+    Equal(SewerPipeUtilityKind.Review, SewerPreparationRules.ClassifyUtility("Pipes", new[] { "Pipes" }, names));
+    names[2] = "L24-00066-SSWR-64+88-CONN";
+    Equal(SewerPipeUtilityKind.Candidate, SewerPreparationRules.ClassifyUtility("Pipes", new[] { "Pipes" }, names));
+    Check(SewerPreparationRules.IsExplicitSewerConnectionName(names[2]));
+});
+Run("Connection-side small line keeps its exact endpoint while the manhole side clips", () =>
+{
+    Check(SewerPreparationRules.IsExplicitSewerConnectionName("SSWR-EXIST-CONN"));
+    AssertPlan(P(0, 0), P(10, 0), C("MH", 0, 0, 2), null, SewerClipKind.Trimmed, 0.2, 1);
+    AssertPlan(P(10, 0), P(0, 0), null, C("MH", 0, 0, 2), SewerClipKind.Trimmed, 0, 0.8);
+});
+Run("Connection requires coincident finite XYZ instead of nearby manhole tolerance", () =>
+{
+    Check(SewerPreparationRules.ConnectionAnchorMatches(867367.5209, 1295739.4424, 10, 867367.5209, 1295739.4424, 10));
+    Check(SewerPreparationRules.ConnectionAnchorMatches(0, 0, 1, 1e-9, -1e-9, 1 + 1e-9));
+    Check(!SewerPreparationRules.ConnectionAnchorMatches(0, 0, 0, 0.01, 0, 0));
+    Check(!SewerPreparationRules.ConnectionAnchorMatches(0, 0, 0, 0, 0.01, 0));
+    Check(!SewerPreparationRules.ConnectionAnchorMatches(0, 0, 0, 0, 0, 0.01));
+    Check(!SewerPreparationRules.ConnectionAnchorMatches(0, 0, 0, 0.8e-8, 0.8e-8, 0));
+    foreach (double value in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
+    {
+        Check(!SewerPreparationRules.ConnectionAnchorMatches(value, 0, 0, 0, 0, 0));
+        Check(!SewerPreparationRules.ConnectionAnchorMatches(0, value, 0, 0, 0, 0));
+        Check(!SewerPreparationRules.ConnectionAnchorMatches(0, 0, value, 0, 0, 0));
+        Check(!SewerPreparationRules.ConnectionAnchorMatches(0, 0, 0, value, 0, 0));
+        Check(!SewerPreparationRules.ConnectionAnchorMatches(0, 0, 0, 0, value, 0));
+        Check(!SewerPreparationRules.ConnectionAnchorMatches(0, 0, 0, 0, 0, value));
+    }
+});
+Run("Connection-side centerline and both walls stay untrimmed at their original terminal station", () =>
+{
+    foreach (double offset in new[] { -0.5, 0.0, 0.5 })
+        AssertPlan(P(0, offset), P(10, offset), C("MH", 0, 0, 2), null,
+            SewerClipKind.Trimmed, Math.Sqrt(4 - offset * offset) / 10, 1);
+});
+Run("Two verified connection ends keep the original line without invented circles", () =>
+    AssertPlan(P(0, 0), P(10, 0), null, null, SewerClipKind.Unchanged, 0, 1));
+
+Run("Utility conflict diagnostic identifies layer and exact table evidence", () =>
+{
+    Equal(SewerPipeUtilityKind.Review, SewerPreparationRules.ClassifyUtility("GIS-SSWR-PIPE-E",
+        new[] { "AssetInfo", "SD_Pipes" }, Array.Empty<string>(), out string detail));
+    Check(detail.Contains("Conflicting utility evidence", StringComparison.Ordinal));
+    Check(detail.Contains("table[1]='SD_Pipes'", StringComparison.Ordinal));
+    Check(detail.Contains("layer='GIS-SSWR-PIPE-E'", StringComparison.Ordinal));
+});
+Run("Utility conflict diagnostic identifies terminal indices and values", () =>
+{
+    Equal(SewerPipeUtilityKind.Review, SewerPreparationRules.ClassifyUtility("Pipes", new[] { "Pipes" },
+        new[] { "L24-00066-SSWR - Pipe - (2)", "L24-00066-SSMH-05", "SD-END-04" }, out string detail));
+    Check(detail.Contains("Storm: identity[2]='SD-END-04'", StringComparison.Ordinal));
+    Check(detail.Contains("identity[0]='L24-00066-SSWR - Pipe - (2)'", StringComparison.Ordinal));
+    Check(detail.Contains("identity[1]='L24-00066-SSMH-05'", StringComparison.Ordinal));
+});
+Run("Utility diagnostics distinguish neutral candidates from excluded storm data", () =>
+{
+    Equal(SewerPipeUtilityKind.Candidate, SewerPreparationRules.ClassifyUtility("Pipes", new[] { "Pipes" },
+        new[] { "P-1", "N-1", "N-2" }, out string candidate));
+    Check(candidate.Contains("terminal ownership still require validation", StringComparison.Ordinal));
+    Equal(SewerPipeUtilityKind.ExcludedStorm, SewerPreparationRules.ClassifyUtility("Pipes", new[] { "SD_Pipes" },
+        new[] { "P-1", "N-1", "N-2" }, out string storm));
+    Check(storm.Contains("Explicit storm evidence: table[0]='SD_Pipes'", StringComparison.Ordinal));
+});
+Run("Invalid utility evidence reports the failed source or exact index", () =>
+{
+    Equal(SewerPipeUtilityKind.Review, SewerPreparationRules.ClassifyUtility(" ", Array.Empty<string>(), Array.Empty<string>(), out string layer));
+    Check(layer.Contains("layer", StringComparison.Ordinal));
+    Equal(SewerPipeUtilityKind.Review, SewerPreparationRules.ClassifyUtility("Pipes", null!, Array.Empty<string>(), out string unavailable));
+    Check(unavailable.Contains("unavailable", StringComparison.Ordinal));
+    Equal(SewerPipeUtilityKind.Review, SewerPreparationRules.ClassifyUtility("Pipes", new[] { "Pipes", "" }, Array.Empty<string>(), out string table));
+    Check(table.Contains("table name at index 1", StringComparison.Ordinal));
+    Equal(SewerPipeUtilityKind.Review, SewerPreparationRules.ClassifyUtility("Pipes", new[] { "Pipes" }, new[] { "P-1", null! }, out string identity));
+    Check(identity.Contains("identity at index 1", StringComparison.Ordinal));
+});
+Run("Utility diagnostic escapes values without changing their classification", () =>
+{
+    Equal("'O\\'Brien\\\\test\\r\\n\\t'", SewerPreparationRules.DescribeEvidenceValue("O'Brien\\test\r\n\t"));
+    Equal("<unavailable>", SewerPreparationRules.DescribeEvidenceValue(null));
+    Equal(SewerPipeUtilityKind.Review, SewerPreparationRules.ClassifyUtility("Pipes", new[] { "SD_Pipes" },
+        new[] { "SSMH-1\r\npretend status" }, out string detail));
+    Check(!detail.Contains('\r') && !detail.Contains('\n') && detail.Contains("\\r\\n", StringComparison.Ordinal));
+});
+
 Run("Generic utility evidence remains a candidate for later native validation", () =>
 {
     Equal(SewerPipeUtilityKind.Candidate, SewerPreparationRules.ClassifyUtility("Pipes", Array.Empty<string>(), Array.Empty<string>()));

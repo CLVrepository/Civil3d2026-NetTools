@@ -68,12 +68,24 @@ namespace CLV_CivilTools.Gis
                 RequireActiveOdEntity(entityId);
                 List<VerifiedOdRecord> records = ReadVerifiedOdRecords(entityId);
                 tables = records.Select(record => record.TableName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-                identities = records.SelectMany(record => record.Fields).Where(field => field.Kind == "Character" &&
-                    (string.Equals(field.Name, "Name", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(field.Name, "StructureStart", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(field.Name, "StructureEnd", StringComparison.OrdinalIgnoreCase)))
-                    .Select(field => (string)field.Value).ToArray();
-                detail = string.Empty;
+                var values = new List<string>();
+                var locations = new List<string>();
+                for (int recordIndex = 0; recordIndex < records.Count; recordIndex++)
+                {
+                    VerifiedOdRecord record = records[recordIndex];
+                    foreach (VerifiedOdField field in record.Fields.Where(field => field.Kind == "Character" &&
+                        (string.Equals(field.Name, "Name", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(field.Name, "StructureStart", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(field.Name, "StructureEnd", StringComparison.OrdinalIgnoreCase))))
+                    {
+                        locations.Add($"identity[{values.Count}] from record[{recordIndex}] " +
+                            SewerPreparationRules.DescribeEvidenceValue(record.TableName) + "." +
+                            SewerPreparationRules.DescribeEvidenceValue(field.Name));
+                        values.Add((string)field.Value);
+                    }
+                }
+                identities = values.ToArray();
+                detail = string.Join("; ", locations);
                 return true;
             }
             catch (System.Exception error)
@@ -184,6 +196,14 @@ namespace CLV_CivilTools.Gis
 
         internal static bool TryReadStructuresIdentity(ObjectId entityId, out string name, out string partSizeName,
             out string detail, out bool nativeReadFailure)
+            => TryReadStructuresIdentityCore(entityId, false, out name, out partSizeName, out detail, out nativeReadFailure);
+
+        internal static bool TryReadSewerStructuresIdentity(ObjectId entityId, out string name,
+            out string partSizeName, out string detail)
+            => TryReadStructuresIdentityCore(entityId, true, out name, out partSizeName, out detail, out _);
+
+        private static bool TryReadStructuresIdentityCore(ObjectId entityId, bool allowSewerConnection,
+            out string name, out string partSizeName, out string detail, out bool nativeReadFailure)
         {
             name = string.Empty;
             partSizeName = string.Empty;
@@ -202,7 +222,18 @@ namespace CLV_CivilTools.Gis
                     throw new VerifiedOdIdentityException("Conflicting Structures records are attached; no identity was selected.");
 
                 name = ReadVerifiedOdIdentityField(first, "Name");
-                partSizeName = ReadVerifiedOdIdentityField(first, "PartSizeName");
+                if (SewerPreparationRules.MayOmitStructurePartSizeName(allowSewerConnection, name))
+                {
+                    // A -CONN tie-in has no required physical-type information.
+                    // Keep any actual Character text for utility-conflict checks;
+                    // missing/blank text is not replaced with a fabricated part.
+                    List<VerifiedOdField> parts = first.Fields.Where(field =>
+                        string.Equals(field.Name, "PartSizeName", StringComparison.OrdinalIgnoreCase)).ToList();
+                    if (parts.Count > 1 || parts.Count == 1 && (parts[0].Kind != "Character" || parts[0].Value is not string))
+                        throw new VerifiedOdIdentityException("Structures PartSizeName, when present, must be one Character field.");
+                    partSizeName = parts.Count == 0 ? string.Empty : ((string)parts[0].Value).Trim();
+                }
+                else partSizeName = ReadVerifiedOdIdentityField(first, "PartSizeName");
                 detail = $"Structures identity verified from {records.Count} record(s).";
                 return true;
             }

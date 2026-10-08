@@ -6,6 +6,7 @@ namespace CLV_CivilTools.Gis
 {
     internal enum SewerPipeSizeKind { Invalid, SingleLine, CenterAndWalls }
     internal enum SewerPipeUtilityKind { Candidate, ExcludedStorm, Review }
+    internal enum SewerOpenEndKind { None, NullStub, Connection }
 
     internal static class SewerPreparationRules
     {
@@ -34,27 +35,90 @@ namespace CLV_CivilTools.Gis
         /// </summary>
         internal static SewerPipeUtilityKind ClassifyUtility(string layer, IReadOnlyList<string> tables,
             IReadOnlyList<string> identityValues)
+            => ClassifyUtility(layer, tables, identityValues, out _);
+
+        internal static SewerPipeUtilityKind ClassifyUtility(string layer, IReadOnlyList<string> tables,
+            IReadOnlyList<string> identityValues, out string detail)
         {
-            if (string.IsNullOrWhiteSpace(layer) || tables == null || identityValues == null)
+            if (string.IsNullOrWhiteSpace(layer))
+            {
+                detail = "The source layer is blank or unavailable.";
                 return SewerPipeUtilityKind.Review;
+            }
+            if (tables == null || identityValues == null)
+            {
+                detail = "Native table or identity evidence is unavailable.";
+                return SewerPipeUtilityKind.Review;
+            }
 
             bool storm = IsKnownSourceLayer(layer) && StormToken.IsMatch(layer);
             bool sewer = SewerToken.IsMatch(layer);
-            foreach (string table in tables)
+            var stormEvidence = new List<string>();
+            var sewerEvidence = new List<string>();
+            if (storm) stormEvidence.Add("layer=" + DescribeEvidenceValue(layer));
+            if (sewer) sewerEvidence.Add("layer=" + DescribeEvidenceValue(layer));
+            for (int index = 0; index < tables.Count; index++)
             {
-                if (string.IsNullOrWhiteSpace(table)) return SewerPipeUtilityKind.Review;
+                string table = tables[index];
+                if (string.IsNullOrWhiteSpace(table))
+                {
+                    detail = $"Native table name at index {index} is blank or unavailable.";
+                    return SewerPipeUtilityKind.Review;
+                }
                 // Never interpret a table such as OTHER_SD_Pipes as SD_Pipes.
-                storm |= string.Equals(table, "SD_Pipes", StringComparison.OrdinalIgnoreCase);
-                sewer |= string.Equals(table, "SS_Pipes", StringComparison.OrdinalIgnoreCase) || SewerToken.IsMatch(table);
+                bool tableStorm = string.Equals(table, "SD_Pipes", StringComparison.OrdinalIgnoreCase);
+                bool tableSewer = string.Equals(table, "SS_Pipes", StringComparison.OrdinalIgnoreCase) || SewerToken.IsMatch(table);
+                storm |= tableStorm; sewer |= tableSewer;
+                if (tableStorm) stormEvidence.Add($"table[{index}]=" + DescribeEvidenceValue(table));
+                if (tableSewer) sewerEvidence.Add($"table[{index}]=" + DescribeEvidenceValue(table));
             }
-            foreach (string identity in identityValues)
+            for (int index = 0; index < identityValues.Count; index++)
             {
-                if (identity == null) return SewerPipeUtilityKind.Review;
-                storm |= StormToken.IsMatch(identity);
-                sewer |= SewerToken.IsMatch(identity);
+                string identity = identityValues[index];
+                if (identity == null)
+                {
+                    detail = $"Native Character identity at index {index} is unavailable.";
+                    return SewerPipeUtilityKind.Review;
+                }
+                bool identityStorm = StormToken.IsMatch(identity), identitySewer = SewerToken.IsMatch(identity);
+                storm |= identityStorm; sewer |= identitySewer;
+                if (identityStorm) stormEvidence.Add($"identity[{index}]=" + DescribeEvidenceValue(identity));
+                if (identitySewer) sewerEvidence.Add($"identity[{index}]=" + DescribeEvidenceValue(identity));
             }
+            detail = storm && sewer
+                ? "Conflicting utility evidence. Storm: " + string.Join("; ", stormEvidence) +
+                    ". Sewer: " + string.Join("; ", sewerEvidence) + "."
+                : storm ? "Explicit storm evidence: " + string.Join("; ", stormEvidence) + "."
+                : "No conflicting storm evidence; sewer schema and terminal ownership still require validation.";
             return storm && sewer ? SewerPipeUtilityKind.Review :
                 storm ? SewerPipeUtilityKind.ExcludedStorm : SewerPipeUtilityKind.Candidate;
+        }
+
+        internal static string DescribeEvidenceValue(string? value) => value == null ? "<unavailable>" :
+            "'" + value.Replace("\\", "\\\\").Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t").Replace("'", "\\'") + "'";
+
+        // User-defined tie-in convention, independent of any physical structure
+        // type. Identity, coordinates and native OD are still proved by the host.
+        internal static bool IsExplicitSewerConnectionName(string? name)
+        {
+            string value = name?.Trim() ?? string.Empty;
+            return value.Length > 5 && value.EndsWith("-CONN", StringComparison.OrdinalIgnoreCase) &&
+                value.Substring(0, value.Length - 5).Trim().Length > 0 &&
+                SewerToken.IsMatch(value) && !StormToken.IsMatch(value);
+        }
+
+        internal static bool MayOmitStructurePartSizeName(bool sewerConnectionReader, string? name)
+            => sewerConnectionReader && IsExplicitSewerConnectionName(name);
+
+        internal static bool ConnectionAnchorMatches(double pipeX, double pipeY, double pipeZ,
+            double pointX, double pointY, double pointZ)
+        {
+            const double tolerance = 1e-8;
+            if (!double.IsFinite(pipeX) || !double.IsFinite(pipeY) || !double.IsFinite(pipeZ) ||
+                !double.IsFinite(pointX) || !double.IsFinite(pointY) || !double.IsFinite(pointZ)) return false;
+            double x = pipeX - pointX, y = pipeY - pointY, z = pipeZ - pointZ;
+            return Math.Abs(x) <= tolerance && Math.Abs(y) <= tolerance && Math.Abs(z) <= tolerance &&
+                x * x + y * y <= tolerance * tolerance;
         }
 
         private static bool IsKnownSourceLayer(string layer)

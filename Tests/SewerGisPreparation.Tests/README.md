@@ -51,3 +51,23 @@ Feet), rejecting unitless, incompatible and unknown values. The host must read
 the actual database setting before edits; a block's insertion-unit label alone
 does not establish the drawing's units. The numerical contract is documented in
 [Autodesk INSUNITS](https://help.autodesk.com/cloudhelp/2022/ENU/AutoCAD-Core/files/GUID-A58A87BB-482B-4042-A00A-EEF55A2B4FD8.htm).
+
+Utility diagnostic cases verify the exact storm/sewer evidence, field indices,
+invalid-input locations and escaped control characters without relaxing the gate.
+The native reader separately labels each identity index with its table, record
+and field name; those labels still require native validation.
+
+Native dictionary regression: rerun the six MHs that failed `84dca7b` and verify
+metadata capture no longer casts `System.Collections.DictionaryEntry` to
+`DBDictionaryEntry`. Production snapshots the typed AutoCAD foreach entries before
+sorting. A pure fake-enumerator demonstration would not execute that production
+native path, so no such test is claimed here. Also verify unknown nested metadata
+still stops conversion and changed metadata still changes the captured signature.
+
+Connection cases cover exact corrected-sewer `-CONN` suffix recognition, rejection
+of arbitrary or conflicted names, the observed FBC naming conflict, corrected
+identity acceptance, small/large lines with an untrimmed connection terminal,
+reversed orientation and two permitted open ends. The host still must prove a
+unique native Structures target and matching endpoint XYZ (production-linked cases reject nearby 0.01-unit offsets, Z differences, nonfinite coordinates and diagonal tolerance overflow). Native acceptance must
+cover absent/blank PartSizeName, retained connection POINT/full OD and archive
+reruns. The pure name rule never proves native ownership by itself.

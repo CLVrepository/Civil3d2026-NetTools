@@ -66,11 +66,11 @@ namespace CLV_CivilTools.Gis
                         return true;
                     }
 
-                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.08-S1: checking sewer OD, evaluated manhole circles and pipe connections...");
+                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.08-S3: checking sewer OD, evaluated manhole circles and pipe connections...");
                     SewerManholeBatch manholes = GisSewerManholePlanner.Plan(db, transaction);
                     var reviews = new List<string>(manholes.Reviews);
                     IReadOnlyList<PipePlan> plannedPipes = PlanPipes(db, transaction, model, manholes.Structures, reviews);
-                    foreach (SewerManholePlan manhole in manholes.Structures.Where(item => !item.IsNullEnd))
+                    foreach (SewerManholePlan manhole in manholes.Structures.Where(item => !item.IsOpenEnd))
                     {
                         try
                         {
@@ -91,13 +91,13 @@ namespace CLV_CivilTools.Gis
                         document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS: no sewer geometry or source cleanup was applied.");
                         return false;
                     }
-                    if (plannedPipes.Count == 0 && manholes.Structures.All(item => item.IsNullEnd))
+                    if (plannedPipes.Count == 0 && manholes.Structures.All(item => item.IsOpenEnd))
                     {
                         document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS: no supported imported sewer structures or pipes were found.");
                         return true;
                     }
                     document.Editor.WriteMessage("\nSEWER: preflight passed for {0} manholes and {1} straight pipes; preparing geometry and verifying OD...",
-                        manholes.Structures.Count(item => !item.IsNullEnd), plannedPipes.Count);
+                        manholes.Structures.Count(item => !item.IsOpenEnd), plannedPipes.Count);
 
                     foreach ((string name, string linetype) in new[]
                     {
@@ -109,9 +109,10 @@ namespace CLV_CivilTools.Gis
                     var structureArchive = new List<StructureArchive>();
                     foreach (SewerManholePlan manhole in manholes.Structures)
                     {
-                        if (manhole.IsNullEnd)
+                        if (manhole.IsOpenEnd)
                         {
-                            outputIds.Add((manhole.SourceId, "OpenNullEnd", manhole.Name));
+                            RequireSourcePointUnchanged(transaction, manhole);
+                            outputIds.Add((manhole.SourceId, manhole.OpenEndKind == SewerOpenEndKind.Connection ? "OpenConnectionEnd" : "OpenNullEnd", manhole.Name));
                             continue;
                         }
                         RequireSourceManholeUnchanged(transaction, manhole);
@@ -160,12 +161,14 @@ namespace CLV_CivilTools.Gis
 
                     // All native data transfers are read back before any source
                     // block, point or owned marker is retired.
-                    foreach (SewerManholePlan manhole in manholes.Structures.Where(item => !item.IsNullEnd))
+                    foreach (SewerManholePlan manhole in manholes.Structures.Where(item => !item.IsOpenEnd))
                     {
                         RequireSourceManholeUnchanged(transaction, manhole);
                         ObjectId outer = structureArchive.Single(item => item.Handle == manhole.SourceId.Handle.ToString()).OuterId;
                         RequireOd(outer, GisImportCommands.ObjectDataFingerprintState.Present, manhole.SourceOdFingerprint);
                     }
+                    foreach (SewerManholePlan openEnd in manholes.Structures.Where(item => item.IsOpenEnd))
+                        RequireSourcePointUnchanged(transaction, openEnd);
                     var outputs = outputIds.Select(item => CaptureOutput(transaction, item.Id, item.Role, item.Name)).ToArray();
                     var archive = new BatchArchive(Array.AsReadOnly(outputs), Array.AsReadOnly(plannedPipes.Select(pipe =>
                         (pipe.Id, pipe.Data.Name, pipe.OriginalSignature)).ToArray()), Array.AsReadOnly(structureArchive.ToArray()));
@@ -175,7 +178,7 @@ namespace CLV_CivilTools.Gis
                     RequireSameArchive(archive, stored);
                     VerifyArchive(db, transaction, model.ObjectId, stored);
 
-                    foreach (SewerManholePlan manhole in manholes.Structures.Where(item => !item.IsNullEnd))
+                    foreach (SewerManholePlan manhole in manholes.Structures.Where(item => !item.IsOpenEnd))
                     {
                         ((Entity)transaction.GetObject(manhole.BlockId, OpenMode.ForWrite)).Erase(true);
                         if (!retainedPoints.Contains(manhole.SourceId))
@@ -188,7 +191,7 @@ namespace CLV_CivilTools.Gis
                         structures++;
                     }
                     foreach (var output in outputIds)
-                        if (output.Role != "OpenNullEnd" && output.Role != "RetainedSourcePoint")
+                        if (output.Role != "OpenNullEnd" && output.Role != "OpenConnectionEnd" && output.Role != "RetainedSourcePoint")
                             ((Entity)transaction.GetObject(output.Id, OpenMode.ForWrite)).RecordGraphicsModified(true);
                     VerifyArchive(db, transaction, model.ObjectId, stored);
                     transaction.TransactionManager.QueueForGraphicsFlush();
@@ -198,7 +201,7 @@ namespace CLV_CivilTools.Gis
                 }
                 try { document.Editor.Regen(); document.Editor.UpdateScreen(); }
                 catch (System.Exception error) { document.Editor.WriteMessage("\nSEWER DISPLAY WARNING: {0}", error.Message); }
-                document.Editor.WriteMessage($"\nCLV-GIS-SSWR-GIS: verified manholes={structures}, pipes={pipes}, under-12-inch single lines={singleLines}, offset walls={walls}, owned markers removed={markers}. All sewer pipe linework was clipped to the verified outer circles. Object Data and ownership were read back; no broad cleanup or LISP command was queued.");
+                document.Editor.WriteMessage($"\nCLV-GIS-SSWR-GIS: verified manholes={structures}, pipes={pipes}, under-12-inch single lines={singleLines}, offset walls={walls}, owned markers removed={markers}. Pipe linework was clipped at verified manhole outer circles; explicit open connection/null terminals were retained. Object Data and ownership were read back; no broad cleanup or LISP command was queued.");
                 if (retainedPoints.Count > 0)
                     document.Editor.WriteMessage("\nRetained imported points with additional XData/extension data: {0}. Their complete native OD is also on the new outer circles; other instance data was left on the points.",
                         string.Join(", ", retainedPoints.Select(id => id.Handle.ToString())));
@@ -241,10 +244,10 @@ namespace CLV_CivilTools.Gis
                     RequireUnlocked(tr, id);
                     if (!byName.TryGetValue(data.StructureStart, out SewerManholePlan? first) ||
                         !byName.TryGetValue(data.StructureEnd, out SewerManholePlan? last))
-                        throw new InvalidOperationException("StructureStart/StructureEnd does not resolve to a unique verified sewer structure or explicit null end.");
-                    bool forward = NearXY(line.StartPoint, first.SourcePosition) && NearXY(line.EndPoint, last.SourcePosition);
-                    bool reverse = NearXY(line.StartPoint, last.SourcePosition) && NearXY(line.EndPoint, first.SourcePosition);
-                    if (forward == reverse) throw new InvalidOperationException("Pipe endpoints do not establish one unambiguous connection orientation to their OD structures.");
+                        throw new InvalidOperationException("StructureStart/StructureEnd does not resolve to a unique verified sewer structure, exact -CONN connection, or explicit null end.");
+                    bool forward = MatchesTerminal(line.StartPoint, first) && MatchesTerminal(line.EndPoint, last);
+                    bool reverse = MatchesTerminal(line.StartPoint, last) && MatchesTerminal(line.EndPoint, first);
+                    if (forward == reverse) throw new InvalidOperationException("Pipe endpoints do not establish one unambiguous connection orientation to their OD structures. A -CONN point must coincide with the pipe endpoint; no relocation or extension is inferred.");
                     SewerManholePlan start = forward ? first : last, end = forward ? last : first;
                     if (Math.Abs(start.SourcePosition.Z - line.StartPoint.Z) > Tolerance ||
                         Math.Abs(end.SourcePosition.Z - line.EndPoint.Z) > Tolerance)
@@ -280,13 +283,19 @@ namespace CLV_CivilTools.Gis
         {
             if (!GisImportCommands.TryReadPipeUtilityEvidence(id, out var tables, out var names, out string detail))
                 throw new InvalidOperationException(detail);
-            SewerPipeUtilityKind kind = SewerPreparationRules.ClassifyUtility(layer, tables, names);
+            SewerPipeUtilityKind kind = SewerPreparationRules.ClassifyUtility(layer, tables, names, out string reason);
             if (kind == SewerPipeUtilityKind.Review)
-                throw new InvalidOperationException("Invalid or conflicting storm/sewer utility evidence; no utility was inferred.");
+                throw new InvalidOperationException(reason + " Source layer=" + SewerPreparationRules.DescribeEvidenceValue(layer) +
+                    ". " + detail + " No utility was inferred.");
             return kind == SewerPipeUtilityKind.ExcludedStorm;
         }
         private static bool NearXY(Point3d a, Point3d b)
             => Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y)) <= StormStructureMatching.MatchTolerance;
+        private static bool MatchesTerminal(Point3d endpoint, SewerManholePlan structure)
+            => structure.OpenEndKind == SewerOpenEndKind.Connection
+                ? SewerPreparationRules.ConnectionAnchorMatches(endpoint.X, endpoint.Y, endpoint.Z,
+                    structure.SourcePosition.X, structure.SourcePosition.Y, structure.SourcePosition.Z)
+                : NearXY(endpoint, structure.SourcePosition);
         private static Point3d Offset(Point3d point, Vector3d shift)
         {
             Point3d result = point + shift;
@@ -297,7 +306,7 @@ namespace CLV_CivilTools.Gis
         }
         private static SewerCircle? Boundary(SewerManholePlan structure, double elevation)
         {
-            if (structure.IsNullEnd) return null;
+            if (structure.IsOpenEnd) return null;
             SewerManholeCircle circle = structure.Outer ?? throw new InvalidOperationException("A connected manhole has no verified outer circle.");
             if (Math.Abs(circle.Center.Z - elevation) > Tolerance)
                 throw new InvalidOperationException($"Pipe and {structure.Name} outer circle are at different elevations; no flattening was applied.");
@@ -384,13 +393,17 @@ namespace CLV_CivilTools.Gis
             if (state != expected || (expected == GisImportCommands.ObjectDataFingerprintState.Present && actual != fingerprint))
                 throw new InvalidOperationException($"Entity {id.Handle}: complete typed OD differs: {detail}");
         }
-        private static void RequireSourceManholeUnchanged(Transaction tr, SewerManholePlan plan)
+        private static void RequireSourcePointUnchanged(Transaction tr, SewerManholePlan plan)
         {
             var point = tr.GetObject(plan.SourceId, OpenMode.ForRead, false) as DBPoint
                 ?? throw new InvalidOperationException("The imported Structures point is unavailable.");
             if (point.Position != plan.SourcePosition || !string.Equals(point.Layer, "Structures", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("The imported Structures point changed after planning.");
             RequireOd(plan.SourceId, GisImportCommands.ObjectDataFingerprintState.Present, plan.SourceOdFingerprint);
+        }
+        private static void RequireSourceManholeUnchanged(Transaction tr, SewerManholePlan plan)
+        {
+            RequireSourcePointUnchanged(tr, plan);
             var block = tr.GetObject(plan.BlockId, OpenMode.ForRead, false) as BlockReference
                 ?? throw new InvalidOperationException("The planned manhole block is unavailable.");
             if (GisSewerManholePlanner.CaptureBlockState(tr, block) != plan.BlockStateSignature)
@@ -440,7 +453,7 @@ namespace CLV_CivilTools.Gis
                 }
                 else if (string.Equals(entity.Layer, "Structures", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!GisImportCommands.TryReadStructuresIdentity(id, out string name, out string part, out string detail))
+                    if (!GisImportCommands.TryReadSewerStructuresIdentity(id, out string name, out string part, out string detail))
                         throw new InvalidOperationException($"Untracked Structures entity {id.Handle}: {detail}");
                     newInput = GisSewerManholePlanner.IsSewerIdentity(name, part);
                 }

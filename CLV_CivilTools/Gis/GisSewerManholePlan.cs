@@ -24,12 +24,12 @@ namespace CLV_CivilTools.Gis
     internal sealed class SewerManholePlan
     {
         internal SewerManholePlan(ObjectId sourceId, string name, string partSizeName, Point3d sourcePosition,
-            string sourceOdFingerprint, bool isNullEnd, ObjectId blockId, ObjectId markerId,
+            string sourceOdFingerprint, SewerOpenEndKind openEndKind, ObjectId blockId, ObjectId markerId,
             SewerManholeCircle? outer, IEnumerable<SewerManholeCircle> inner, string blockStateSignature,
             string markerStateSignature = "")
         {
             SourceId = sourceId; Name = name; PartSizeName = partSizeName; SourcePosition = sourcePosition;
-            SourceOdFingerprint = sourceOdFingerprint; IsNullEnd = isNullEnd; BlockId = blockId; MarkerId = markerId;
+            SourceOdFingerprint = sourceOdFingerprint; OpenEndKind = openEndKind; BlockId = blockId; MarkerId = markerId;
             Outer = outer; Inner = Array.AsReadOnly(inner.ToArray()); BlockStateSignature = blockStateSignature;
             MarkerStateSignature = markerStateSignature;
         }
@@ -38,7 +38,8 @@ namespace CLV_CivilTools.Gis
         internal string PartSizeName { get; }
         internal Point3d SourcePosition { get; }
         internal string SourceOdFingerprint { get; }
-        internal bool IsNullEnd { get; }
+        internal SewerOpenEndKind OpenEndKind { get; }
+        internal bool IsOpenEnd => OpenEndKind != SewerOpenEndKind.None;
         internal ObjectId BlockId { get; }
         internal ObjectId MarkerId { get; }
         internal SewerManholeCircle? Outer { get; }
@@ -166,12 +167,13 @@ namespace CLV_CivilTools.Gis
                     reviews.Add(SourceReview(source, "duplicate Structures identity; every duplicate is retained"));
                     continue;
                 }
-                if (source.Kind == SourceKind.NullEnd)
+                if (source.Kind == SourceKind.NullEnd || source.Kind == SourceKind.ConnectionEnd)
                 {
-                    // Exact established null/STUB convention only. A null endpoint never
-                    // consumes a block/marker and stays at its original XYZ coordinate.
+                    // Open endpoints never claim a physical MH/radius or consume
+                    // a block/marker. The imported point and native OD stay intact.
                     plans.Add(new SewerManholePlan(source.Id, source.Name, source.PartSizeName, source.Position,
-                        source.Fingerprint, true, ObjectId.Null, ObjectId.Null, null,
+                        source.Fingerprint, source.Kind == SourceKind.ConnectionEnd ? SewerOpenEndKind.Connection : SewerOpenEndKind.NullStub,
+                        ObjectId.Null, ObjectId.Null, null,
                         Array.Empty<SewerManholeCircle>(), string.Empty));
                     continue;
                 }
@@ -207,7 +209,7 @@ namespace CLV_CivilTools.Gis
                         throw new InvalidOperationException(detail);
                     ObjectId markerId = FindOwnedMarker(tr, source, selected, sources, markers, reviews);
                     plans.Add(new SewerManholePlan(source.Id, source.Name, source.PartSizeName, source.Position,
-                        source.Fingerprint, false, selected.ObjectId, markerId, geometry.Outer,
+                        source.Fingerprint, SewerOpenEndKind.None, selected.ObjectId, markerId, geometry.Outer,
                         geometry.Inner, geometry.Signature, markerId.IsNull ? string.Empty :
                             CaptureMarkerState(tr, (BlockReference)tr.GetObject(markerId, OpenMode.ForRead))));
                 }
@@ -224,6 +226,7 @@ namespace CLV_CivilTools.Gis
 
         internal static bool IsSewerIdentity(string name, string part)
         {
+            if (SewerPreparationRules.IsExplicitSewerConnectionName(name)) return true;
             if (SewerToken.IsMatch(name) || SewerManholePart(part)) return true;
             return !StormToken.IsMatch(name) && !StormToken.IsMatch(part) &&
                 StormStructureMatching.Classify(name, part) == StormStructureRole.NullPipeEnd;
@@ -249,22 +252,25 @@ namespace CLV_CivilTools.Gis
 
         private static Source ReadSource(DBPoint point)
         {
-            bool read = GisImportCommands.TryReadStructuresIdentity(point.ObjectId, out string name, out string part,
-                out string identityDetail, out _);
+            bool read = GisImportCommands.TryReadSewerStructuresIdentity(point.ObjectId, out string name, out string part,
+                out string identityDetail);
             var source = new Source(point.ObjectId, name, part, point.Position);
             if (!Finite(point.Position)) source.Problem = "source XYZ coordinates are not finite";
             else if (!read) source.Problem = identityDetail;
             else
             {
                 StormStructureRole role = StormStructureMatching.Classify(name, part);
-                bool sewer = SewerToken.IsMatch(name) || SewerManholePart(part);
+                bool connection = SewerPreparationRules.IsExplicitSewerConnectionName(name);
+                bool sewer = connection || SewerToken.IsMatch(name) || SewerManholePart(part);
                 bool storm = StormToken.IsMatch(name) || StormToken.IsMatch(part) ||
-                    role == StormStructureRole.Access || role == StormStructureRole.DropInlet || role == StormStructureRole.JunctionBox;
+                    role == StormStructureRole.DropInlet || role == StormStructureRole.JunctionBox ||
+                    !connection && role == StormStructureRole.Access;
                 if (storm)
                 {
                     source.Kind = SourceKind.Other;
                     if (sewer) source.Problem = "conflicting sewer and explicit storm identity/role evidence";
                 }
+                else if (connection) source.Kind = SourceKind.ConnectionEnd;
                 else if (role == StormStructureRole.NullPipeEnd) source.Kind = SourceKind.NullEnd;
                 else if (name.Trim().EndsWith("-STUB", StringComparison.OrdinalIgnoreCase) ||
                     part.IndexOf("NULL", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -272,7 +278,7 @@ namespace CLV_CivilTools.Gis
                 else if (sewer && name.Trim().Length > 0) source.Kind = SourceKind.Manhole;
                 else source.Kind = SourceKind.Ambiguous;
 
-                if (source.Kind == SourceKind.Manhole || source.Kind == SourceKind.NullEnd)
+                if (source.Kind == SourceKind.Manhole || source.Kind == SourceKind.NullEnd || source.Kind == SourceKind.ConnectionEnd)
                 {
                     var state = GisImportCommands.InspectObjectDataFingerprint(point.ObjectId, out string fingerprint, out string odDetail);
                     if (state != GisImportCommands.ObjectDataFingerprintState.Present) source.Problem = odDetail;
@@ -536,7 +542,11 @@ namespace CLV_CivilTools.Gis
             signature.Add(Handle(id)); signature.Add(id.ObjectClass.Name);
             if (value is DBDictionary dictionary)
             {
-                foreach (DBDictionaryEntry entry in dictionary.Cast<DBDictionaryEntry>().OrderBy(e => e.Key, StringComparer.Ordinal))
+                // The typed foreach exposes DBDictionaryEntry. LINQ Cast uses the
+                // non-generic IEnumerable path, which boxes DictionaryEntry instead.
+                var entries = new List<DBDictionaryEntry>();
+                foreach (DBDictionaryEntry entry in dictionary) entries.Add(entry);
+                foreach (DBDictionaryEntry entry in entries.OrderBy(e => e.Key, StringComparer.Ordinal))
                 {
                     signature.Add(entry.Key);
                     AddDynamicMetadataState(signature, entry.Value, tr, depth + 1);
@@ -575,7 +585,7 @@ namespace CLV_CivilTools.Gis
         private static string Handle(ObjectId id) => id.IsNull ? "<null>" : id.Handle.ToString();
         private static string SourceReview(Source source, string message) => $"Structures point {Handle(source.Id)} ('{source.Name}'): {message}; retained for review.";
 
-        private enum SourceKind { Ambiguous, Other, Manhole, NullEnd }
+        private enum SourceKind { Ambiguous, Other, Manhole, NullEnd, ConnectionEnd }
         private sealed class Source
         {
             internal Source(ObjectId id, string name, string partSizeName, Point3d position)

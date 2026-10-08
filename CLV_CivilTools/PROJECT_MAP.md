@@ -1,3 +1,12 @@
+## 2026-10-08 - Explicit sewer connection policy S3
+- `SewerPreparationRules.IsExplicitSewerConnectionName` recognizes only corrected sewer-utility names ending exactly `-CONN`. `GisSewerManholePlanner` represents connection versus existing null/STUB endpoints explicitly with `SewerOpenEndKind`, without requesting or consuming MH geometry.
+- The sewer-only identity-reader entry point permits missing/blank Character PartSizeName for that exact connection convention. The original Structures reader keeps its strict behavior for Storm/other callers. Available part text still participates in explicit utility-conflict checks; generic physical-part descriptions do not select a connection geometry.
+- The host retains/rechecks connection point XYZ/full OD, preserves open pipe/wall terminals and archives the retained point under OpenConnectionEnd. Normal unique-ID/orientation/elevation checks precede clipping. Rerun ownership includes those retained points; no endpoint rename or data repair occurs.
+
+## 2026-10-08 - Sewer native enumeration correction S2
+- `GisSewerManholePlan.AddDynamicMetadataState` replaces `DBDictionary.Cast<DBDictionaryEntry>()` with a typed foreach snapshot, then the same ordinal sort. Autodesk's typed enumerator exposes DBDictionaryEntry; the non-generic enumeration used by LINQ yielded DictionaryEntry in the installed host. Other typed dictionary loops are unchanged.
+- `SewerPreparationRules` adds an explanatory overload without changing classification tokens/precedence. `GisImport.TryReadPipeUtilityEvidence` keeps the same Character field selection/order and records table/record/field labels. `GisSewerPreparation` includes that evidence in review diagnostics. Tests cover the pure diagnostics; actual dictionary traversal/native OD remains a host regression.
+
 ## 2026-10-08 - Managed sewer preparation S1
 - `Gis/GisSewerGisCommands.cs` now calls `GisSewerPreparation.Run` synchronously. The Sewer ALL route no longer queues legacy MH/pipe LISP or broad cleanup. Standalone commands and Storm R5 remain unchanged.
 - `Gis/GisSewerManholePlan.cs` reads same-record native Structures identity, matches a unique evaluated `UFLS-GIS-MH-CIRCULAR` and optional `UFLS_MH_MARK`, and validates actual visible circular outer/inner geometry, transforms and XYZ alignment. It does not infer ring roles from radius or pair a sewer MH with a storm `-JS` record.
