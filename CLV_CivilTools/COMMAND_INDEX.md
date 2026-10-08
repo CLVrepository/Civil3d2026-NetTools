@@ -1,3 +1,8 @@
+## 2026-10-08 - Managed sewer preparation
+- `CLV-GIS-SSWR-GIS` - Q2 > GIS > GIS TOOLS > ADD TO DATABASE > SEWER > GIS PREP - ALL. Uses managed evaluated circular manholes, full native OD verification and straight-pipe clipping to OUTER walls. Under 12 inches keeps one line; 12 inches and above keeps the centerline plus both half-diameter offsets. No LISP or broad cleanup is queued by this ALL route.
+- SEWER now also has CREATE GIS DRAWING first, invoking the same `CLV-GIS-NEW-DRAWING` setup/save/reopen and manual-MAPIMPORT handoff used under STORM DRAIN. See `Docs/SEWER_GIS_PREP.md` for preparation limits, retained review objects and native trial steps.
+- Legacy standalone `CLV-GIS-SSWR-MH-ALL` and `CLV-GIS-SSWR-PIPE-ALL` remain available with their existing behavior. Their LISP dependencies remain required when those legacy commands are used.
+
 ## 2026-10-08 - Add to Database menu
 - Q2 > GIS > GIS TOOLS > `ADD TO DATABASE` opens the renamed palette. The legacy `CLV-GIS-CREATE-DATA` command and existing access configuration remain unchanged.
 - STORM DRAIN contains `CREATE GIS DRAWING` first, then `GIS PREP - ALL`. SEWER contains `GIS PREP - ALL`. The six individual storm/sewer buttons were removed from this palette; their backing commands remain available.

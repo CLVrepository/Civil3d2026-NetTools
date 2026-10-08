@@ -110,6 +110,15 @@ namespace CLV_CivilTools.Gis
             }
         }
 
+        // Reuse the established method-specific appearance/geometry readers for
+        // durable sewer ownership checks without changing the clone workflow.
+        internal static string ReadPrimitiveSignature(Entity entity, Transaction transaction)
+        {
+            if (entity is not Line && entity is not Circle)
+                throw new InvalidOperationException("Primitive signature requires a LINE or CIRCLE.");
+            return GeometrySignature(entity, transaction);
+        }
+
         internal static Result CloneAndVerify(AcDocument source, AcDocument destination, Snapshot snapshot)
         {
             ArgumentNullException.ThrowIfNull(source);

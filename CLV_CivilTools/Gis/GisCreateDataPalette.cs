@@ -98,6 +98,7 @@ namespace CLV_CivilTools.Gis
             layout.Controls.Add(CreateCommandButton("GIS PREP - ALL", "CLV-GIS-STORM-GIS"));
 
             layout.Controls.Add(CreateSectionLabel("SEWER"));
+            layout.Controls.Add(CreateCommandButton("CREATE GIS DRAWING", "CLV-GIS-NEW-DRAWING"));
             layout.Controls.Add(CreateCommandButton("GIS PREP - ALL", "CLV-GIS-SSWR-GIS"));
 
             layout.Controls.Add(CreateSectionLabel("OBJECT DATA"));

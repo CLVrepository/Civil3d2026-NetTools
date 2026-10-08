@@ -55,6 +55,35 @@ namespace CLV_CivilTools.Gis
             ReadFailed
         }
 
+        internal sealed record SewerPipeData(string Name, string PartSizeName,
+            string StructureStart, string StructureEnd, double DiameterFeet,
+            string ObjectDataFingerprint, IReadOnlyList<string> TableNames);
+
+        internal static bool TryReadPipeUtilityEvidence(ObjectId entityId, out IReadOnlyList<string> tables,
+            out IReadOnlyList<string> identities, out string detail)
+        {
+            tables = Array.Empty<string>(); identities = Array.Empty<string>();
+            try
+            {
+                RequireActiveOdEntity(entityId);
+                List<VerifiedOdRecord> records = ReadVerifiedOdRecords(entityId);
+                tables = records.Select(record => record.TableName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                identities = records.SelectMany(record => record.Fields).Where(field => field.Kind == "Character" &&
+                    (string.Equals(field.Name, "Name", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(field.Name, "StructureStart", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(field.Name, "StructureEnd", StringComparison.OrdinalIgnoreCase)))
+                    .Select(field => (string)field.Value).ToArray();
+                detail = string.Empty;
+                return true;
+            }
+            catch (System.Exception error)
+            {
+                tables = Array.Empty<string>(); identities = Array.Empty<string>();
+                detail = "Pipe utility OD read failed: " + OdErrorMessage(error);
+                return false;
+            }
+        }
+
         private const string SourceCoordinateSystem = "NAD_1983_StatePlane_Nevada_East_FIPS_2701_Feet";
         private const string TempBoundaryLayer = "GIS-TEMP-BOUNDARY";
         private const string ManagedMapApiAssemblyName = "ManagedMapApi";
@@ -194,6 +223,63 @@ namespace CLV_CivilTools.Gis
             }
         }
 
+        /// <summary>
+        /// Reads the verified Pipes identity and diameter without changing native OD.
+        /// Every Pipes record must agree; the four identifiers come from that same
+        /// record. InsideDiameter must be present there and agree with every occurrence
+        /// in all attached records. The fingerprint covers the complete typed snapshot.
+        /// The caller must hold the active document lock.
+        /// </summary>
+        internal static bool TryReadSewerPipeData(ObjectId entityId, out SewerPipeData? data, out string detail)
+        {
+            data = null;
+            try
+            {
+                RequireActiveOdEntity(entityId);
+                List<VerifiedOdRecord> records = ReadVerifiedOdRecords(entityId);
+                List<VerifiedOdRecord> pipes = records
+                    .Where(record => string.Equals(record.TableName, "Pipes", StringComparison.OrdinalIgnoreCase)).ToList();
+                if (pipes.Count == 0)
+                    throw new VerifiedOdIdentityException("No Pipes Object Data record is attached.");
+
+                VerifiedOdRecord first = pipes[0];
+                if (pipes.Any(record => !string.Equals(record.Key, first.Key, StringComparison.Ordinal)))
+                    throw new VerifiedOdIdentityException("Conflicting Pipes records are attached; no identity was selected.");
+
+                string name = ReadVerifiedOdIdentityField(first, "Name", "Pipes");
+                string partSizeName = ReadVerifiedOdIdentityField(first, "PartSizeName", "Pipes");
+                string structureStart = ReadVerifiedOdIdentityField(first, "StructureStart", "Pipes");
+                string structureEnd = ReadVerifiedOdIdentityField(first, "StructureEnd", "Pipes");
+                if (!first.Fields.Any(field => string.Equals(field.Name, "InsideDiameter", StringComparison.OrdinalIgnoreCase)))
+                    throw new VerifiedOdPipeDiameterException("The Pipes record has no InsideDiameter field.");
+
+                double? diameterFeet = ReadAgreedVerifiedOdPipeDiameter(records, out int occurrenceCount);
+                if (!diameterFeet.HasValue)
+                    throw new VerifiedOdPipeDiameterException("No InsideDiameter field is attached in native Object Data.");
+                if (!SameVerifiedOdRecords(records, ReadVerifiedOdRecords(entityId)))
+                    throw new InvalidOperationException("Source OD changed during sewer pipe verification.");
+
+                string fingerprint = StormObjectDataFingerprint.Compute(records.Select(record => record.Key));
+                IReadOnlyList<string> tableNames = records.Select(record => record.TableName)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(tableName => tableName, StringComparer.OrdinalIgnoreCase).ToArray();
+                data = new SewerPipeData(name, partSizeName, structureStart, structureEnd,
+                    diameterFeet.Value, fingerprint, tableNames);
+                detail = $"Pipes identity verified from {pipes.Count} record(s); read one agreed positive InsideDiameter from {occurrenceCount} occurrence(s) and fingerprinted {records.Count} complete typed OD record(s), without changes.";
+                return true;
+            }
+            catch (VerifiedOdIdentityException ex)
+            {
+                detail = ex.Message;
+                return false;
+            }
+            catch (System.Exception ex)
+            {
+                detail = "Sewer pipe native OD read failed: " + OdErrorMessage(ex);
+                return false;
+            }
+        }
+
         // Read-only eligibility check. An outline is unbound only when it truly has
         // no native OD; unreadable/conflicting metadata must never mean "shared".
         internal static OutlineObjectDataState InspectOutlineObjectData(ObjectId id,
@@ -324,35 +410,7 @@ namespace CLV_CivilTools.Gis
                 odTableNames = records.Select(record => record.TableName)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
-                double? agreedDiameter = null;
-                int occurrenceCount = 0;
-                foreach (VerifiedOdRecord record in records)
-                {
-                    List<VerifiedOdField> fields = record.Fields.Where(field =>
-                        string.Equals(field.Name, "InsideDiameter", StringComparison.OrdinalIgnoreCase)).ToList();
-                    if (fields.Count == 0) continue;
-                    if (fields.Count != 1)
-                        throw new VerifiedOdPipeDiameterException($"Table {record.TableName} has duplicate InsideDiameter fields; no diameter was selected.");
-
-                    VerifiedOdField field = fields[0];
-                    double value;
-                    if (field.Kind == "Integer" && field.Value is int integer)
-                        value = integer;
-                    else if (field.Kind == "Real" && field.Value is double real)
-                        value = real;
-                    else if (field.Kind == "Character" && field.Value is string text &&
-                        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
-                        value = parsed;
-                    else
-                        throw new VerifiedOdPipeDiameterException($"Table {record.TableName} InsideDiameter is not an Integer, Real, or invariant numeric Character value.");
-
-                    if (!double.IsFinite(value) || value <= 0)
-                        throw new VerifiedOdPipeDiameterException($"Table {record.TableName} InsideDiameter must be positive and finite, in feet.");
-                    if (agreedDiameter.HasValue && agreedDiameter.Value != value)
-                        throw new VerifiedOdPipeDiameterException("Attached OD records have conflicting InsideDiameter values; no first-record or table preference was applied.");
-                    agreedDiameter = value;
-                    occurrenceCount++;
-                }
+                double? agreedDiameter = ReadAgreedVerifiedOdPipeDiameter(records, out int occurrenceCount);
 
                 if (!agreedDiameter.HasValue)
                 {
@@ -734,11 +792,48 @@ namespace CLV_CivilTools.Gis
         }
 
         private static string ReadVerifiedOdIdentityField(VerifiedOdRecord record, string fieldName)
+            => ReadVerifiedOdIdentityField(record, fieldName, "Structures");
+
+        private static string ReadVerifiedOdIdentityField(VerifiedOdRecord record, string fieldName, string identityTableName)
         {
             List<VerifiedOdField> fields = record.Fields.Where(f => string.Equals(f.Name, fieldName, StringComparison.OrdinalIgnoreCase)).ToList();
             if (fields.Count != 1 || fields[0].Kind != "Character" || fields[0].Value is not string text || string.IsNullOrWhiteSpace(text))
-                throw new VerifiedOdIdentityException("Structures must have one nonblank Character field named " + fieldName + ".");
+                throw new VerifiedOdIdentityException(identityTableName + " must have one nonblank Character field named " + fieldName + ".");
             return text.Trim();
+        }
+
+        private static double? ReadAgreedVerifiedOdPipeDiameter(IReadOnlyList<VerifiedOdRecord> records, out int occurrenceCount)
+        {
+            double? agreedDiameter = null;
+            occurrenceCount = 0;
+            foreach (VerifiedOdRecord record in records)
+            {
+                List<VerifiedOdField> fields = record.Fields.Where(field =>
+                    string.Equals(field.Name, "InsideDiameter", StringComparison.OrdinalIgnoreCase)).ToList();
+                if (fields.Count == 0) continue;
+                if (fields.Count != 1)
+                    throw new VerifiedOdPipeDiameterException($"Table {record.TableName} has duplicate InsideDiameter fields; no diameter was selected.");
+
+                VerifiedOdField field = fields[0];
+                double value;
+                if (field.Kind == "Integer" && field.Value is int integer)
+                    value = integer;
+                else if (field.Kind == "Real" && field.Value is double real)
+                    value = real;
+                else if (field.Kind == "Character" && field.Value is string text &&
+                    double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
+                    value = parsed;
+                else
+                    throw new VerifiedOdPipeDiameterException($"Table {record.TableName} InsideDiameter is not an Integer, Real, or invariant numeric Character value.");
+
+                if (!double.IsFinite(value) || value <= 0)
+                    throw new VerifiedOdPipeDiameterException($"Table {record.TableName} InsideDiameter must be positive and finite, in feet.");
+                if (agreedDiameter.HasValue && agreedDiameter.Value != value)
+                    throw new VerifiedOdPipeDiameterException("Attached OD records have conflicting InsideDiameter values; no first-record or table preference was applied.");
+                agreedDiameter = value;
+                occurrenceCount++;
+            }
+            return agreedDiameter;
         }
 
         private static bool SameVerifiedOdRecords(List<VerifiedOdRecord> a, List<VerifiedOdRecord> b)

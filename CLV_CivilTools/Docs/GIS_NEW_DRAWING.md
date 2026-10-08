@@ -1,6 +1,6 @@
 # Create GIS Drawing
 
-`CLV-GIS-NEW-DRAWING` (Q2 > GIS > GIS TOOLS > ADD TO DATABASE > STORM DRAIN > **CREATE GIS DRAWING**) prepares a separate drawing for **manual MAPIMPORT**, then prompts for a new DWG filename and saves/reopens it. Run it from the original survey/network drawing. It uses that drawing's assigned coordinate system and automatically finds the supported survey linework and DI/MH blocks; there is no geometry-selection or SDF prompt.
+`CLV-GIS-NEW-DRAWING` (Q2 > GIS > GIS TOOLS > ADD TO DATABASE > STORM DRAIN or SEWER > **CREATE GIS DRAWING**) prepares a separate drawing for **manual MAPIMPORT**, then prompts for a new DWG filename and saves/reopens it. Run it from the original survey/network drawing. It uses that drawing's assigned coordinate system and automatically finds the supported survey linework and DI/MH blocks; there is no geometry-selection or SDF prompt.
 
 ## Workflow
 
@@ -43,7 +43,7 @@ On 2026-10-08 the user directed that automatic-import debugging stop and request
 
 ## Validation
 
-The user ran setup-only commit `16e46b4`: it reported 42 copied/verified survey objects and an active unsaved drawing with the source CRS. The objects were initially invisible but appeared after saving, closing and reopening; this is the user's corrected observation. Explicit graphics registration in `c5f36c9` still did not resolve initial normal display, although selection highlighted the objects. The user then requested this save/reopen workflow as the practical workaround. The underlying display cause has not been established.
+The user ran setup-only commit `16e46b4`: it reported 42 copied/verified survey objects and an active unsaved drawing with the source CRS. The objects were initially invisible but appeared after saving, closing and reopening; this is the user's corrected observation. Explicit graphics registration in `c5f36c9` still did not resolve initial normal display, although selection highlighted the objects. The user then requested this save/reopen workflow as the practical workaround. The user subsequently reported that save/reopen commit `2ea8716` seems to work. The underlying display cause has not been established.
 
 The save/reopen change has static checks and focused path-policy tests. Executable tests, the full plugin build and the automated save/reopen lifecycle remain unrun in the authoring environment because the .NET SDK and Autodesk runtime are unavailable. Native acceptance must cover successful new-file save/reopen and visible geometry, cancel, protected/existing/invalid paths, disk-save failure, failed verification and failed reopen. The source must remain unchanged in every case. Autodesk documents the [full-copy SaveAs option](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_Database_SaveAs_string__MarshalAsUnmanagedType_U1__bool_DwgVersion_Autodesk_AutoCAD_DatabaseServices_SecurityParameters.html) and [native save-file prompt](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_EditorInput_Editor_GetFileNameForSave_PromptSaveFileOptions.html).
 
