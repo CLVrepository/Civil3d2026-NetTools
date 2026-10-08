@@ -6,8 +6,9 @@
 - `Gis/GisNewDrawingClone.cs`: selected model-space cloning, dependency collision checks, source/destination geometry/block/attribute/OD verification.
 - `Gis/GisNewDrawingAppearance.cs`: active method-specific color/transparency/linetype snapshot guards used by clone verification.
 - `Gis/GisNewDrawingMapApi.cs`: source-code drawing assignment, incoming/from import-code override, profile loading, effective OD mapping and raw-coordinate/result verification.
+- `Gis/GisNewDrawingNativeOutputs.cs`: active exact-signature reader for the four import-setting enum outputs, with correctly owned pointer storage; it reads actual mappings without invoking setters.
 - `Gis/GisPalette.cs`: `CREATE GIS DRAWING` queues the Session command. Existing R5 preparation/cleanup files are untouched. Native acceptance checklist: `Docs/GIS_NEW_DRAWING.md`.
-- `Tests/GisNewDrawingProfile.Tests`, `GisNewDrawingAppearance.Tests`, `GisNewDrawingSdf.Tests` and `GisNewDrawingCoordinateSystem.Tests` all exercise active code. They sit outside the production project and are not deployment dependencies.
+- `Tests/GisNewDrawingProfile.Tests`, `GisNewDrawingAppearance.Tests`, `GisNewDrawingSdf.Tests`, `GisNewDrawingCoordinateSystem.Tests` and `GisNewDrawingNativeOutputs.Tests` all exercise active code. They sit outside the production project and are not deployment dependencies.
 
 ## 2026-10-07 - Managed storm pipeline and durable cleanup R5
 - `Gis/GisStormGisCommands.cs`: calls committed structure preparation, then one synchronous managed transaction for pipe preparation, trim and cleanup. Legacy standalone LISP-backed commands are unchanged.

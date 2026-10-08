@@ -1,3 +1,8 @@
+## 2026-10-08 - Read native import mapping outputs correctly
+- Fixes null enum-output pointers in `LayerName`, `DataMapping`, `PointToBlockMapping` and `ColumnDataMapping`. The dedicated reader validates each getter signature, supplies initialized writable storage, validates the returned enum and releases storage in finally.
+- Retains actual profile/layer/OD/column/point-mode validation. No mapping setter or default is substituted for native readback, and input wrappers remain acquired after profile loading. Automated import and discard-on-failure behavior are unchanged.
+- Adds an active native-output reader and focused pointer-shaped regression fixtures. Production needs no unsafe compilation setting. Tests/full build and native acceptance remain unrun for this update.
+
 ## 2026-10-08 - Compare clone resources by rendering properties
 - Separates exact source-resource snapshots from cross-drawing appearance comparison. Linetype description text no longer causes an otherwise equivalent built-in linetype to collide; source rechecks still preserve that metadata exactly.
 - Compares symbol identities case-insensitively in resource and entity references, while keeping literal text, font paths, color names, text-generation flags, patterns and shape settings exact. Matching handles in different databases are not identity evidence.

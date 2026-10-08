@@ -194,20 +194,23 @@ namespace CLV_CivilTools.Gis
                         code => SetTextProperty(layer, "TargetCoordinateSystem", code),
                         () => Get(layer, "TargetCoordinateSystem") as string,
                         name + " incoming import coordinate system");
-                    (object? layerMode, object? layerName) = OutPair(layer, "LayerName");
-                    if (Text(layerMode) != "LayerNameDirect" || Text(layerName) != expected.LayerName)
+                    GisNewDrawingNativeOutputs.EnumTextOutput layerMapping = GisNewDrawingNativeOutputs.ReadPair(layer, "LayerName");
+                    string layerMode = Text(layerMapping.Mode);
+                    string layerName = Text(layerMapping.Text);
+                    if (layerMode != "LayerNameDirect" || layerName != expected.LayerName)
                         throw new InvalidOperationException("Native CAD layer mapping differs from the profile: " + name);
-                    (object? tableMode, object? tableName) = OutPair(layer, "DataMapping");
-                    string mode = Text(tableMode);
-                    document.Editor.WriteMessage($"\nEffective mapping: {name} -> {Text(layerName)}; OD {mode} / '{Text(tableName)}'.");
-                    if (!IsOdMapping(mode) || Text(tableName) != expected.LayerName)
-                        throw new InvalidOperationException($"The supplied profile loaded {name} with OD mapping {mode} / '{Text(tableName)}'. " +
+                    GisNewDrawingNativeOutputs.EnumTextOutput tableMapping = GisNewDrawingNativeOutputs.ReadPair(layer, "DataMapping");
+                    string mode = Text(tableMapping.Mode);
+                    string tableName = Text(tableMapping.Text);
+                    document.Editor.WriteMessage($"\nEffective mapping: {name} -> {layerName}; OD {mode} / '{tableName}'.");
+                    if (!IsOdMapping(mode) || tableName != expected.LayerName)
+                        throw new InvalidOperationException($"The supplied profile loaded {name} with OD mapping {mode} / '{tableName}'. " +
                             $"Expected a native Object Data mapping to {expected.LayerName}. No import was run and the profile was not changed. " +
                             "Inspect/resave the working MAPIMPORT profile with Object Data enabled before retrying.");
                     if (expected.LayerName == "Structures")
                     {
-                        (object? pointMode, _) = OutPair(layer, "PointToBlockMapping");
-                        if (Text(pointMode) != "MapPointToPoint")
+                        GisNewDrawingNativeOutputs.EnumTextOutput pointMapping = GisNewDrawingNativeOutputs.ReadPair(layer, "PointToBlockMapping");
+                        if (Text(pointMapping.Mode) != "MapPointToPoint")
                             throw new InvalidOperationException("The Structures profile does not import native DBPoints.");
                     }
                     VerifyColumns(layer, expected);
@@ -227,9 +230,9 @@ namespace CLV_CivilTools.Gis
                 {
                     string name = Text(Get(column, "ColumnName"));
                     if (!seen.Add(name)) throw new InvalidOperationException("Duplicate native input column: " + name);
-                    var arguments = new object?[] { null };
-                    string actualOutput = Text(Invoke(column, "ColumnDataMapping", arguments));
-                    string actualMode = Text(arguments[0]);
+                    GisNewDrawingNativeOutputs.EnumTextOutput columnMapping = GisNewDrawingNativeOutputs.ReadColumnMapping(column);
+                    string actualOutput = Text(columnMapping.Text);
+                    string actualMode = Text(columnMapping.Mode);
                     GisNewDrawingProfileColumn? planned = expected.Columns.SingleOrDefault(item => item.ColumnName == name);
                     bool mapped = !string.IsNullOrEmpty(actualOutput) && actualMode != "NoImportMapping";
                     if (planned?.IsMappedToObjectData == true)
@@ -340,12 +343,6 @@ namespace CLV_CivilTools.Gis
             property.SetValue(target, value);
         }
         private static string Text(object? value) => Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
-        private static (object?, object?) OutPair(object target, string name)
-        {
-            var arguments = new object?[] { null, null };
-            Invoke(target, name, arguments);
-            return (arguments[0], arguments[1]);
-        }
         private static object? Invoke(object target, string name, params object?[] arguments)
         {
             MethodInfo[] methods = target.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public)

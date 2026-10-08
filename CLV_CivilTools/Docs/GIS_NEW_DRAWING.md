@@ -61,6 +61,12 @@ A genuine conflict reports the differing property names and source/target values
 
 The latest native trial identified a Continuous collision before any clone but did not expose the actual differing field. Description/name-case acceptance is based on the documented contracts; the trial must still verify the actual definitions and output. The original shared template is never edited.
 
+## Native import-setting readback
+
+The four native mapping getters (`LayerName`, `DataMapping`, `PointToBlockMapping`, and `ColumnDataMapping`) return enum values through native output pointers in the published Map 2026 API. They require writable enum storage; null arguments are not managed `out` enum slots. The dedicated reader checks the actual signature, supplies initialized storage of the enum's exact underlying size, validates that a defined value was written, and frees the storage on every exit. A managed enum-reference shape is handled only when the reflected signature actually declares it.
+
+The command continues to inspect the loaded profile's real CAD-layer, OD-table, column and point mappings. These getters are not replaced with setters or guessed mappings. Layers/columns are obtained after `LoadImportFormat`, which can invalidate earlier iterators when its schema changes. The borrowed importer singleton remains alive, and returned wrappers follow the existing cleanup.
+
 ## Validation
 
 Run the existing profile, appearance, SDF, source-coordinate policy and storm regression suites, then build the actual plugin against installed Civil 3D 2026/Map assemblies. For a .NET 10-only test executor, use `-p:TargetFramework=net10.0 -p:GisTestTargetFramework=net10.0`. Do not retarget the production project as part of this feature.
@@ -69,8 +75,9 @@ Run the existing profile, appearance, SDF, source-coordinate policy and storm re
 - `Tests/GisNewDrawingAppearance.Tests/GisNewDrawingAppearance.Tests.csproj`
 - `Tests/GisNewDrawingSdf.Tests/GisNewDrawingSdf.Tests.csproj`
 - `Tests/GisNewDrawingCoordinateSystem.Tests/GisNewDrawingCoordinateSystem.Tests.csproj`
+- `Tests/GisNewDrawingNativeOutputs.Tests/GisNewDrawingNativeOutputs.Tests.csproj`
 - `Tests/StormStructureMatching.Tests/StormStructureMatching.Tests.csproj`
 
-The SDF runner deliberately uses the test assembly name `OSGeo.FDO`; never deploy it or other test outputs into Civil 3D. The MapGuide fake and obsolete semantic-CRS tests were removed. Coordinate policy tests exercise source-code assignment/readback without a MapGuide dependency.
+The SDF runner deliberately uses the test assembly name `OSGeo.FDO`; never deploy it or other test outputs into Civil 3D. The MapGuide fake and obsolete semantic-CRS tests were removed. Coordinate policy tests exercise source-code assignment/readback without a MapGuide dependency. The separate native-output suite uses unsafe fake getter signatures only inside its test project; the production reader uses safe C# and no Autodesk test binaries are deployed.
 
 Native acceptance should verify the actual source drawing and template, copied XYZ/dynamic/attribute/OD state, imported counts/fields/vertices, missing/unsupported source assignment, disconnected UNC files, unchanged source inputs, cancellation/partial failure and repeated invocation. Test LVF and LVHEF separately. The supplied sample is expected to contain 13 pipes and 22 structures including one null/STUB; establish those counts through the complete native run before calling them an acceptance result. Its 22 imported structures differ from the existing conversion's 21 real structures.
