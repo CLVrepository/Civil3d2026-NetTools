@@ -1,7 +1,7 @@
 ## 2026-10-08 - Separate GIS drawing setup for manual import
-- `Gis/GisNewDrawingCommands.cs`: Session-context source/destination handling, fresh Blank template, matching source units/CRS, verified copy, active unsaved completion with manual MAPIMPORT/IPF instructions, and discard only on setup failure. No SDF picker or automatic import remains.
+- `Gis/GisNewDrawingCommands.cs`: Session-context Blank/source-CRS/units/verified copy, new-filename prompt, full-copy save with non-overwriting publication, disk setup verification and close/reopen. Cancel/save failure retains the prepared drawing; reopen failure preserves the saved file. Manual MAPIMPORT/IPF instructions remain; no SDF picker or automatic import.
 - `Gis/GisNewDrawingCoordinateSystem.cs`: active source-code policy and one assignment/readback; no SDF metadata, WKT or dictionary logic.
-- `Gis/GisNewDrawingResources.cs`: exact supported source codes and shared UNC template/profile paths. No IPF parsing or import field schema remains.
+- `Gis/GisNewDrawingResources.cs`: exact source codes/shared UNC paths and read-only new-DWG path validation protecting source/template/open files. No IPF parsing or import field schema remains.
 - `Gis/GisNewDrawingMapApi.cs`: only the borrowed Map project Projection reader/setter used by setup.
 - `Gis/GisNewDrawingClone.cs` and `Gis/GisNewDrawingAppearance.cs`: active geometry/block/attribute/OD preservation, dependency collision checks and rendering comparisons.
 - `Gis/GisPalette.cs`: `CREATE GIS DRAWING` queues the unchanged command name. Existing R5 preparation remains independent. Workflow and final automatic-trial failure: `Docs/GIS_NEW_DRAWING.md`.

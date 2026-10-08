@@ -1,3 +1,8 @@
+## 2026-10-08 - Prompt to save and reopen the prepared GIS drawing
+- User-requested workaround after `c5f36c9` still displayed copied objects only when selected; manual save/close/reopen had restored normal display. The command now asks for a new DWG filename after verified setup, saves a full copy and verifies basic stored setup data before closing/reopening it. The display root cause remains unproven.
+- New-file-only policy refuses existing/source/template/open drawing paths. The save uses a temporary full copy and non-overwriting file move; a racing target creation cannot replace an existing drawing. Cancel/save/verification failure keeps the prepared document open. Close/reopen failure preserves the saved output and reports the exact recovery path.
+- Reopened documents replace the old references; no closed database or old ObjectIds are reused. Manual MAPIMPORT remains separate, with the matching IPF path shown after reopen. Added filesystem path-policy cases to the existing coordinate/resource tests; executable tests/full build/native lifecycle remain unrun.
+
 ## 2026-10-08 - Register copied geometry for initial display
 - Setup-only trial `16e46b4` completed and verified 42 survey objects, but they appeared only after saving/closing/reopening. The new drawing now marks only its verified cloned entities graphics-modified, queues graphics while transaction-resident, commits, and then regenerates/updates the screen after releasing the document lock.
 - Reuses the existing storm-preparation display sequence without changing geometry, visibility, layers, transparency or dynamic state. Display-only failures produce a warning and preserve the verified unsaved result; layer locks are respected. Setup/copy failures retain their discard behavior.

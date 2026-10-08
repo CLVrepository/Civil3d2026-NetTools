@@ -6,14 +6,15 @@ using System.Linq;
 using System.Security.Cryptography;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace CLV_CivilTools.Gis
 {
     /// <summary>
-    /// Makes a separate, unsaved GIS work drawing for manual MAPIMPORT. The source
-    /// drawing and shared DWT are unchanged. No SDF is opened or import queued.
+    /// Prepares a separate GIS drawing, then offers a new-file save and reopen for
+    /// manual MAPIMPORT. The source and shared DWT are unchanged; no SDF is opened.
     /// </summary>
     public static class GisNewDrawingCommands
     {
@@ -127,12 +128,14 @@ namespace CLV_CivilTools.Gis
                 }
                 stage = "reporting the prepared unsaved drawing";
                 destination.Editor.WriteMessage($"\nCLV-GIS-NEW-DRAWING setup complete: {cloned.CopiedCount} survey object(s) copied and verified at original coordinates. " +
-                    $"Coordinate system: {sourceCs}.\nNew drawing: {destination.Name}. It is active and unsaved.\n" +
-                    "Next: run MAPIMPORT, select your exported SDF, and load this matching profile:\n" +
-                    profilePath + "\nComplete MAPIMPORT manually, then use SAVEAS to choose the drawing name and folder. " +
-                    "Run the existing GIS preparation command after importing the network.");
+                    $"Coordinate system: {sourceCs}.\nNew drawing: {destination.Name}. Choose a new DWG filename to save and reopen it.");
                 foreach (string warning in displayWarnings)
                     destination.Editor.WriteMessage("\nDISPLAY WARNING: {0}\nThe copied geometry remains verified and this drawing is still open and unsaved.", warning);
+                // Keep only stable values across closing/reopening. New documents
+                // have new ObjectIds, Editors and Database instances.
+                var copiedHandles = cloned.Ids.Values.Select(id => id.Handle.ToString()).ToHashSet(StringComparer.Ordinal);
+                stage = "saving and reopening the prepared drawing";
+                SaveAndReopenPreparedDrawing(source, ref destination, sourceUnits, sourceCs, profilePath, copiedHandles);
             }
             catch (System.Exception ex)
             {
@@ -197,7 +200,15 @@ namespace CLV_CivilTools.Gis
                     }
                     try
                     {
-                        HostApplicationServices.WorkingDatabase = complete && destination != null ? destination.Database : originalWorkingDatabase;
+                        if (complete)
+                        {
+                            // destination can be null during a failed reopen. Never
+                            // dereference the original destination after its close.
+                            Document? live = AcadApp.DocumentManager.MdiActiveDocument
+                                ?? FindLiveDocument(destination) ?? FindLiveDocument(source);
+                            if (live != null) HostApplicationServices.WorkingDatabase = live.Database;
+                        }
+                        else HostApplicationServices.WorkingDatabase = originalWorkingDatabase;
                     }
                     catch (System.Exception restoreError)
                     {
@@ -212,6 +223,203 @@ namespace CLV_CivilTools.Gis
                 }
                 finally { _running = false; }
             }
+        }
+
+        private static void SaveAndReopenPreparedDrawing(Document source, ref Document? destination,
+            UnitsValue units, string coordinateSystem, string profilePath, IReadOnlySet<string> copiedHandles)
+        {
+            Document prepared = destination ?? throw new InvalidOperationException("The prepared drawing is unavailable.");
+            string preparedName = prepared.Name;
+            string sourceName = source.Name;
+            string? path;
+            string? stagingPath = null;
+            try { path = SelectNewDrawingPath(prepared, sourceName); }
+            catch (System.Exception error)
+            {
+                WriteDiagnostic(source, "\nThe save prompt could not be completed. The prepared drawing remains open.\n" + DescribeFailure(error));
+                WriteManualImportInstructions(source, profilePath, saved: false);
+                return;
+            }
+            if (path == null)
+            {
+                WriteDiagnostic(source, "\nSave/reopen canceled. The prepared drawing remains open and unsaved. " +
+                    "Use SAVEAS and reopen it manually when ready.");
+                WriteManualImportInstructions(source, profilePath, saved: false);
+                return;
+            }
+
+            try
+            {
+                ActivateDocument(prepared);
+                using (prepared.LockDocument())
+                {
+                    // Recheck after the prompt and immediately before writing.
+                    // This workflow never authorizes replacing an existing DWG.
+                    if (!GisNewDrawingResources.TryValidateNewDrawingPath(path, ProtectedDrawingPaths(),
+                        out string checkedPath, out string detail)) throw new InvalidOperationException(detail);
+                    path = checkedPath;
+                    stagingPath = Path.Combine(Path.GetDirectoryName(path)!, "CLV_GIS_SAVE_" + Guid.NewGuid().ToString("N") + ".dwg");
+                    if (File.Exists(stagingPath) || Directory.Exists(stagingPath))
+                        throw new IOException("The temporary save path is already occupied.");
+                    // Save a full copy without renaming the prepared document.
+                    // Publishing with non-overwriting Move protects a target that
+                    // another process creates after our last existence check.
+                    prepared.Database.SaveAs(stagingPath, false, DwgVersion.Current, prepared.Database.SecurityParameters);
+                }
+                File.Move(stagingPath, path);
+                stagingPath = null;
+                // SaveAs returning is not the close gate by itself. Open the file
+                // read-only through a separate database and verify basic setup data.
+                VerifySavedDrawing(path, units, sourceName, coordinateSystem, profilePath, copiedHandles);
+            }
+            catch (System.Exception error)
+            {
+                WriteDiagnostic(source, "\nSave/reopen was not completed. The prepared drawing remains open; no drawing was closed. " +
+                    $"Requested path: {path}\n" + DescribeFailure(error));
+                if (stagingPath != null && File.Exists(stagingPath))
+                    WriteDiagnostic(source, "\nA temporary save file remains at: " + stagingPath + ". The prepared drawing remains the working copy.");
+                WriteManualImportInstructions(source, profilePath, saved: false);
+                return;
+            }
+
+            WriteDiagnostic(source, $"\nSaved DWG verified: {path}");
+            try
+            {
+                // Close from Session context after every document lock and
+                // verification database has been released. The source is not saved.
+                ActivateDocument(source);
+                prepared.CloseAndDiscard();
+                destination = FindLiveDocument(prepared, preparedName);
+                if (destination != null)
+                {
+                    ActivateDocument(destination);
+                    WriteDiagnostic(source, $"\nSaved at {path}, but the prepared document remained open. Close and reopen this saved file manually.");
+                    WriteManualImportInstructions(source, profilePath, saved: true);
+                    return;
+                }
+            }
+            catch (System.Exception error)
+            {
+                destination = FindLiveDocument(prepared, preparedName) ?? FindLiveDocument(null, path);
+                WriteDiagnostic(source, $"\nThe DWG is saved and verified at {path}, but automatic closing did not complete. " +
+                    "If its tab is still open, close it; then OPEN this saved path. The saved file was not deleted.\n" + DescribeFailure(error));
+                WriteManualImportInstructions(source, profilePath, saved: true, requiresOpen: true);
+                return;
+            }
+
+            try
+            {
+                // Clear the old document before Open can throw. The caller's
+                // finally must never touch the closed document/database.
+                destination = null;
+                destination = DocumentCollectionExtension.Open(AcadApp.DocumentManager, path, false);
+                ActivateDocument(destination);
+                using (destination.LockDocument())
+                {
+                    VerifyPreparedDatabase(destination.Database, units, sourceName, coordinateSystem, profilePath, copiedHandles);
+                    GisNewDrawingMapApi.VerifyProjection(coordinateSystem);
+                }
+                WriteDiagnostic(source, $"\nPrepared GIS drawing saved and reopened: {path}\nCoordinate system: {coordinateSystem}.");
+                WriteManualImportInstructions(source, profilePath, saved: true);
+            }
+            catch (System.Exception error)
+            {
+                destination = FindLiveDocument(destination, path);
+                WriteDiagnostic(source, $"\nThe DWG remains saved at {path}, but automatic reopen/verification did not complete. " +
+                    "OPEN that path (or select its tab if already open) and inspect it before continuing. No saved file was deleted.\n" + DescribeFailure(error));
+                WriteManualImportInstructions(source, profilePath, saved: true, requiresOpen: true);
+            }
+        }
+
+        private static string? SelectNewDrawingPath(Document prepared, string sourceName)
+        {
+            var options = new PromptSaveFileOptions("\nSave prepared GIS drawing to a NEW DWG file (Cancel keeps it open)")
+            {
+                DialogCaption = "Save and Reopen GIS Drawing - New File Only",
+                Filter = "AutoCAD drawing (*.dwg)|*.dwg",
+                InitialFileName = Path.GetFileNameWithoutExtension(sourceName) + "_GIS.dwg"
+            };
+            string? folder = Path.GetDirectoryName(sourceName);
+            if (!string.IsNullOrEmpty(folder) && Directory.Exists(folder)) options.InitialDirectory = folder;
+            while (true)
+            {
+                PromptFileNameResult choice = prepared.Editor.GetFileNameForSave(options);
+                if (choice.Status != PromptStatus.OK) return null;
+                if (GisNewDrawingResources.TryValidateNewDrawingPath(choice.StringResult, ProtectedDrawingPaths(),
+                    out string path, out string detail)) return path;
+                prepared.Editor.WriteMessage("\n{0}\nChoose a different NEW filename, or Cancel to keep this drawing open.", detail);
+            }
+        }
+
+        private static IReadOnlyList<string> ProtectedDrawingPaths()
+        {
+            var paths = new List<string> { GisNewDrawingResources.TemplatePath };
+            foreach (Document document in AcadApp.DocumentManager)
+            {
+                paths.Add(document.Name);
+                paths.Add(document.Database.Filename);
+            }
+            return paths;
+        }
+
+        private static Document? FindLiveDocument(Document? preferred, string? savedPath = null)
+        {
+            foreach (Document document in AcadApp.DocumentManager)
+            {
+                if (ReferenceEquals(document, preferred)) return document;
+                if (savedPath != null && string.Equals(document.Name, savedPath, StringComparison.OrdinalIgnoreCase)) return document;
+                if (savedPath != null && Path.IsPathFullyQualified(savedPath) && Path.IsPathFullyQualified(document.Name) &&
+                    string.Equals(Path.GetFullPath(document.Name), savedPath, StringComparison.OrdinalIgnoreCase)) return document;
+            }
+            return null;
+        }
+
+        private static void ActivateDocument(Document document)
+        {
+            AcadApp.DocumentManager.MdiActiveDocument = document;
+            HostApplicationServices.WorkingDatabase = document.Database;
+            if (AcadApp.DocumentManager.MdiActiveDocument != document || HostApplicationServices.WorkingDatabase != document.Database)
+                throw new InvalidOperationException("The requested drawing could not become active/current.");
+        }
+
+        private static void VerifySavedDrawing(string path, UnitsValue units, string sourceName,
+            string coordinateSystem, string profilePath, IReadOnlySet<string> copiedHandles)
+        {
+            RequireReadableFile(path, "Saved DWG");
+            using var saved = new Database(false, true);
+            saved.ReadDwgFile(path, FileOpenMode.OpenForReadAndAllShare, true, string.Empty);
+            saved.CloseInput(true);
+            VerifyPreparedDatabase(saved, units, sourceName, coordinateSystem, profilePath, copiedHandles);
+        }
+
+        private static void VerifyPreparedDatabase(Database database, UnitsValue units, string sourceName,
+            string coordinateSystem, string profilePath, IReadOnlySet<string> copiedHandles)
+        {
+            if (database.Insunits != units) throw new InvalidDataException("Saved drawing insertion units differ from the verified setup.");
+            using Transaction transaction = database.TransactionManager.StartOpenCloseTransaction();
+            var blocks = (BlockTable)transaction.GetObject(database.BlockTableId, OpenMode.ForRead);
+            var model = (BlockTableRecord)transaction.GetObject(blocks[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+            var handles = model.Cast<ObjectId>().Where(id => !id.IsErased).Select(id => id.Handle.ToString()).ToHashSet(StringComparer.Ordinal);
+            if (!handles.SetEquals(copiedHandles)) throw new InvalidDataException("Saved drawing model-space objects differ from the verified setup.");
+            var dictionary = (DBDictionary)transaction.GetObject(database.NamedObjectsDictionaryId, OpenMode.ForRead);
+            if (!dictionary.Contains("CLV_GIS_NEW_DRAWING_V2")) throw new InvalidDataException("Saved drawing is missing its setup marker.");
+            var record = transaction.GetObject(dictionary.GetAt("CLV_GIS_NEW_DRAWING_V2"), OpenMode.ForRead) as Xrecord
+                ?? throw new InvalidDataException("Saved drawing setup marker has an unexpected type.");
+            using ResultBuffer? data = record.Data;
+            TypedValue[] values = data?.AsArray() ?? throw new InvalidDataException("Saved drawing setup marker is empty.");
+            if (values.Length != 5 || values.Any(value => value.TypeCode != (int)DxfCode.Text) ||
+                !Equals(values[0].Value, "SETUP_READY_MANUAL_IMPORT") || !Equals(values[1].Value, sourceName) ||
+                !Equals(values[2].Value, profilePath) || !Equals(values[3].Value, coordinateSystem))
+                throw new InvalidDataException("Saved drawing setup marker differs from the verified setup.");
+            transaction.Commit();
+        }
+
+        private static void WriteManualImportInstructions(Document source, string profilePath, bool saved, bool requiresOpen = false)
+        {
+            WriteDiagnostic(source, (requiresOpen ? "\nAfter opening the saved GIS drawing, " : "\nNext, in the prepared GIS drawing, ") +
+                "run MAPIMPORT, select the exported SDF, and load this matching profile:\n" + profilePath +
+                (saved ? "\nSave the drawing again after the manual import." : "\nUse SAVEAS when ready; the source drawing is unchanged.") +
+                " Run the existing GIS preparation command after importing the network.");
         }
 
         private static string DescribeFailure(System.Exception error)

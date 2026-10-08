@@ -1,5 +1,5 @@
 ## 2026-10-07 - Create GIS Drawing
-- `CLV-GIS-NEW-DRAWING` - Q2 > GIS > DATA > `CREATE GIS DRAWING`. Creates a separate active, unsaved Blank drawing, matches source units/CRS, and clones/verifies eligible survey geometry and blocks. Shows the matching IPF path for manual MAPIMPORT; no SDF prompt or automatic import. Use SAVEAS after the manual import. See `Docs/GIS_NEW_DRAWING.md`.
+- `CLV-GIS-NEW-DRAWING` - Q2 > GIS > DATA > `CREATE GIS DRAWING`. Creates Blank, matches source units/CRS and clones/verifies eligible survey geometry. Prompts for a new DWG filename, verifies the saved copy, and reopens it; cancel/save failure keeps the prepared drawing open. Shows the matching IPF for manual MAPIMPORT. No SDF prompt or automatic import. See `Docs/GIS_NEW_DRAWING.md`.
 
 ## 2026-10-07 - Managed storm preparation and cleanup R5
 - `CLV-GIS-STORM-GIS` / storm GIS PREP-ALL: revision `2026.10.07-R5` performs managed storm pipe offsets, owned-wall trim at verified straight DI/box outers, and verified point/marker cleanup after structure preparation. It records pipe/structure ownership for reruns; any dependent failure rolls back the pipe/trim/cleanup transaction. No LISP helper is required by this ALL path.

@@ -113,4 +113,124 @@ Test("policy and test runner have no MapGuide dependency", () =>
     Check(!typeof(GisNewDrawingCoordinateSystem).Assembly.GetReferencedAssemblies().Any(assembly => assembly.Name?.StartsWith("OSGeo.MapGuide", StringComparison.Ordinal) == true),
         "The source-authoritative policy must not reference a MapGuide runtime or fake.");
 });
+
+string pathTestRoot = Path.Combine(Path.GetTempPath(), "GisNewDrawingPath-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(pathTestRoot);
+try
+{
+    void CheckPathRejected(string? requested, IEnumerable<string> protectedPaths, string expectedDetail)
+    {
+        string path = "must be cleared";
+        Check(!GisNewDrawingResources.TryValidateNewDrawingPath(requested, protectedPaths, out path, out string detail),
+            "An unsafe or unavailable destination must be rejected.");
+        Check(path == string.Empty, "Rejected validation must clear the output path.");
+        Check(detail.Contains(expectedDetail, StringComparison.Ordinal), "Expected refusal detail: " + expectedDetail + "; got: " + detail);
+    }
+
+    foreach (string name in new[] { "New drawing.dwg", "New drawing.DWG", "New drawing" })
+        Test("new filename is accepted without filesystem writes: " + name, () =>
+        {
+            string requested = Path.Combine(pathTestRoot, name);
+            string expected = Path.HasExtension(requested) ? requested : requested + ".dwg";
+            Check(GisNewDrawingResources.TryValidateNewDrawingPath(requested, Array.Empty<string>(), out string path, out string detail), detail);
+            Check(path == expected, "Keep an explicit DWG extension or append .dwg when absent.");
+            Check(detail == string.Empty, "A valid new destination must have no failure detail.");
+            Check(!File.Exists(path) && !Directory.Exists(path), "Validation must not reserve or create its target.");
+        });
+
+    foreach (string? requested in new string?[] { null, "", " ", "\t", "Drawing1.dwg", Path.Combine("relative", "drawing.dwg") })
+        Test("blank or relative path is rejected: " + (requested ?? "<null>"), () =>
+            CheckPathRejected(requested, Array.Empty<string>(), "fully qualified"));
+
+    foreach (string name in new[] { "drawing.dwt", "drawing.dxf", "drawing.dwg.bak" })
+        Test("non-DWG extension is rejected: " + name, () =>
+            CheckPathRejected(Path.Combine(pathTestRoot, name), Array.Empty<string>(), ".dwg extension"));
+
+    Test("missing parent is rejected without creating a folder", () =>
+    {
+        string parent = Path.Combine(pathTestRoot, "missing-parent");
+        CheckPathRejected(Path.Combine(parent, "new.dwg"), Array.Empty<string>(), "does not exist or is unavailable");
+        Check(!Directory.Exists(parent), "Validation must not create the missing destination folder.");
+    });
+    Test("a file cannot serve as the parent folder", () =>
+    {
+        string parent = Path.Combine(pathTestRoot, "parent-is-file");
+        File.WriteAllText(parent, "preserve parent file");
+        CheckPathRejected(Path.Combine(parent, "new.dwg"), Array.Empty<string>(), "does not exist or is unavailable");
+        Check(File.ReadAllText(parent) == "preserve parent file", "Parent files must remain unchanged.");
+    });
+    Test("existing drawing is rejected and preserved", () =>
+    {
+        string existing = Path.Combine(pathTestRoot, "existing.dwg");
+        File.WriteAllText(existing, "preserve existing drawing");
+        CheckPathRejected(existing, Array.Empty<string>(), "already exists");
+        CheckPathRejected(Path.Combine(pathTestRoot, "existing"), Array.Empty<string>(), "already exists");
+        Check(File.ReadAllText(existing) == "preserve existing drawing", "Validation must not alter existing drawing bytes.");
+    });
+    Test("existing directory is rejected and preserved", () =>
+    {
+        string existing = Path.Combine(pathTestRoot, "existing-folder.dwg");
+        Directory.CreateDirectory(existing);
+        CheckPathRejected(existing, Array.Empty<string>(), "already exists");
+        Check(Directory.Exists(existing) && !Directory.EnumerateFileSystemEntries(existing).Any(),
+            "Validation must not change the existing directory.");
+    });
+    Test("revalidation rejects a destination created since the first check", () =>
+    {
+        string requested = Path.Combine(pathTestRoot, "created-after-validation.dwg");
+        Check(GisNewDrawingResources.TryValidateNewDrawingPath(requested, Array.Empty<string>(), out string path, out string detail), detail);
+        File.WriteAllText(requested, "another writer created this drawing");
+        Check(!GisNewDrawingResources.TryValidateNewDrawingPath(requested, Array.Empty<string>(), out path, out detail),
+            "An earlier successful check must not authorize a now-existing target.");
+        Check(path == string.Empty && detail.Contains("already exists", StringComparison.Ordinal),
+            "Revalidation must clear the previously valid path and explain the collision.");
+        Check(File.ReadAllText(requested) == "another writer created this drawing", "Revalidation must preserve the intervening file.");
+    });
+
+    string nested = Path.Combine(pathTestRoot, "nested");
+    Directory.CreateDirectory(nested);
+    Test("dot segments normalize to one new destination", () =>
+    {
+        string requested = Path.Combine(nested, "..", ".", "canonical.dwg");
+        Check(GisNewDrawingResources.TryValidateNewDrawingPath(requested, Array.Empty<string>(), out string path, out string detail), detail);
+        Check(path == Path.Combine(pathTestRoot, "canonical.dwg"), "Returned path must be canonical and fully qualified.");
+        Check(!File.Exists(path), "Canonicalization must not create a file.");
+    });
+    Test("dot segments cannot alias an existing drawing", () =>
+        CheckPathRejected(Path.Combine(nested, "..", "existing.dwg"), Array.Empty<string>(), "already exists"));
+
+    foreach (string name in new[] { "source.dwg", "template.dwg", "open-drawing.dwg" })
+        Test("protected canonical path is rejected: " + name, () =>
+        {
+            // These files deliberately do not exist: protection must work
+            // independently of the target-existence check.
+            string protectedPath = Path.Combine(pathTestRoot, name);
+            CheckPathRejected(Path.Combine(nested, "..", name), new[] { protectedPath }, "source, template and every open drawing");
+            CheckPathRejected(protectedPath, new[] { Path.Combine(nested, "..", name) }, "source, template and every open drawing");
+        });
+    Test("protected path case aliases are rejected on every platform", () =>
+        CheckPathRejected(Path.Combine(pathTestRoot, "Protected.dwg"),
+            new[] { Path.Combine(pathTestRoot, "PROTECTED.DWG") }, "source, template and every open drawing"));
+    Test("implicit extension cannot alias a protected drawing", () =>
+        CheckPathRejected(Path.Combine(pathTestRoot, "protected-no-extension"),
+            new[] { Path.Combine(pathTestRoot, "protected-no-extension.dwg") }, "source, template and every open drawing"));
+    Test("unsaved document display names do not protect unrelated full paths", () =>
+    {
+        string requested = Path.Combine(pathTestRoot, "Drawing1.dwg");
+        Check(GisNewDrawingResources.TryValidateNewDrawingPath(requested,
+            new[] { "Drawing1.dwg", "", " " }, out string path, out string detail), detail);
+        Check(path == requested, "A non-rooted display name must not be resolved against the current directory.");
+    });
+    Test("invalid path exception becomes a refusal with no output path", () =>
+        CheckPathRejected(Path.Combine(pathTestRoot, "invalid\0.dwg"), Array.Empty<string>(), "could not be validated"));
+    Test("invalid protected path cannot bypass protection", () =>
+        CheckPathRejected(Path.Combine(pathTestRoot, "safe.dwg"),
+            new[] { Path.Combine(pathTestRoot, "invalid\0.dwg") }, "could not be validated"));
+    Test("missing protected paths fail closed", () =>
+        CheckPathRejected(Path.Combine(pathTestRoot, "safe.dwg"), null!, "could not be checked"));
+}
+finally
+{
+    Directory.Delete(pathTestRoot, recursive: true);
+}
 Console.WriteLine($"All {passed} drawing-setup coordinate/resource checks passed. Native drawing setup acceptance remains required.");
