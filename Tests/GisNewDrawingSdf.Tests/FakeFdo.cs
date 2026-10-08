@@ -2,7 +2,6 @@
 // the synthetic geometry/file bytes are not an SDF implementation.
 using CLV_CivilTools.Gis;
 using OSGeo.FDO.Commands;
-using GisCoordinateSystemTestSupport;
 
 namespace OSGeo.FDO.ClientServices
 {
@@ -30,23 +29,23 @@ public static class FakeState
     public static bool HonorsReadOnly = true;
     public static bool HasFile = true;
     public static bool OpenSucceeds = true;
-    public static bool FailSpatialRead;
     public static bool FailFeatureRead;
     public static bool FailReaderClose;
     public static bool FailReaderDispose;
     public static int OpenCount;
     public static int FeatureReadCount;
+    public static int SpatialContextCommandCount;
+    public static int SpatialContextAssociationReadCount;
 
     public static void Reset()
     {
-        FakeMapGuide.Reset();
         Objects.Clear(); Events.Clear(); Classes.Clear(); Geometries.Clear(); Schemas.Clear();
         FailDescribeSchema = false;
         FailGeometryDecode = false;
         HasReadOnly = HonorsReadOnly = HasFile = OpenSucceeds = true;
-        FailSpatialRead = FailFeatureRead = FailReaderClose = FailReaderDispose = false;
-        OpenCount = FeatureReadCount = 0;
-        Contexts = new() { ("Default", GisNewDrawingProfile.LvfCoordinateSystem, FakeMapGuide.Wkt(GisNewDrawingProfile.LvfCoordinateSystem)) };
+        FailFeatureRead = FailReaderClose = FailReaderDispose = false;
+        OpenCount = FeatureReadCount = SpatialContextCommandCount = SpatialContextAssociationReadCount = 0;
+        Contexts = new() { ("Default", GisNewDrawingProfile.LvfCoordinateSystem, "unused synthetic WKT") };
         var pipes = new FakeClassData(GisNewDrawingProfile.PipesInputClass);
         pipes.Rows.Add(Pipe("Pipe 1", 1)); pipes.Rows.Add(Pipe("Pipe 2", 5));
         var structures = new FakeClassData(GisNewDrawingProfile.StructuresInputClass);
@@ -110,11 +109,16 @@ public sealed class FakeConnection : FakeDisposable
     }
     public FakeDisposable CreateCommand(CommandType kind) => kind switch
     {
-        CommandType.CommandType_GetSpatialContexts => new FakeSpatialCommand(),
+        CommandType.CommandType_GetSpatialContexts => RejectSpatialContexts(),
         CommandType.CommandType_DescribeSchema => new FakeDescribeSchemaCommand(),
         CommandType.CommandType_Select => new FakeSelectCommand(),
         _ => throw new InvalidOperationException("Unexpected command; writes are prohibited.")
     };
+    private static FakeDisposable RejectSpatialContexts()
+    {
+        FakeState.SpatialContextCommandCount++;
+        throw new InvalidOperationException("SDF preflight must not request spatial contexts.");
+    }
     public int CloseCount { get; private set; }
     public void Close() { CloseCount++; FakeState.Events.Add("Connection.Close"); }
 }
@@ -131,27 +135,6 @@ public sealed class FakeConnectionProperties : FakeDisposable
     public string[] PropertyNames => new[] { FakeState.HasFile ? "File" : "OtherFile", FakeState.HasReadOnly ? "ReadOnly" : "OtherReadOnly" };
     public void SetProperty(string name, string value) { settings[name] = name == "ReadOnly" && !FakeState.HonorsReadOnly ? "FALSE" : value; }
     public string GetProperty(string name) => settings[name];
-}
-public sealed class FakeSpatialCommand : FakeDisposable
-{
-    public bool ActiveOnly { get; set; } = true;
-    public FakeSpatialReader Execute()
-    {
-        if (ActiveOnly) throw new InvalidOperationException("Did not request all spatial contexts.");
-        return new();
-    }
-}
-public sealed class FakeSpatialReader : FakeDisposable
-{
-    private int index = -1;
-    public bool ReadNext()
-    {
-        if (FakeState.FailSpatialRead) throw new IOException("Injected spatial reader failure.");
-        return ++index < FakeState.Contexts.Count;
-    }
-    public string GetName() => FakeState.Contexts[index].Name;
-    public string GetCoordinateSystem() => FakeState.Contexts[index].Crs;
-    public string GetCoordinateSystemWkt() => FakeState.Contexts[index].Wkt;
 }
 public sealed class FakeSelectCommand : FakeDisposable
 {
@@ -267,9 +250,17 @@ public sealed class FakeClassDefinition : FakeDisposable
 }
 public sealed class FakeGeometryProperty : FakeDisposable
 {
-    public FakeGeometryProperty(string association) { SpatialContextAssociation = association; }
+    private readonly string association;
+    public FakeGeometryProperty(string association) { this.association = association; }
     public string Name => "Geometry";
-    public string SpatialContextAssociation { get; }
+    public string SpatialContextAssociation
+    {
+        get
+        {
+            FakeState.SpatialContextAssociationReadCount++;
+            throw new InvalidOperationException("SDF preflight must not read spatial-context association '" + association + "'.");
+        }
+    }
 }
 public sealed class FakeProperties : FakeDisposable
 {

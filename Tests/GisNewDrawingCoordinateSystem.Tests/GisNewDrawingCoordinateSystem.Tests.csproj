@@ -9,7 +9,6 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../GisNewDrawingCoordinateSystem.FakeMapGuide/GisNewDrawingCoordinateSystem.FakeMapGuide.csproj" />
     <Compile Include="Program.cs" />
     <Compile Include="../../CLV_CivilTools/Gis/GisNewDrawingCoordinateSystem.cs" Link="GisNewDrawingCoordinateSystem.cs" />
     <Compile Include="../../CLV_CivilTools/Gis/GisNewDrawingProfile.cs" Link="GisNewDrawingProfile.cs" />

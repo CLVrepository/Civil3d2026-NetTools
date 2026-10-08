@@ -39,6 +39,7 @@ namespace CLV_CivilTools.Gis
                 {
                     HostApplicationServices.WorkingDatabase = source.Database;
                     sourceCs = GisNewDrawingMapApi.ReadProjection();
+                    GisNewDrawingCoordinateSystem.RequireSourceCode(sourceCs);
                     if (!GisNewDrawingProfile.TryResolveProfilePath(sourceCs, out _, out string csDetail))
                         throw new InvalidOperationException(csDetail);
                     sourceUnits = source.Database.Insunits;
@@ -61,12 +62,13 @@ namespace CLV_CivilTools.Gis
                 string profileHash = Hash(profileGuard);
                 if (!GisNewDrawingProfile.TryLoad(profilePath, sourceCs, out GisNewDrawingProfile? profile, out string profileDetail) || profile == null)
                     throw new InvalidOperationException(profileDetail);
-                source.Editor.WriteMessage("\nGIS setup: reading SDF schema, coordinate system and network features (read-only)...");
+                source.Editor.WriteMessage("\nGIS setup: reading SDF schema and raw network features (read-only)...");
                 if (!GisNewDrawingSdf.TryRead(sdfPath, profile, out GisNewDrawingSdfSnapshot? sdf, out string sdfDetail) || sdf == null)
                     throw new InvalidOperationException(sdfDetail);
 
                 source.Editor.WriteMessage($"\nGIS drawing preflight: {sourceCs}; {sourceSnapshot.SelectedCount} survey object(s), " +
-                    $"{sdf.Pipes.Count} SDF pipe(s), {sdf.Structures.Count} SDF structure(s).\nProfile: {profilePath}");
+                    $"{sdf.Pipes.Count} SDF pipe(s), {sdf.Structures.Count} SDF structure(s).\nProfile: {profilePath}\n" +
+                    "The source drawing sets the import coordinate system; SDF coordinate-system labels are not used.");
                 foreach (string diagnostic in profile.Diagnostics)
                     source.Editor.WriteMessage("\nProfile note: " + diagnostic);
 

@@ -15,8 +15,7 @@ namespace CLV_CivilTools.Gis
     ///
     /// API names checked against Map 3D 2026 FDO_API_managed.chm:
     /// FeatureAccessManager.GetConnectionManager; IConnection.CreateCommand;
-    /// IGetSpatialContexts.ActiveOnly/Execute; ISpatialContextReader.GetName,
-    /// GetCoordinateSystem and GetCoordinateSystemWkt; ISelect.Execute;
+    /// ISelect.Execute;
     /// IDescribeSchema.SchemaName/Execute; FeatureSchema.Classes;
     /// SchemaElement.Name/FeatureSchema/Parent; ClassDefinition.QualifiedName;
     /// IFeatureCommand.SetFeatureClassName; IFeatureReader.GetClassDefinition,
@@ -30,7 +29,6 @@ namespace CLV_CivilTools.Gis
         private const string AccessManagerType = "OSGeo.FDO.ClientServices.FeatureAccessManager";
         private const string CommandTypeName = "OSGeo.FDO.Commands.CommandType";
         private const string GeometryFactoryType = "OSGeo.FDO.Geometry.FgfGeometryFactory";
-        private const int MaximumSpatialContexts = 1024;
         private const int MaximumFeaturesPerClass = 1000000;
         private const int MaximumSchemaElements = 10000;
 
@@ -52,7 +50,6 @@ namespace CLV_CivilTools.Gis
                 long length = guard.Length;
                 DateTime modified = File.GetLastWriteTimeUtc(fullPath);
                 string hash = Hash(guard);
-                IReadOnlyList<GisNewDrawingSdfSpatialContext> contexts;
                 IReadOnlyList<GisNewDrawingSdfFeature> pipes;
                 IReadOnlyList<GisNewDrawingSdfFeature> structures;
                 using (var native = new NativeScope())
@@ -84,25 +81,23 @@ namespace CLV_CivilTools.Gis
                     }
                     if (Text(Call(connection, "Open")) != "ConnectionState_Open")
                         throw new InvalidDataException("The read-only SDF connection did not reach ConnectionState_Open.");
-                    contexts = ReadSpatialContexts(connection, commandType);
-                    if (contexts.Count == 0)
-                        throw new InvalidDataException("The SDF has no spatial context. Its coordinate system cannot be verified.");
-                    if (contexts.GroupBy(context => context.Name, StringComparer.Ordinal).Any(group => group.Count() != 1))
-                        throw new InvalidDataException("The SDF has duplicate spatial-context names.");
+                    // The original drawing's supported CRS is authoritative. Read
+                    // native coordinates without consulting SDF CRS metadata or
+                    // requesting a coordinate transformation from the provider.
                     // Reader definitions may be detached copies. Establish exact schema
                     // membership independently before accepting either feature reader.
                     VerifyClassDeclarations(connection, commandType, profile.SelectedTables);
                     pipes = ReadFeatures(connection, commandType, geometryFactory, profile.SelectedTables.Single(table =>
-                        table.InputClass == GisNewDrawingProfile.PipesInputClass), contexts, profile.SourceCoordinateSystem);
+                        table.InputClass == GisNewDrawingProfile.PipesInputClass));
                     structures = ReadFeatures(connection, commandType, geometryFactory, profile.SelectedTables.Single(table =>
-                        table.InputClass == GisNewDrawingProfile.StructuresInputClass), contexts, profile.SourceCoordinateSystem);
+                        table.InputClass == GisNewDrawingProfile.StructuresInputClass));
                 }
                 // No success result escapes until readers/commands/connection have
                 // closed/disposed and the original bytes have been checked again.
                 if (length != guard.Length || modified != File.GetLastWriteTimeUtc(fullPath) || hash != Hash(guard))
                     throw new InvalidDataException("The SDF changed during preflight. Import was not started.");
                 snapshot = new GisNewDrawingSdfSnapshot(fullPath, length, modified, hash,
-                    profile.SourceCoordinateSystem, contexts, pipes, structures);
+                    profile.SourceCoordinateSystem, pipes, structures);
                 detail = string.Empty;
                 return true;
             }
@@ -132,27 +127,8 @@ namespace CLV_CivilTools.Gis
             }
         }
 
-        private static IReadOnlyList<GisNewDrawingSdfSpatialContext> ReadSpatialContexts(object connection, Type commandType)
-        {
-            using var scope = new NativeScope();
-            object command = scope.Own(Call(connection, "CreateCommand", Enum.Parse(commandType, "CommandType_GetSpatialContexts")));
-            Set(command, "ActiveOnly", false);
-            // ISpatialContextReader has no Close method; its FDO Disposable base
-            // releases it. Feature readers and connections additionally have Close.
-            object reader = scope.Own(Call(command, "Execute"));
-            var result = new List<GisNewDrawingSdfSpatialContext>();
-            while (Boolean(Call(reader, "ReadNext")))
-            {
-                if (result.Count >= MaximumSpatialContexts)
-                    throw new InvalidDataException("The SDF spatial-context count exceeds the preflight safety limit.");
-                result.Add(new GisNewDrawingSdfSpatialContext(Text(Call(reader, "GetName")),
-                    Text(Call(reader, "GetCoordinateSystem")), Text(Call(reader, "GetCoordinateSystemWkt"))));
-            }
-            return Array.AsReadOnly(result.ToArray());
-        }
-
         private static IReadOnlyList<GisNewDrawingSdfFeature> ReadFeatures(object connection, Type commandType, object geometryFactory,
-            GisNewDrawingProfileTable table, IReadOnlyList<GisNewDrawingSdfSpatialContext> contexts, string sourceCrs)
+            GisNewDrawingProfileTable table)
         {
             using var scope = new NativeScope();
             object command = scope.Own(Call(connection, "CreateCommand", Enum.Parse(commandType, "CommandType_Select")));
@@ -168,23 +144,6 @@ namespace CLV_CivilTools.Gis
             string geometryName = Text(Get(geometry, "Name"));
             if (string.IsNullOrWhiteSpace(geometryName))
                 throw new InvalidDataException($"{table.InputClass} has no default geometric property.");
-            string association = Text(Get(geometry, "SpatialContextAssociation"));
-            GisNewDrawingSdfSpatialContext? spatialContext = string.IsNullOrEmpty(association)
-                ? (contexts.Count == 1 ? contexts[0] : null)
-                : contexts.SingleOrDefault(context => context.Name == association);
-            if (spatialContext == null)
-                throw new InvalidDataException($"{table.InputClass}.{geometryName} has an unresolved/ambiguous spatial context '{association}'.");
-            if (string.IsNullOrWhiteSpace(spatialContext.CoordinateSystemWkt))
-                throw new InvalidDataException($"{table.InputClass}: the SDF spatial context has no coordinate-system WKT for verification.");
-            try
-            {
-                GisNewDrawingCoordinateSystem.Verify(sourceCrs, spatialContext.CoordinateSystem, spatialContext.CoordinateSystemWkt);
-            }
-            catch (System.Exception ex)
-            {
-                throw new InvalidDataException($"{table.InputClass}: source/SDF CRS verification failed: {ex.Message}", ex);
-            }
-
             object properties = scope.Own(Get(definition, "Properties"));
             var fields = new List<(string Name, string Getter)>();
             foreach (GisNewDrawingProfileColumn column in table.MappedColumns)
@@ -490,16 +449,14 @@ namespace CLV_CivilTools.Gis
 
     internal sealed class GisNewDrawingSdfSnapshot
     {
-        internal GisNewDrawingSdfSnapshot(string path, long length, DateTime modified, string hash, string coordinateSystem,
-            IEnumerable<GisNewDrawingSdfSpatialContext> contexts, IEnumerable<GisNewDrawingSdfFeature> pipes,
-            IEnumerable<GisNewDrawingSdfFeature> structures)
+        internal GisNewDrawingSdfSnapshot(string path, long length, DateTime modified, string hash, string sourceCoordinateSystem,
+            IEnumerable<GisNewDrawingSdfFeature> pipes, IEnumerable<GisNewDrawingSdfFeature> structures)
         {
             FilePath = path;
             FileLength = length;
             LastWriteTimeUtc = modified;
             FileSha256 = hash;
-            CoordinateSystem = coordinateSystem;
-            SpatialContexts = Array.AsReadOnly(contexts.ToArray());
+            CoordinateSystem = sourceCoordinateSystem;
             Pipes = Array.AsReadOnly(pipes.ToArray());
             Structures = Array.AsReadOnly(structures.ToArray());
         }
@@ -507,15 +464,13 @@ namespace CLV_CivilTools.Gis
         internal long FileLength { get; }
         internal DateTime LastWriteTimeUtc { get; }
         internal string FileSha256 { get; }
+        // Authoritative original drawing/profile CRS, not a verified SDF CRS.
         internal string CoordinateSystem { get; }
-        internal IReadOnlyList<GisNewDrawingSdfSpatialContext> SpatialContexts { get; }
         internal IReadOnlyList<GisNewDrawingSdfFeature> Pipes { get; }
         internal IReadOnlyList<GisNewDrawingSdfFeature> Structures { get; }
         internal int PipeCount => Pipes.Count;
         internal int StructureCount => Structures.Count;
     }
-
-    internal sealed record GisNewDrawingSdfSpatialContext(string Name, string CoordinateSystem, string CoordinateSystemWkt);
 
     internal sealed record GisNewDrawingSdfCoordinate(double X, double Y, double? Z);
 

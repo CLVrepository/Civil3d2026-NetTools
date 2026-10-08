@@ -25,24 +25,14 @@ namespace CLV_CivilTools.Gis
 
         internal static void AssignProjection(string coordinateSystem)
         {
-            if (!GisNewDrawingProfile.IsSupportedCoordinateSystem(coordinateSystem))
-                throw new InvalidOperationException("Unsupported coordinate-system assignment: " + coordinateSystem);
             object project = Project();
-            PropertyInfo property = project.GetType().GetProperty("Projection")
-                ?? throw new MissingMemberException(project.GetType().FullName, "Projection");
-            if (!property.CanWrite) throw new InvalidOperationException("Map project Projection is read-only in this host.");
-            property.SetValue(project, coordinateSystem);
-            VerifyProjection(coordinateSystem);
+            GisNewDrawingCoordinateSystem.AssignSameCode(coordinateSystem,
+                code => SetTextProperty(project, "Projection", code),
+                () => Get(project, "Projection") as string, "New drawing Map Projection");
         }
 
         internal static void VerifyProjection(string expectedCode)
-        {
-            try { GisNewDrawingCoordinateSystem.Verify(expectedCode, ReadProjection(), string.Empty); }
-            catch (System.Exception ex)
-            {
-                throw new InvalidOperationException("Destination Map Projection could not be verified against the source drawing: " + ex.Message, ex);
-            }
-        }
+            => GisNewDrawingCoordinateSystem.VerifySameCode(expectedCode, ReadProjection(), "New drawing Map Projection");
 
         internal static ImportSummary ImportAndVerify(Document document, GisNewDrawingSdfSnapshot sdf,
             string profilePath, GisNewDrawingProfile profile)
@@ -50,6 +40,9 @@ namespace CLV_CivilTools.Gis
             if (document != Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument ||
                 document.Database != HostApplicationServices.WorkingDatabase)
                 throw new InvalidOperationException("The destination drawing must be active and its database current for Map import.");
+            VerifyProjection(profile.SourceCoordinateSystem);
+            GisNewDrawingCoordinateSystem.VerifySameCode(profile.SourceCoordinateSystem, sdf.CoordinateSystem,
+                "SDF snapshot's source-drawing code");
             var pipes = new Dictionary<string, GisNewDrawingSdfFeature>(StringComparer.Ordinal);
             var structures = new Dictionary<string, GisNewDrawingSdfFeature>(StringComparer.Ordinal);
             AddExpected(pipes, sdf.Pipes, "Pipes");
@@ -157,7 +150,7 @@ namespace CLV_CivilTools.Gis
                 if (!double.IsFinite(value.X) || !double.IsFinite(value.Y) || !double.IsFinite(value.Z) ||
                     Math.Abs(value.X - expected.X) > tolerance || Math.Abs(value.Y - expected.Y) > tolerance ||
                     Math.Abs(value.Z - (expected.Z ?? 0d)) > tolerance)
-                    throw new InvalidOperationException($"Imported '{feature.Name}', handle {entity.Handle}: vertex {index + 1} XYZ differs from the same-CRS SDF. No transformed/scaled geometry was accepted.");
+                    throw new InvalidOperationException($"Imported '{feature.Name}', handle {entity.Handle}: vertex {index + 1} XYZ differs from the raw SDF coordinates. No transformed/scaled geometry was accepted.");
             }
         }
 
@@ -192,15 +185,15 @@ namespace CLV_CivilTools.Gis
                     if (selected != expected.Selected)
                         throw new InvalidOperationException($"IPF selection did not load as expected for {name}: selected={selected}.");
                     if (!selected) continue;
-                    try
-                    {
-                        GisNewDrawingCoordinateSystem.Verify(profile.SourceCoordinateSystem,
-                            Text(Get(layer, "TargetCoordinateSystem")), string.Empty);
-                    }
-                    catch (System.Exception ex)
-                    {
-                        throw new InvalidOperationException($"Native incoming CRS for {name}.TargetCoordinateSystem could not be verified: {ex.Message}", ex);
-                    }
+                    // The documented property name is counterintuitive: it sets
+                    // the incoming/from CRS shown in MAPIMPORT's Coordinate System
+                    // column. Explicitly interpret raw SDF coordinates in the source
+                    // drawing's assigned code; the new drawing has that same code.
+                    // This overrides embedded SDF labels in this import session only.
+                    GisNewDrawingCoordinateSystem.AssignSameCode(profile.SourceCoordinateSystem,
+                        code => SetTextProperty(layer, "TargetCoordinateSystem", code),
+                        () => Get(layer, "TargetCoordinateSystem") as string,
+                        name + " incoming import coordinate system");
                     (object? layerMode, object? layerName) = OutPair(layer, "LayerName");
                     if (Text(layerMode) != "LayerNameDirect" || Text(layerName) != expected.LayerName)
                         throw new InvalidOperationException("Native CAD layer mapping differs from the profile: " + name);
@@ -338,6 +331,14 @@ namespace CLV_CivilTools.Gis
         private static object Project() => Get(Application(), "ActiveProject");
         private static object Get(object target, string name) => target.GetType().GetProperty(name)?.GetValue(target)
             ?? throw new InvalidOperationException($"Native property {target.GetType().FullName}.{name} is unavailable.");
+        private static void SetTextProperty(object target, string name, string value)
+        {
+            PropertyInfo property = target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance)
+                ?? throw new MissingMemberException(target.GetType().FullName, name);
+            if (!property.CanRead || !property.CanWrite || property.PropertyType != typeof(string))
+                throw new InvalidOperationException($"Native {target.GetType().FullName}.{name} must be a readable/writable coordinate-system string.");
+            property.SetValue(target, value);
+        }
         private static string Text(object? value) => Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
         private static (object?, object?) OutPair(object target, string name)
         {

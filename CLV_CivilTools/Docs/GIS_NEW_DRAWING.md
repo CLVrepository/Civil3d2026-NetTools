@@ -1,98 +1,68 @@
 # Create GIS Drawing
 
-## Purpose and status
+`CLV-GIS-NEW-DRAWING` (Q2 > GIS > DATA > **CREATE GIS DRAWING**) prepares a separate, unsaved drawing for the existing GIS workflow. Export the Civil network SDF first, then run this command in the original survey/network drawing. The original drawing's assigned coordinate system is authoritative.
 
-`CLV-GIS-NEW-DRAWING` (Q2 > GIS > DATA > **CREATE GIS DRAWING**) prepares a separate, unsaved drawing for the existing GIS preparation workflow. It does not export the Civil network, run structure conversion, offset/trim pipes, or save/overwrite a DWG. Export the network SDF first, then run this command in the original survey/network drawing.
-
-This is a new implementation requiring a Civil 3D 2026 build and native acceptance test before deployment. Portable tests do not prove Autodesk runtime behavior. The existing R5 conversion and cleanup code is unchanged.
+The command does not export the network, run R5 structure conversion/cleanup, or save/overwrite a DWG. Native Civil 3D acceptance of the complete workflow remains required.
 
 ## Inputs
 
-- The active source drawing with an actual Map coordinate-system assignment of exactly `NV83.NCRS-LVF` or `NV83.NCRS-LVHEF`. No inferred/default coordinate system is used.
-- The exported SDF selected at the file prompt. Native FDO read-only inspection checks its real spatial context, mapped fields and feature counts. The SDF must use the same coordinate system as the source drawing.
-- Shared template: `\\ci.las-vegas.nv.us\pw_data_depot\PW_AutoCAD_Support\2026_Civil3D\Drawing Templates\Blank (2026).dwt`.
-- Shared profile directory: `\\ci.las-vegas.nv.us\pw_data_depot\PW_AutoCAD_Support\2026_Civil3D\SDF to SHP`.
-- Exactly one matching profile: `UFLS-IMPORT-NV83.NCRS-LVF.ipf` or `UFLS-IMPORT-NV83.NCRS.LVHEF.ipf`. The period before `LVHEF` in that filename is intentional.
+- Original drawing assigned exactly `NV83.NCRS-LVF` or `NV83.NCRS-LVHEF`. A missing or unsupported assignment stops before creating a drawing; there is no default.
+- The exported SDF selected at the file prompt. Its raw feature coordinates are interpreted in the original drawing's assigned system. No SDF coordinate-system assignment, WKT, spatial-context association or dictionary-equivalence check is required.
+- Template: `\\ci.las-vegas.nv.us\pw_data_depot\PW_AutoCAD_Support\2026_Civil3D\Drawing Templates\Blank (2026).dwt`.
+- Profiles: `\\ci.las-vegas.nv.us\pw_data_depot\PW_AutoCAD_Support\2026_Civil3D\SDF to SHP`.
+- Exactly one profile: LVF selects `UFLS-IMPORT-NV83.NCRS-LVF.ipf`; LVHEF selects `UFLS-IMPORT-NV83.NCRS.LVHEF.ipf`. The period before `LVHEF` is intentional.
 
-No mapped-drive dependency, local resource-copy deployment, new LISP helper, or IPF modification is introduced.
+Shared files are read-only inputs. No mapped drive, copied profile, new LISP helper or shared-profile edit is introduced.
 
-## Workflow and checks
+## Workflow
 
-1. Snapshot eligible model-space survey curves and known DI/MH block references. Preserve current dynamic-block states, attributes, native coordinates/elevations, and any attached Object Data.
-2. Preflight all files, the profile's selected classes/mappings and the SDF's actual CRS/records. Both supplied IPFs select `Civil_Schema:Pipes` and `Civil_Schema:Structures`; Alignments, Parcels and Points are off, and spatial clipping is off.
-3. Create the new drawing from the shared template. Require empty model space, assign/read back the source CRS, and match its insertion-unit metadata to the source. Default template layers or definitions alone do not imply that the template is invalid.
-4. Clone only the eligible objects and their necessary dependencies, without clipboard operations, coordinate transformations or explosion. Verify mapped objects, properties and OD. Conflicting block definitions or incompatible shared symbol records stop the operation rather than being silently replaced.
-5. Use native Map `Importer.Init("FDO_SDF", sdfPath)`, `LoadImportFormat(ipfPath)` and `Import(true)`. Validate effective native layer/class/CRS/point/column settings after loading the profile. `LoadImportFormat`'s Boolean means schema changed, not success.
-6. Compare imported entity counts, classes, unique names, vertex XYZ coordinates and all mapped OD scalar values against the source SDF snapshot. FDO decodes the geometry natively; this version accepts Point/LineString XY/XYZ only and rejects unsupported curve/multipart/measured geometry. Imported coordinates must match within an absolute 0.000001 drawing units (2D geometry has Z=0). Require zero transformation skips. Keep null/STUB structure points; this command performs no conversion cleanup.
-7. Leave the verified drawing open and unsaved. Review/save it before running the existing preparation command.
+1. Read the original drawing's actual Map Projection and snapshot eligible model-space survey outlines and known DI/MH blocks, including dynamic state, attributes, XYZ and attached Object Data.
+2. Prompt for the SDF. Check readable template/profile/SDF inputs, the supplied profile's selected classes/mappings, and SDF schema, raw geometry and scalar fields through read-only native FDO.
+3. Create a new drawing from Blank. Require empty model space, match source insertion-unit metadata, and assign the source coordinate-system code once with readback.
+4. Clone eligible geometry and dependencies at native coordinates. Verify geometry, attributes, dynamic state, Object Data, mapped definitions and child topology. Incompatible named definitions stop the operation instead of replacing existing resources.
+5. Initialize the native importer and load the one matching IPF. For each selected input layer, explicitly set its incoming/from coordinate-system code to the source drawing's code and read it back. The destination already has that same code.
+6. Import Pipes and Structures, then compare entity counts, unique identities, mapped OD and every vertex XYZ against the raw SDF snapshot. Require zero transformation skips and an absolute coordinate difference no greater than 0.000001 drawing units. Unexpected transformed/scaled output fails verification.
+7. Leave the verified drawing open and unsaved. Review/save it before running the existing GIS preparation command.
 
-The command holds its source files read-only and verifies hashes. Source drawing geometry, shared profiles, template and SDF are not intentionally modified. On failure/cancellation after destination creation, it attempts to discard only its own new drawing and return to the source. If disposal fails, the command reports that the remaining drawing is incomplete and must be closed without saving. A destination-only `CLV_GIS_NEW_DRAWING_V1` Xrecord records the setup state for diagnosis; existing conversion commands do not interpret this marker.
+The source is unchanged. File sharing guards and before/after hashes detect changed inputs. Failure or cancellation after destination creation attempts to discard only this command's fresh drawing and return to the original. If disposal fails, the remaining drawing is explicitly reported incomplete and must be closed without saving. A destination-only `CLV_GIS_NEW_DRAWING_V1` Xrecord records setup status; existing conversion commands do not interpret it.
 
-## Profile OD ambiguity
+## Coordinate handling
 
-The supplied IPFs include explicit `MappedToOD` field entries, while table-level fields include `NoODTable`, `ImportMappingInvalid`, and an empty ObjectDataName. The XML validator preserves these original settings and reports a diagnostic. It does not invent or rewrite table mappings.
+The simplified workflow uses Map `ActiveProject.Projection` for drawing assignment/readback. It no longer loads MapGuide's CRS factory, mathematical comparator, dictionary or WKT parser. Source code chooses the profile; embedded SDF CRS labels do not choose or block the workflow.
 
-The native importer must report an effective new/existing OD mapping to `Pipes` / `Structures` with the exact mapped columns before import proceeds. If it does not, the command stops before import and prints the effective mapping. Inspect or re-save the proven MAPIMPORT profile with OD enabled, then retry; do not treat an XML-only preflight as proof that native OD will be created.
+Autodesk Map 3D 2026 documents `InputLayer.TargetCoordinateSystem` as the read/write coordinate system that incoming data is transformed **from**, corresponding to the Coordinate System column in the Import dialog. Its name does not mean the drawing's output CRS. The command explicitly sets it to the source drawing's code after `LoadImportFormat`, so incoming interpretation and destination assignment agree. `OriginalCoordinateSys` is documented unimplemented and is not used.
 
-Expected mapped fields:
+Both supplied IPFs enable coordinate conversion; they remain unchanged. The .NET importer does not expose a separate global conversion toggle. Giving input and destination the same source code establishes the intended identity import, and raw XYZ readback verifies the result. The filename alone is never treated as proof that imported coordinates stayed unchanged. No transform function, dictionary edit or SDF metadata write is performed by this command.
+
+The user-referenced Google Earth and CLB menu LISP routines were not available in the repository or the inspected Library candidates, so their exact implementation has not been claimed as reviewed or reused. The documented Map drawing-assignment API is already used by the command.
+
+## Preserved data checks and limits
+
+Both supplied profiles select `Civil_Schema:Pipes` and `Civil_Schema:Structures`; Alignments, Parcels and Points are off, and spatial clipping is off. FDO preflight verifies exact declared schema/class membership before accepting reader definitions, including detached reader copies. No source-file filters or writes are added.
+
+Supported SDF geometry is Point/LineString XY/XYZ. Curved, multipart or measured geometry remains unsupported. Imported Structures must be native DBPoints; pipe curves must preserve the raw LineString vertices. Explicit null/STUB structure points are retained; this command performs no downstream conversion cleanup.
+
+Required OD fields:
 
 - Pipes: Name, InsideDiameter, Length, Slope, StartInvert, EndInvert, StructureStart, StructureEnd, PartSizeName
 - Structures: Name, PartSizeName
 
-NetworkName, RimElevation, OutsideDiameter and Autogenerated_SDF_ID are intentionally unmapped in the supplied profiles.
+NetworkName, RimElevation, OutsideDiameter and Autogenerated_SDF_ID remain intentionally unmapped in the supplied profiles.
 
-## Acceptance tests
+The IPFs contain `MappedToOD` column entries alongside table-level `NoODTable`, `ImportMappingInvalid` and empty ObjectDataName values. The command does not invent mappings from these conflicting XML fields. After loading, the native importer must expose effective OD mapping to Pipes/Structures with the expected columns. Otherwise it stops before import with the actual mapping. That native profile behavior remains an acceptance item.
 
-Run portable profile tests with the installed matching SDK:
+Clone checks continue to distinguish inherited/ACI/RGB color and transparency modes without invoking unsupported getters. Generated anonymous block names may change between drawings only when exact IdMapping/reference/geometry/topology checks establish their identity. Named block collisions remain guarded.
 
-`dotnet run --project Tests/GisNewDrawingProfile.Tests/GisNewDrawingProfile.Tests.csproj`
+## Validation
 
-For a .NET 10-only host, append `-p:TargetFramework=net10.0`. Run the existing `Tests/StormStructureMatching.Tests` regression suite as well.
+Run the existing profile, appearance, SDF, source-coordinate policy and storm regression suites, then build the actual plugin against installed Civil 3D 2026/Map assemblies. For a .NET 10-only test executor, use `-p:TargetFramework=net10.0 -p:GisTestTargetFramework=net10.0`. Do not retarget the production project as part of this feature.
 
-Run `dotnet run --project Tests/GisNewDrawingSdf.Tests/GisNewDrawingSdf.Tests.csproj` for the isolated fake-FDO tests. They exercise the production preflight's reflection, strict read-only/CRS gates, complete snapshots, native-coordinate decoding interface and cleanup/failure paths. They do not establish compatibility with Autodesk binaries. That test executable deliberately has assembly name `OSGeo.FDO`; never deploy or load it into Civil 3D.
+- `Tests/GisNewDrawingProfile.Tests/GisNewDrawingProfile.Tests.csproj`
+- `Tests/GisNewDrawingAppearance.Tests/GisNewDrawingAppearance.Tests.csproj`
+- `Tests/GisNewDrawingSdf.Tests/GisNewDrawingSdf.Tests.csproj`
+- `Tests/GisNewDrawingCoordinateSystem.Tests/GisNewDrawingCoordinateSystem.Tests.csproj`
+- `Tests/StormStructureMatching.Tests/StormStructureMatching.Tests.csproj`
 
-Build the actual plugin against installed Civil 3D 2026/Map assemblies. Use the framework configured in the repository and its supported host version; do not retarget the main project as part of this feature.
+The SDF runner deliberately uses the test assembly name `OSGeo.FDO`; never deploy it or other test outputs into Civil 3D. The MapGuide fake and obsolete semantic-CRS tests were removed. Coordinate policy tests exercise source-code assignment/readback without a MapGuide dependency.
 
-Native test in a disposable source copy:
-
-- Supplied `L24-00066-STRM-E.sdf`: actual CRS LVHEF; 13 pipe records and 22 structure records, including `L24-00066-STRM-63+75-STUB` / `UFLS-Null Structure`. Verify these counts through native FDO before considering them an acceptance pass. The existing conversion's 21 real structures are a different count.
-- Inspect the actual Blank template and verify its units/default definitions; do not assume a DWG database has literally no default layers or block records.
-- Verify known outline vertex XYZ values, DI attribute values and evaluated MH dynamic properties before/after cloning; source remains unchanged.
-- Verify all imported OD fields against the SDF and no unexpected classes or layers. Test the explicit effective-mapping stop if the IPF does not establish native OD.
-- Test missing/disconnected UNC resources, unsupported/missing CRS, opposite-CRS SDF, mismatched profiles, template model-space content, conflicting block definitions, missing OD, import cancellation, partial imports and repeat invocation.
-- Test a real LVF SDF separately. Successful LVHEF testing does not establish LVF acceptance.
-
-## Capture appearance guard regression
-
-A first native attempt stopped during read-only source capture with `eInvalidKey`, before the SDF prompt or destination creation. The original diagnostic did not establish the exact failing getter. Snapshot getters are now method-specific: no RGB reads for inherited/indexed colors, no Alpha read for inherited transparency, no optional name reads when absent, and no TextAt call on plain/shape linetype elements. Mode and applicable values remain part of the comparison. A native failure still stops the operation, now with a labelled property/stage; no error is replaced with a guessed default.
-
-Run `dotnet run --project Tests/GisNewDrawingAppearance.Tests/GisNewDrawingAppearance.Tests.csproj` (append `-p:TargetFramework=net10.0` if needed) to test the lazy-reader contracts. These portable tests do not establish the exact C1955 cause or replace the original-drawing native retry.
-
-## SDF reader class identity
-
-SDF selection and its read-only validation occur before the new Blank drawing is created. A subsequent native trial reached the SDF picker and stopped at the class-definition check. The original gate compared the feature reader's QualifiedName to `Civil_Schema:Pipes`, although a reader can return a copied class definition without a schema parent.
-
-The revised preflight anchors each requested class in the exact declared schema first, then checks the reader's exact class name and any supplied qualified/schema/parent identity. It does not accept arbitrary suffix matches or conflicting schema names. Failures report the actual returned identity. Setup stage messages make it clear whether the command is checking files, reading SDF metadata, creating the destination, copying geometry or importing data. The source drawing's CRS is read first; an unassigned blank template never determines the source CRS.
-
-## Dictionary-verified CRS definitions
-
-FDO may return complete WKT from GetCoordinateSystem even when the source drawing reports a short code. Verification now resolves the approved source code through the installed Map/CS-Map dictionary and checks every supplied definition against that independent entry. The bounded WKT1 structural guard preserves numeric meaning while allowing insignificant whitespace, equivalent decimal spellings, the top-level display title and PARAMETER ordering. It runs before native WKT parsing because the native parser can return a dictionary entry by matching names; that shortcut alone is never accepted as evidence. Projection, units, datum, ellipsoid, parameters, offsets, origins, scale and quadrant must also pass native mathematical/property checks. The comparison applies to destination/importer readbacks as well; source profile selection remains the exact two-code whitelist.
-
-This intentionally does not guess unproved WKT aliases, ignore unknown clauses, apply fuzzy numeric tolerances, transform coordinates, change catalog paths or rewrite shared definitions. If installed dictionary serialization/parsed properties disagree, the error identifies the differing field/value and the definition remains unverified. Compilation/fake-runtime tests do not prove compatibility with the original SDF in Civil 3D.
-
-Run the coordinate-system suite with:
-`dotnet run --project Tests/GisNewDrawingCoordinateSystem.Tests/GisNewDrawingCoordinateSystem.Tests.csproj -p:GisTestTargetFramework=net10.0`
-
-Run the updated SDF suite with the same GisTestTargetFramework property so its shared fake runtime targets the same framework. Neither test-only OSGeo.FDO nor OSGeo.MapGuide.Geometry assembly belongs in Civil 3D deployment.
-
-Generated anonymous block names may change across databases. Only verified anonymous definitions are exempt from name collision checks; they must map to distinct new definitions, every selected/nested reference must target the exact mapped definitions, and geometry/attributes/OD plus child topology remain verified. Named block definitions still retain the collision stop.
-
-## Managed CRS wrapper lifetime
-
-A native trial of the CRS verifier stopped at factory acquisition because the installed Map 3D 2026 wrappers do not implement `System.IDisposable`. Installed metadata confirms the factory, catalog, mathematical comparator and coordinate-system wrappers each expose a public parameterless `void Dispose()` instead. The verifier now binds that exact managed method before each acquisition and releases caller-owned wrappers once in reverse order. It does not call protected/native destructors, `Release`, catalog shutdown or dictionary setters. All remaining reflected verifier signatures were also checked against the installed assemblies.
-
-The shared fake runtime mirrors the no-interface disposal contract, with regressions for every wrapper type, null acquisitions, reverse-order release, repeated calls preserving the shared catalog owner, and cleanup continuing after a disposal failure. These tests validate the adapter contract, not native dictionary/SDF acceptance. A separate isolated in-host fixture is required for actual native ownership and CRS acceptance.
-
-## Native reflection declarations
-
-The installed coordinate-system wrapper hides `System.Object.ToString()` rather than overriding it; flattened reflection exposes both string-returning methods. Its integer `GetType()` likewise coexists with the CLR Type-returning method. The verifier now resolves an exact return/argument-compatible signature at the nearest declaring class, rejects ambiguity at that class, and stops before `System.Object`. It never uses the CLR object display name as dictionary WKT. The complete set of reflected native method candidates was audited; all other queried members have one compatible declaration in the installed API. The shared fake and regression suite reproduce these actual inheritance/slot contracts. This correction changes method selection only, without weakening CRS checks or changing coordinate/drawing operations.
+Native acceptance should verify the actual source drawing and template, copied XYZ/dynamic/attribute/OD state, imported counts/fields/vertices, missing/unsupported source assignment, disconnected UNC files, unchanged source inputs, cancellation/partial failure and repeated invocation. Test LVF and LVHEF separately. The supplied sample is expected to contain 13 pipes and 22 structures including one null/STUB; establish those counts through the complete native run before calling them an acceptance result. Its 22 imported structures differ from the existing conversion's 21 real structures.

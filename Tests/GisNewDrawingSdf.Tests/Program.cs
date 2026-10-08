@@ -1,7 +1,7 @@
 using System.Collections.Generic;
+using System.Reflection;
 using System.Security.Cryptography;
 using CLV_CivilTools.Gis;
-using GisCoordinateSystemTestSupport;
 
 int passed = 0, failed = 0;
 string folder = Path.Combine(Path.GetTempPath(), "clv-sdf-tests-" + Guid.NewGuid().ToString("N"));
@@ -9,7 +9,7 @@ Directory.CreateDirectory(folder);
 string path = Path.Combine(folder, "misleading-NV83.NCRS-LVHEF.sdf");
 try
 {
-    Run("Correct native CRS overrides misleading filename; all rows/scalars preserved", () =>
+    Run("Source drawing CRS overrides misleading filename; all rows/scalars preserved", () =>
     {
         var snapshot = Read();
         Equal(GisNewDrawingProfile.LvfCoordinateSystem, snapshot.CoordinateSystem);
@@ -25,62 +25,77 @@ try
         Equal("Structure 1", snapshot.Pipes[0].Scalars["StructureStart"]);
         Equal("Stub 1", snapshot.Pipes[0].Scalars["StructureEnd"]);
         Equal(2, snapshot.Structures[0].Scalars.Count);
-        Equal(FakeMapGuide.Wkt(GisNewDrawingProfile.LvfCoordinateSystem), snapshot.SpatialContexts.Single().CoordinateSystemWkt);
         True(FakeState.Events.Contains("Open.ReadOnly=TRUE"));
     });
     Run("Provider must expose explicit ReadOnly before any Open", () => { FakeState.HasReadOnly = false; Reject("ReadOnly"); Equal(0, FakeState.OpenCount); });
     Run("Provider must retain ReadOnly=TRUE before any Open", () => { FakeState.HonorsReadOnly = false; Reject("ReadOnly=TRUE"); Equal(0, FakeState.OpenCount); });
     Run("Provider must expose File before any Open", () => { FakeState.HasFile = false; Reject("File"); Equal(0, FakeState.OpenCount); });
     Run("Pending provider connection is rejected", () => { FakeState.OpenSucceeds = false; Reject("ConnectionState_Open"); });
-    foreach (string crs in new[] { GisNewDrawingProfile.LvhefCoordinateSystem, "nv83.ncrs-lvf", "NV83.NCRS.LVF", "EPSG:26911" })
+    foreach (string source in new[] { GisNewDrawingProfile.LvfCoordinateSystem, GisNewDrawingProfile.LvhefCoordinateSystem })
     {
-        string actual = crs;
-        Run("Different or unresolved dictionary CRS code rejected: " + actual, () =>
+        string sourceCrs = source;
+        Run("Source CRS is authoritative with absent SDF spatial contexts: " + sourceCrs, () =>
         {
-            FakeState.Contexts[0] = ("Default", actual, FakeMapGuide.Wkt(GisNewDrawingProfile.LvfCoordinateSystem));
-            Reject("CRS verification failed"); Equal(0, FakeState.FeatureReadCount);
+            FakeState.Contexts.Clear();
+            var snapshot = Read(sourceCrs);
+            Equal(sourceCrs, snapshot.CoordinateSystem);
+            Equal(2, snapshot.PipeCount); Equal(2, snapshot.StructureCount);
         });
+        foreach (var metadata in new[]
+        {
+            (Name: "Default", Crs: "", Wkt: ""),
+            (Name: "Default", Crs: "EPSG:26911", Wkt: "PROJCS[\"different coordinate system\"]"),
+            (Name: "Default", Crs: "malformed[", Wkt: "not WKT"),
+            (Name: "Default", Crs: GisNewDrawingProfile.LvfCoordinateSystem, Wkt: "contradictory WKT"),
+            (Name: "Default", Crs: GisNewDrawingProfile.LvhefCoordinateSystem, Wkt: "contradictory WKT")
+        })
+        {
+            var context = metadata;
+            Run("SDF CRS metadata cannot block source " + sourceCrs + ": " + context.Crs + "/" + context.Wkt, () =>
+            {
+                FakeState.Contexts[0] = context;
+                var snapshot = Read(sourceCrs);
+                Equal(sourceCrs, snapshot.CoordinateSystem);
+                Equal(new GisNewDrawingSdfCoordinate(1.5, 2.5, null), snapshot.Pipes[0].Coordinates[0]);
+                True(new byte[] { 1, 2, 3, 4 }.SequenceEqual(snapshot.Pipes[0].GeometryBytes));
+            });
+        }
     }
-    Run("LVHEF succeeds only with exact LVHEF profile", () =>
+    Run("Duplicate SDF context names do not block raw feature reads", () =>
     {
-        FakeState.Contexts[0] = ("Default", GisNewDrawingProfile.LvhefCoordinateSystem, FakeMapGuide.Wkt(GisNewDrawingProfile.LvhefCoordinateSystem));
-        var snapshot = Read(GisNewDrawingProfile.LvhefCoordinateSystem);
-        Equal(GisNewDrawingProfile.LvhefCoordinateSystem, snapshot.CoordinateSystem);
+        FakeState.Contexts.Add(FakeState.Contexts[0]); Read();
     });
-    Run("Full WKT in both FDO fields verifies against the source dictionary", () =>
+    Run("Unknown geometry spatial-context association is never resolved", () =>
     {
-        string wkt = FakeMapGuide.Wkt(GisNewDrawingProfile.LvfCoordinateSystem);
-        FakeState.Contexts[0] = ("Default", wkt, wkt);
-        var snapshot = Read(); Equal(GisNewDrawingProfile.LvfCoordinateSystem, snapshot.CoordinateSystem);
-        Equal(wkt, snapshot.SpatialContexts.Single().CoordinateSystem);
+        Structures().Association = "missing"; Read();
     });
-    Run("Missing name can use independently verified complete WKT", () =>
+    Run("Blank geometry association with multiple contexts does not block reads", () =>
     {
-        FakeState.Contexts[0] = ("Default", "", FakeMapGuide.Wkt(GisNewDrawingProfile.LvfCoordinateSystem));
+        Pipes().Association = Structures().Association = "";
+        FakeState.Contexts.Add(("Other", "different CRS", "malformed WKT"));
         Read();
     });
-    Run("Same-title SDF WKT with changed numeric projection parameter is rejected", () =>
+    foreach (string unsupported in new[] { "", "nv83.ncrs-lvf", "NV83.NCRS.LVF", "EPSG:26911" })
     {
-        string wkt = FakeMapGuide.Wkt(GisNewDrawingProfile.LvfCoordinateSystem).Replace("984250.0000", "984251.0000");
-        FakeMapGuide.RegisterWkt(wkt, GisNewDrawingProfile.LvfCoordinateSystem);
-        FakeState.Contexts[0] = ("Default", wkt, wkt);
-        Reject("CRS verification failed"); Equal(0, FakeState.FeatureReadCount);
-    });
-    Run("Conflicting code and WKT fields are rejected", () =>
+        string sourceCrs = unsupported;
+        Run("Unsupported source drawing CRS rejected before FDO access: " + sourceCrs, () =>
+        {
+            // Bypass the normal profile parser to exercise the SDF boundary guard.
+            var constructor = typeof(GisNewDrawingProfile).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic).Single();
+            var profile = (GisNewDrawingProfile)constructor.Invoke(new object[]
+            {
+                sourceCrs, "test-only invalid profile", Array.Empty<GisNewDrawingProfileTable>(), Array.Empty<string>()
+            });
+            True(!GisNewDrawingSdf.TryRead(path, profile, out var snapshot, out string detail));
+            True(snapshot == null); True(detail.Contains("exact supported CLV coordinate system"), detail);
+            Equal(0, FakeState.Objects.Count); Equal(0, FakeState.OpenCount);
+        });
+    }
+    Run("Missing source profile rejected before FDO access", () =>
     {
-        FakeState.Contexts[0] = ("Default", GisNewDrawingProfile.LvfCoordinateSystem, FakeMapGuide.Wkt(GisNewDrawingProfile.LvhefCoordinateSystem));
-        Reject("CRS verification failed"); Equal(0, FakeState.FeatureReadCount);
-    });
-    Run("Missing spatial contexts fail closed", () => { FakeState.Contexts.Clear(); Reject("no spatial context"); });
-    Run("Duplicate spatial-context names fail closed", () => { FakeState.Contexts.Add(FakeState.Contexts[0]); Reject("duplicate spatial-context"); });
-    Run("Missing WKT fails even when native code matches", () => { FakeState.Contexts[0] = ("Default", GisNewDrawingProfile.LvfCoordinateSystem, ""); Reject("no coordinate-system WKT"); });
-    Run("Each class must resolve its actual spatial-context association", () => { Structures().Association = "missing"; Reject("unresolved/ambiguous"); });
-    Run("Blank association accepted only with one real spatial context", () => { Pipes().Association = Structures().Association = ""; Read(); });
-    Run("Blank association with multiple contexts is ambiguous", () =>
-    {
-        Pipes().Association = "";
-        FakeState.Contexts.Add(("Other", GisNewDrawingProfile.LvfCoordinateSystem, "PROJCS[\"other\"]"));
-        Reject("unresolved/ambiguous");
+        True(!GisNewDrawingSdf.TryRead(path, null!, out var snapshot, out string detail));
+        True(snapshot == null); True(detail.Contains("exact supported CLV coordinate system"), detail);
+        Equal(0, FakeState.Objects.Count); Equal(0, FakeState.OpenCount);
     });
     Run("Duplicate Name rows are retained with distinct scalars and geometry", () =>
     {
@@ -270,7 +285,6 @@ try
         var snapshot = Read(); File.Delete(path);
         True(!GisNewDrawingSdf.TryVerifyUnchanged(snapshot, out string detail)); True(detail.Contains("verification failed"));
     });
-    Run("Spatial reader exception disposes all acquired resources", () => { FakeState.FailSpatialRead = true; Reject("Injected spatial reader failure"); });
     Run("Feature reader exception closes/disposes all acquired resources", () => { FakeState.FailFeatureRead = true; Reject("Injected feature reader failure"); });
     Run("Reader Close exception still disposes reader command and connection", () => { FakeState.FailReaderClose = true; Reject("fully closed/disposed"); });
     Run("Reader Dispose exception still releases command and connection", () => { FakeState.FailReaderDispose = true; Reject("fully closed/disposed"); });
@@ -285,7 +299,8 @@ void Run(string name, Action test)
     try
     {
         test();
-        Equal(0, FakeMapGuide.LiveObjects);
+        Equal(0, FakeState.SpatialContextCommandCount);
+        Equal(0, FakeState.SpatialContextAssociationReadCount);
         True(FakeState.Objects.All(value => value.DisposeCount == 1), "Every acquired native wrapper must be disposed exactly once.");
         True(FakeState.Objects.OfType<FakeConnection>().All(value => value.CloseCount == 1), "Every acquired connection must be closed.");
         True(FakeState.Objects.OfType<FakeFeatureReader>().All(value => value.CloseCount == 1), "Every acquired feature reader must be closed.");

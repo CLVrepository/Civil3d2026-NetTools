@@ -1,3 +1,8 @@
+## 2026-10-08 - Source drawing controls GIS import coordinates
+- Simplifies `CLV-GIS-NEW-DRAWING` to use the original drawing's assigned LVF/LVHEF code, assign it once to the new Blank drawing, and load the one matching supplied IPF. Explicitly sets each selected incoming import layer to that same code.
+- Removes mandatory SDF CRS/WKT/spatial-context verification and the MapGuide dictionary/reflection machinery. Raw SDF feature/schema/OD checks, file guards, clone preservation and post-import XYZ/count/OD verification remain.
+- Replaces the obsolete semantic-CRS fake/tests with source-code assignment/readback regressions, including missing source handling and arbitrary embedded SDF CRS labels. Shared IPFs and existing R5 commands are unchanged. Full native workflow acceptance remains pending.
+
 ## 2026-10-07 - Native CRS hidden-method resolution
 - Resolves each reflected CRS member at the nearest compatible declaring class with an exact return type. Handles the installed wrapper's hidden nonvirtual `ToString()` and integer `GetType()` without accepting inherited `System.Object` methods or arbitrary overload order.
 - Mirrors the complete measured wrapper signature/virtual-slot shapes in the shared fake and adds declaration, ambiguity, fallback and API-contract regressions. CRS equivalence and native ownership rules are unchanged; original-SDF acceptance remains pending.
