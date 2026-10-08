@@ -1,3 +1,8 @@
+## 2026-10-08 - Handle inactive column mapping output
+- Allows an untouched `ColumnDataMapping` enum only for a caller-identified unmapped column returning null/empty destination text. Missingness is explicit; mapped fields, pair getters, nonempty destinations and other undefined enums remain strict.
+- Adds class/column/expected-state/table context to native column readback failures and returned-text detail when an enum is missing. The prior native failure did not identify the column or returned text; inactive-column behavior remains a compatibility inference pending retry.
+- Adds pointer/reference output and production-linked mapping-policy regressions. Tests/full build and native import acceptance remain unrun; shared IPFs and discard-on-failure behavior are unchanged.
+
 ## 2026-10-08 - Activate the profile's explicit Object Data fields
 - The native profile load reported `NoImportMapping` despite explicit `MappedToOD` columns. The importer now sets the Pipes/Structures table mapping for this import, keeps only the exact profile field allowlist, and verifies the effective table/column settings before import. Shared IPFs remain byte-unchanged.
 - Field types come from the FDO schema even for empty classes. Existing local tables are reused only with exact compatible field names/types; attached Map drawings, incompatible schemas, unsupported conversions and null mapped scalar values stop the operation. New tables follow the native importer's deferred creation on the first imported entity.

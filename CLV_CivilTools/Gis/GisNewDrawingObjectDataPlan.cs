@@ -81,25 +81,29 @@ namespace CLV_CivilTools.Gis
 
         /// <summary>
         /// Verifies one native column readback. Map may report the layer's OD mode
-        /// for a cleared column; the empty output name is still required. The
-        /// caller separately verifies that every required exact source name exists.
+        /// for a cleared column or leave that column's enum unwritten; the empty
+        /// output name is still required. Null mode represents only a verified
+        /// unwritten enum, not a default mode or a missing mapped field. The caller
+        /// separately verifies that every required exact source name exists.
         /// </summary>
         internal static void VerifyColumnMapping(GisNewDrawingObjectDataClassPlan plan,
-            string sourceName, string actualMode, string actualOutput)
+            string sourceName, string? actualMode, string actualOutput)
         {
             ArgumentNullException.ThrowIfNull(plan);
             GisNewDrawingObjectDataFieldPlan? expected = plan.Fields.SingleOrDefault(field => field.SourceName == sourceName);
             if (expected != null)
             {
                 Require(actualMode == plan.MappingMode && actualOutput == expected.OutputName,
-                    $"{plan.InputClass}.{sourceName}: native OD column mapping '{actualMode}' / '{actualOutput}' " +
+                    $"{plan.InputClass}.{sourceName}: native OD column mapping '{actualMode ?? "<unwritten>"}' / '{actualOutput}' " +
                     $"differs from planned '{plan.MappingMode}' / '{expected.OutputName}'.");
             }
             else
             {
-                Require(actualOutput == string.Empty && (actualMode == "NoImportMapping" || actualMode == plan.MappingMode),
+                Require(actualOutput == string.Empty &&
+                    (actualMode == null || actualMode == "NoImportMapping" || actualMode == plan.MappingMode),
                     $"{plan.InputClass}.{sourceName}: an unmapped native column must have empty output and " +
-                    $"NoImportMapping or {plan.MappingMode}; found '{actualMode}' / '{actualOutput}'.");
+                    $"an unwritten enum, NoImportMapping or {plan.MappingMode}; " +
+                    $"found '{actualMode ?? "<unwritten>"}' / '{actualOutput}'.");
             }
         }
 

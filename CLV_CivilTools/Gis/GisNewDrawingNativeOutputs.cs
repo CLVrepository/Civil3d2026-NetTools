@@ -12,6 +12,7 @@ namespace CLV_CivilTools.Gis
     internal static class GisNewDrawingNativeOutputs
     {
         internal sealed record EnumTextOutput(Enum Mode, string? Text);
+        internal sealed record ColumnMappingOutput(Enum? Mode, string? Text);
 
         internal static EnumTextOutput ReadPair(object target, string methodName)
         {
@@ -22,13 +23,18 @@ namespace CLV_CivilTools.Gis
                 "PointToBlockMapping" => "PointMappingType",
                 _ => throw new ArgumentException("Unsupported native output getter: " + methodName, nameof(methodName))
             };
-            return Read(target, methodName, enumName, pair: true);
+            ColumnMappingOutput output = Read(target, methodName, enumName, pair: true,
+                allowUnwrittenForEmptyOutput: false);
+            return new EnumTextOutput(output.Mode
+                ?? throw new InvalidOperationException("A native pair getter did not return its required enum."), output.Text);
         }
 
-        internal static EnumTextOutput ReadColumnMapping(object target)
-            => Read(target, "ColumnDataMapping", "ImportDataMapping", pair: false);
+        internal static ColumnMappingOutput ReadColumnMapping(object target, bool allowUnwrittenForEmptyOutput = false)
+            => Read(target, "ColumnDataMapping", "ImportDataMapping", pair: false,
+                allowUnwrittenForEmptyOutput: allowUnwrittenForEmptyOutput);
 
-        private static EnumTextOutput Read(object target, string methodName, string enumName, bool pair)
+        private static ColumnMappingOutput Read(object target, string methodName, string enumName, bool pair,
+            bool allowUnwrittenForEmptyOutput)
         {
             ArgumentNullException.ThrowIfNull(target);
             string enumFullName = "Autodesk.Gis.Map.ImportExport." + enumName;
@@ -70,16 +76,34 @@ namespace CLV_CivilTools.Gis
                 Enum? mode = outputType.IsPointer
                     ? ReadEnum(memory, enumType, storageKind)
                     : arguments[0] as Enum;
-                if (mode == null || mode.GetType() != enumType || mode.Equals(sentinel))
-                    throw new InvalidOperationException($"Native {methodName} did not write its {enumName} output.");
+                string? text = pair ? (string?)arguments[1] : (string?)result;
+                if (mode == null || mode.GetType() != enumType)
+                    throw new InvalidOperationException($"Native {methodName} returned an invalid {enumName} output.");
+                if (mode.Equals(sentinel))
+                {
+                    // Only a caller-identified, deliberately cleared column may
+                    // use its empty destination without an enum. Keep absence
+                    // explicit; never invent NoImportMapping or a table mode.
+                    if (!pair && allowUnwrittenForEmptyOutput && string.IsNullOrEmpty(text))
+                        return new ColumnMappingOutput(null, text);
+                    throw new InvalidOperationException($"Native {methodName} did not write its {enumName} output; " +
+                        $"returned text={DescribeText(text)}, empty-unmapped allowance={allowUnwrittenForEmptyOutput}.");
+                }
                 if (!Enum.IsDefined(enumType, mode))
                     throw new InvalidOperationException($"Native {methodName} returned an undefined {enumName} value: {mode}.");
-                return new EnumTextOutput(mode, pair ? (string?)arguments[1] : (string?)result);
+                return new ColumnMappingOutput(mode, text);
             }
             finally
             {
                 if (memory != IntPtr.Zero) Marshal.FreeHGlobal(memory);
             }
+        }
+
+        private static string DescribeText(string? value)
+        {
+            if (value == null) return "<null>";
+            string escaped = value.Replace("\\", "\\\\").Replace("\r", "\\r").Replace("\n", "\\n").Replace("'", "\\'");
+            return "'" + (escaped.Length > 160 ? escaped.Substring(0, 160) + "..." : escaped) + "'";
         }
 
         private static bool IsGetter(MethodInfo method, string name, string enumFullName, bool pair)

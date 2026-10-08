@@ -46,10 +46,12 @@ are String to Character, Int16/Int32 to Integer, and Single/Double to Real.
 Byte, Int64, Boolean, DateTime, and other unsupported types are rejected.
 
 Column readback tests exercise both New and Existing plans. Exact mapped fields
-require the planned mode and output name. Every other native column, including a
-case-only source alias, must have empty output and either `NoImportMapping` or
-the planned layer mode, matching the native API's documented column semantics.
-Unexpected modes, outputs, case changes, and whitespace outputs are rejected.
+require the planned mode and output name, rejecting a missing mode even with a
+correct name. Every other native column, including a case-only source alias,
+must have exactly empty normalized output and either `NoImportMapping`, the
+planned layer mode, or an explicitly unwritten enum. The unwritten case is a
+bounded compatibility inference, not a documented getter guarantee. Unexpected
+modes, nonempty/whitespace outputs, and case changes are rejected.
 The native caller must additionally check that all required exact source names
 were present; accepting a cleared alias does not satisfy that requirement.
 

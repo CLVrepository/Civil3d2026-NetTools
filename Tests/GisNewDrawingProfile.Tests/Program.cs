@@ -411,6 +411,12 @@ foreach (bool existing in new[] { false, true })
     });
     foreach (string sourceName in new[] { "OutsideDiameter", "ExtraNativeColumn", "name" })
     {
+        Run(mode + ": intentionally unmapped " + sourceName + " accepts unwritten mode only with empty output", () =>
+            GisNewDrawingObjectDataPlan.VerifyColumnMapping(pipes, sourceName, null, ""));
+        foreach (string output in new[] { "Name", " ", "\t" })
+            Run(mode + ": unwritten unmapped " + sourceName + " rejects output '" + output + "'", () =>
+                PlanRejected(() => GisNewDrawingObjectDataPlan.VerifyColumnMapping(pipes, sourceName, null, output),
+                    "unmapped native column must have empty output"));
         foreach (string clearedMode in new[] { "NoImportMapping", mode })
         {
             Run(mode + ": cleared " + sourceName + " accepts " + clearedMode, () =>
@@ -423,6 +429,9 @@ foreach (bool existing in new[] { false, true })
             PlanRejected(() => GisNewDrawingObjectDataPlan.VerifyColumnMapping(pipes, sourceName, otherMode, ""),
                 "unmapped native column must have empty output"));
     }
+    foreach (string output in new[] { "Name", "", " " })
+        Run(mode + ": mapped field rejects unwritten mode with output '" + output + "'", () =>
+            PlanRejected(() => GisNewDrawingObjectDataPlan.VerifyColumnMapping(pipes, "Name", null, output), "differs from planned"));
     foreach (string wrongMode in new[] { "NoImportMapping", otherMode, "", "UnexpectedMapping", mode.ToLowerInvariant() })
     {
         Run(mode + ": mapped field rejects mode '" + wrongMode + "'", () =>

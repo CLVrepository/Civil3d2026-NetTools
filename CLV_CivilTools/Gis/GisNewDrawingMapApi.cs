@@ -272,16 +272,26 @@ namespace CLV_CivilTools.Gis
             var exactNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (object column in Enumerate(layer))
             {
+                string name = "<unread>";
+                bool? expectedMapped = null;
                 try
                 {
-                    string name = Text(Get(column, "ColumnName"));
+                    name = Text(Get(column, "ColumnName"));
                     if (string.IsNullOrEmpty(name) || !seen.Add(name))
                         throw new InvalidOperationException("Blank, duplicate or case-colliding native input column: " + name);
                     exactNames.Add(name);
-                    GisNewDrawingNativeOutputs.EnumTextOutput columnMapping = GisNewDrawingNativeOutputs.ReadColumnMapping(column);
+                    expectedMapped = plan.Fields.Any(field => field.SourceName == name);
+                    GisNewDrawingNativeOutputs.ColumnMappingOutput columnMapping = GisNewDrawingNativeOutputs.ReadColumnMapping(column,
+                        allowUnwrittenForEmptyOutput: expectedMapped == false);
                     string actualOutput = Text(columnMapping.Text);
-                    string actualMode = Text(columnMapping.Mode);
+                    string? actualMode = columnMapping.Mode?.ToString();
                     GisNewDrawingObjectDataPlan.VerifyColumnMapping(plan, name, actualMode, actualOutput);
+                }
+                catch (System.Exception ex)
+                {
+                    throw new InvalidOperationException($"Native OD readback failed for {expected.InputClass}.{name}; " +
+                        $"expected {(expectedMapped == true ? "mapped" : expectedMapped == false ? "unmapped" : "unread")} column, " +
+                        $"table {plan.MappingMode} / '{plan.TableName}'.", ex);
                 }
                 finally { DisposeOwned(column); }
             }

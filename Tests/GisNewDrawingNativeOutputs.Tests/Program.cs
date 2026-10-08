@@ -28,6 +28,13 @@ void Output(GisNewDrawingNativeOutputs.EnumTextOutput actual, Enum mode, string?
     Check(actual.Mode.GetType() == mode.GetType() && actual.Mode.Equals(mode), "Enum output/type differs.");
     Check(actual.Text == text, "String output differs.");
 }
+void ColumnOutput(GisNewDrawingNativeOutputs.ColumnMappingOutput actual, Enum? mode, string? text)
+{
+    Check(mode == null ? actual.Mode == null :
+        actual.Mode is Enum actualMode && actualMode.GetType() == mode.GetType() && actualMode.Equals(mode),
+        "Column enum output/type differs; an unwritten output must remain null.");
+    Check(actual.Text == text, "Column string output differs.");
+}
 
 Test("pointer LayerName receives allocated initialized output", () =>
 {
@@ -40,7 +47,7 @@ Test("pointer DataMapping", () =>
 Test("pointer PointToBlockMapping", () =>
     Output(GisNewDrawingNativeOutputs.ReadPair(new PointerGetters(), "PointToBlockMapping"), PointMappingType.MapPointToPoint, ""));
 Test("pointer ColumnDataMapping reads the return string", () =>
-    Output(GisNewDrawingNativeOutputs.ReadColumnMapping(new PointerGetters()), ImportDataMapping.ExistingObjectDataOnly, "Name"));
+    ColumnOutput(GisNewDrawingNativeOutputs.ReadColumnMapping(new PointerGetters()), ImportDataMapping.ExistingObjectDataOnly, "Name"));
 
 Test("actual enum by-reference LayerName", () =>
     Output(GisNewDrawingNativeOutputs.ReadPair(new ReferenceGetters(), "LayerName"), LayerNameType.LayerNameDirect, "Structures"));
@@ -49,11 +56,11 @@ Test("actual enum by-reference DataMapping", () =>
 Test("actual enum by-reference PointToBlockMapping", () =>
     Output(GisNewDrawingNativeOutputs.ReadPair(new ReferenceGetters(), "PointToBlockMapping"), PointMappingType.MapPointToPoint, ""));
 Test("actual enum by-reference ColumnDataMapping", () =>
-    Output(GisNewDrawingNativeOutputs.ReadColumnMapping(new ReferenceGetters()), ImportDataMapping.ExistingObjectDataOnly, "Name"));
+    ColumnOutput(GisNewDrawingNativeOutputs.ReadColumnMapping(new ReferenceGetters()), ImportDataMapping.ExistingObjectDataOnly, "Name"));
 Test("nullable pair string is left for mapping policy", () =>
     Output(GisNewDrawingNativeOutputs.ReadPair(new NullableGetters(), "LayerName"), LayerNameType.LayerNameDirect, null));
 Test("nullable return string is left for mapping policy", () =>
-    Output(GisNewDrawingNativeOutputs.ReadColumnMapping(new NullableGetters()), ImportDataMapping.NoImportMapping, null));
+    ColumnOutput(GisNewDrawingNativeOutputs.ReadColumnMapping(new NullableGetters()), ImportDataMapping.NoImportMapping, null));
 
 Test("unwritten pointer enum is rejected", () =>
     Reject<InvalidOperationException>(() => GisNewDrawingNativeOutputs.ReadPair(new UnwrittenPointerGetter(), "LayerName"), "did not write"));
@@ -65,6 +72,76 @@ Test("undefined reference enum is rejected", () =>
     Reject<InvalidOperationException>(() => GisNewDrawingNativeOutputs.ReadPair(new UndefinedReferenceGetter(), "LayerName"), "undefined"));
 Test("unwritten column enum is rejected", () =>
     Reject<InvalidOperationException>(() => GisNewDrawingNativeOutputs.ReadColumnMapping(new UnwrittenColumnGetter()), "did not write"));
+
+foreach (bool byReference in new[] { false, true })
+{
+    string shape = byReference ? "reference" : "pointer";
+    foreach (string? text in new string?[] { null, "" })
+    {
+        string output = text == null ? "null" : "empty";
+        Test(shape + " unwritten column with " + output + " output stays strict by default", () =>
+        {
+            IColumnGetterProbe native = ColumnGetter(byReference, null, text);
+            var failure = Reject<InvalidOperationException>(() => GisNewDrawingNativeOutputs.ReadColumnMapping(native), "did not write");
+            Check(failure.Message.Contains(text == null ? "returned text=<null>" : "returned text=''", StringComparison.Ordinal),
+                "Missing-output diagnostics must distinguish null from empty text.");
+            Check(native.Calls == 1, "Rejected column getter must run exactly once.");
+        });
+        Test(shape + " unwritten column with " + output + " output rejects explicit false", () =>
+            Reject<InvalidOperationException>(() => GisNewDrawingNativeOutputs.ReadColumnMapping(
+                ColumnGetter(byReference, null, text), allowUnwrittenForEmptyOutput: false), "did not write"));
+        Test(shape + " cleared column with " + output + " output preserves unwritten mode when permitted", () =>
+        {
+            IColumnGetterProbe native = ColumnGetter(byReference, null, text);
+            ColumnOutput(GisNewDrawingNativeOutputs.ReadColumnMapping(native, allowUnwrittenForEmptyOutput: true), null, text);
+            Check(native.Calls == 1, "Permitted cleared column getter must run exactly once.");
+        });
+    }
+    foreach (string text in new[] { "Name", " ", "\t\r\n" })
+    {
+        Test(shape + " unwritten column rejects nonempty output even when permitted: " + text, () =>
+            Reject<InvalidOperationException>(() => GisNewDrawingNativeOutputs.ReadColumnMapping(
+                ColumnGetter(byReference, null, text), allowUnwrittenForEmptyOutput: true), "did not write"));
+    }
+    foreach (bool allowUnwritten in new[] { false, true })
+    {
+        foreach (string? text in new string?[] { null, "", "Name", " " })
+        {
+            Test(shape + " arbitrary undefined column enum is rejected with allowance=" + allowUnwritten + " and output=" + (text ?? "<null>"), () =>
+                Reject<InvalidOperationException>(() => GisNewDrawingNativeOutputs.ReadColumnMapping(
+                    ColumnGetter(byReference, (ImportDataMapping)12345, text), allowUnwritten), "undefined"));
+            foreach (ImportDataMapping mode in Enum.GetValues<ImportDataMapping>())
+            {
+                Test(shape + " defined column enum " + mode + " is preserved with allowance=" + allowUnwritten + " and output=" + (text ?? "<null>"), () =>
+                    ColumnOutput(GisNewDrawingNativeOutputs.ReadColumnMapping(ColumnGetter(byReference, mode, text), allowUnwritten), mode, text));
+            }
+        }
+    }
+    Test(shape + " cleared-column permission does not persist to the next strict column read", () =>
+    {
+        IColumnGetterProbe native = ColumnGetter(byReference, null, "");
+        ColumnOutput(GisNewDrawingNativeOutputs.ReadColumnMapping(native, allowUnwrittenForEmptyOutput: true), null, "");
+        Reject<InvalidOperationException>(() => GisNewDrawingNativeOutputs.ReadColumnMapping(native), "did not write");
+        Check(native.Calls == 2, "Each column read must run exactly once without caching an allowed result.");
+    });
+    foreach (string getter in new[] { "LayerName", "DataMapping", "PointToBlockMapping" })
+    {
+        foreach (string? text in new string?[] { null, "" })
+        {
+            foreach (bool writeUndefined in new[] { false, true })
+            {
+                Test(shape + " " + getter + " remains strict after a permitted cleared column; undefined=" + writeUndefined + "; output=" + (text ?? "<null>"), () =>
+                {
+                    ColumnOutput(GisNewDrawingNativeOutputs.ReadColumnMapping(
+                        ColumnGetter(byReference, null, text), allowUnwrittenForEmptyOutput: true), null, text);
+                    object native = byReference ? new InvalidPairReferenceGetters(text, writeUndefined) : new InvalidPairPointerGetters(text, writeUndefined);
+                    Reject<InvalidOperationException>(() => GisNewDrawingNativeOutputs.ReadPair(native, getter),
+                        writeUndefined ? "undefined" : "did not write");
+                });
+            }
+        }
+    }
+}
 
 foreach (object invalid in new object[]
 {
@@ -138,6 +215,9 @@ Test("test target has no Autodesk assembly dependency", () =>
         "The focused reader tests must not load Autodesk assemblies."));
 
 Console.WriteLine($"All {passed} native output reader checks passed. Civil 3D integration remains a separate acceptance check.");
+
+static IColumnGetterProbe ColumnGetter(bool byReference, ImportDataMapping? mode, string? text)
+    => byReference ? new ColumnReferenceGetter(mode, text) : new ColumnPointerGetter(mode, text);
 
 // Emit distinct assemblies so all eight underlying types can use the exact
 // documented enum full name without replacing the production signature checks.
@@ -245,6 +325,58 @@ public sealed class UndefinedReferenceGetter
 public unsafe sealed class UnwrittenColumnGetter
 {
     public string ColumnDataMapping(ImportDataMapping* mode) => "Name";
+}
+public interface IColumnGetterProbe
+{
+    int Calls { get; }
+}
+public unsafe sealed class ColumnPointerGetter : IColumnGetterProbe
+{
+    private readonly ImportDataMapping? writtenMode;
+    private readonly string? returnedText;
+    public int Calls { get; private set; }
+    public ColumnPointerGetter(ImportDataMapping? mode, string? text) { writtenMode = mode; returnedText = text; }
+    public string? ColumnDataMapping(ImportDataMapping* mode)
+    {
+        Calls++;
+        if (mode == null || Enum.IsDefined(typeof(ImportDataMapping), *mode))
+            throw new InvalidOperationException("Expected non-null storage initialized to an undefined enum sentinel.");
+        if (writtenMode.HasValue) *mode = writtenMode.Value;
+        return returnedText;
+    }
+}
+public sealed class ColumnReferenceGetter : IColumnGetterProbe
+{
+    private readonly ImportDataMapping? writtenMode;
+    private readonly string? returnedText;
+    public int Calls { get; private set; }
+    public ColumnReferenceGetter(ImportDataMapping? mode, string? text) { writtenMode = mode; returnedText = text; }
+    public string? ColumnDataMapping(ref ImportDataMapping mode)
+    {
+        Calls++;
+        if (Enum.IsDefined(typeof(ImportDataMapping), mode))
+            throw new InvalidOperationException("Expected an undefined enum sentinel.");
+        if (writtenMode.HasValue) mode = writtenMode.Value;
+        return returnedText;
+    }
+}
+public unsafe sealed class InvalidPairPointerGetters
+{
+    private readonly string? output;
+    private readonly bool writeUndefined;
+    public InvalidPairPointerGetters(string? text, bool writeUndefined) { output = text; this.writeUndefined = writeUndefined; }
+    public void LayerName(LayerNameType* mode, out string? text) { if (writeUndefined) *mode = (LayerNameType)12345; text = output; }
+    public void DataMapping(ImportDataMapping* mode, out string? text) { if (writeUndefined) *mode = (ImportDataMapping)12345; text = output; }
+    public void PointToBlockMapping(PointMappingType* mode, out string? text) { if (writeUndefined) *mode = (PointMappingType)12345; text = output; }
+}
+public sealed class InvalidPairReferenceGetters
+{
+    private readonly string? output;
+    private readonly bool writeUndefined;
+    public InvalidPairReferenceGetters(string? text, bool writeUndefined) { output = text; this.writeUndefined = writeUndefined; }
+    public void LayerName(ref LayerNameType mode, out string? text) { if (writeUndefined) mode = (LayerNameType)12345; text = output; }
+    public void DataMapping(ref ImportDataMapping mode, out string? text) { if (writeUndefined) mode = (ImportDataMapping)12345; text = output; }
+    public void PointToBlockMapping(ref PointMappingType mode, out string? text) { if (writeUndefined) mode = (PointMappingType)12345; text = output; }
 }
 public unsafe sealed class ThrowingGetter
 {
