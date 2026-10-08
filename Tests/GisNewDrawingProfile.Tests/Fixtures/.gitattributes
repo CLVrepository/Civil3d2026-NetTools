@@ -1,2 +1,0 @@
-# These supplied XML fixtures are intentionally byte-exact, including CRLF.
-*.ipf -text whitespace=cr-at-eol

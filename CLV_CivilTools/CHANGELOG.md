@@ -1,3 +1,11 @@
+## 2026-10-08 - Keep GIS drawing setup and use manual MAPIMPORT
+- User-directed fallback after the final automatic trial: `CLV-GIS-NEW-DRAWING` now creates Blank, matches source units/CRS, clones and verifies eligible survey objects, and leaves the destination active and unsaved with the matching IPF path and manual MAPIMPORT/SAVEAS steps. No SDF selection, preflight or automatic import remains.
+- Final automatic commit `c15fbce` stopped before Import because mapped `Civil_Schema:Pipes.Name` returned `Name` without writing its enum output. Copy verification had passed; the incomplete drawing was discarded and no output was saved. Further automatic-import debugging is paused.
+- Removes the automatic-only SDF reader, IPF parser, OD planner, native-output helper and their test projects/fixtures. Retains active clone/appearance/coordinate tests, exact resource paths, existing R5 commands and shared dependencies used elsewhere. Git history/recovery refs preserve the automatic version.
+- Setup failures still discard only the new incomplete drawing. Successful setup records `SETUP_READY_MANUAL_IMPORT` under a V2 marker; it does not certify subsequent manual network import. Tests/full build/native completion remain unrun for this update.
+
+The automatic-import entries below are historical and superseded by the setup-only workflow above; their removed implementation is retained only in Git history.
+
 ## 2026-10-08 - Handle inactive column mapping output
 - Allows an untouched `ColumnDataMapping` enum only for a caller-identified unmapped column returning null/empty destination text. Missingness is explicit; mapped fields, pair getters, nonempty destinations and other undefined enums remain strict.
 - Adds class/column/expected-state/table context to native column readback failures and returned-text detail when an enum is missing. The prior native failure did not identify the column or returned text; inactive-column behavior remains a compatibility inference pending retry.

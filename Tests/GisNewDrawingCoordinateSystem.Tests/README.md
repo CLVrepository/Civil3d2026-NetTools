@@ -1,6 +1,6 @@
-# Source drawing coordinate policy tests
+# Drawing setup coordinate and resource tests
 
-The original drawing's exact assigned code is authoritative: `NV83.NCRS-LVF` or `NV83.NCRS-LVHEF`. The production policy assigns that code once to the new drawing, then reads it back. For each selected import layer it explicitly replaces the incoming/from coordinate-system setting with that same source code and reads it back. SDF coordinate-system names/WKT are not inputs to this policy.
+The original drawing's exact assigned code is authoritative: `NV83.NCRS-LVF` or `NV83.NCRS-LVHEF`. The setup policy assigns that code once to the new drawing, then reads it back. The resource helper selects the matching shared profile path for the later manual import. It does not read or parse IPF files.
 
 Run:
 
@@ -8,10 +8,13 @@ Run:
 
 For a .NET 10-only executor use `-p:TargetFramework=net10.0 -p:GisTestTargetFramework=net10.0`.
 
-These package-free tests link the production policy/profile code. They test the exact two supported source codes, missing/unsupported source refusal before writes, one assignment followed by readback, replacement of empty/mismatched/malformed incoming labels, readback mismatches, and setter/reader failures. No MapGuide runtime or fake assembly is referenced or loaded.
+These package-free tests link the production coordinate policy and resource helper. They cover:
 
-The user-selected SDF's raw coordinates are intentionally interpreted in the original drawing's assigned CRS. These tests do not certify embedded SDF coordinate-system labels.
+- Exact blank-template and profile-folder UNC paths, with Windows separators on every test platform.
+- Exact source-code/profile selection, including the intentional period before `LVHEF` in `UFLS-IMPORT-NV83.NCRS.LVHEF.ipf`.
+- Missing and unsupported source-code refusal, including case changes, whitespace and punctuation aliases, with no profile fallback or destination writes.
+- One destination assignment followed by readback, replacement of an empty or mismatched template code, readback mismatches, and setter/reader failures.
 
-The importer still verifies every imported vertex against the raw SDF XYZ coordinates (absolute tolerance 0.000001 drawing units), as well as counts, identities and mapped OD. A native transform/scale that changes coordinates therefore fails verification and the incomplete new drawing is discarded. These portable tests cannot establish native import behavior or end-to-end acceptance.
+No Autodesk runtime, MapGuide runtime or fake assembly is referenced or loaded. These checks need no shared-drive access and do not certify that the deployed template or profiles are accessible.
 
-API evidence: Autodesk Map 3D 2026 `sdk.arx.net.ref.chm`, `Autodesk.Gis.Map.ImportExport.InputLayer.TargetCoordinateSystem`, documents it as the read/write incoming/from CRS shown in the Import dialog's Coordinate System column. `OriginalCoordinateSys` is unimplemented and always empty; this command never uses it as evidence. The supplied profiles remain unchanged.
+Native Civil 3D drawing setup and the later manual `MAPIMPORT` workflow still require acceptance testing. These portable tests do not exercise import, geometry or Object Data.
