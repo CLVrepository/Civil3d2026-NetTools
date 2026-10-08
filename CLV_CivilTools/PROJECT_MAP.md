@@ -1,10 +1,14 @@
+## 2026-10-08 - Add to Database palette layout
+- `Gis/GisPalette.cs` moves the renamed ADD TO DATABASE launcher into GIS TOOLS. `Gis/GisCreateDataPalette.cs` places CREATE GIS DRAWING first under STORM DRAIN, retains storm/sewer GIS PREP - ALL, and removes only the six individual storm/sewer buttons.
+- Palette/window/tab/access-display titles use ADD TO DATABASE. Existing command identifiers, access checks/users file, 256 x 24 button rows, 7 pt font, 340 x 700 default and 300 x 540 minimum sizes are retained. Backing routines and sewer behavior are unchanged.
+
 ## 2026-10-08 - Separate GIS drawing setup for manual import
 - `Gis/GisNewDrawingCommands.cs`: Session-context Blank/source-CRS/units/verified copy, new-filename prompt, full-copy save with non-overwriting publication, disk setup verification and close/reopen. Cancel/save failure retains the prepared drawing; reopen failure preserves the saved file. Manual MAPIMPORT/IPF instructions remain; no SDF picker or automatic import.
 - `Gis/GisNewDrawingCoordinateSystem.cs`: active source-code policy and one assignment/readback; no SDF metadata, WKT or dictionary logic.
 - `Gis/GisNewDrawingResources.cs`: exact source codes/shared UNC paths and read-only new-DWG path validation protecting source/template/open files. No IPF parsing or import field schema remains.
 - `Gis/GisNewDrawingMapApi.cs`: only the borrowed Map project Projection reader/setter used by setup.
 - `Gis/GisNewDrawingClone.cs` and `Gis/GisNewDrawingAppearance.cs`: active geometry/block/attribute/OD preservation, dependency collision checks and rendering comparisons.
-- `Gis/GisPalette.cs`: `CREATE GIS DRAWING` queues the unchanged command name. Existing R5 preparation remains independent. Workflow and final automatic-trial failure: `Docs/GIS_NEW_DRAWING.md`.
+- `Gis/GisPalette.cs`: GIS TOOLS launches `ADD TO DATABASE`. `Gis/GisCreateDataPalette.cs` queues the unchanged `CREATE GIS DRAWING` command from its STORM DRAIN section. Existing R5 preparation remains independent. Workflow and final automatic-trial failure: `Docs/GIS_NEW_DRAWING.md`.
 - Retained tests: `Tests/GisNewDrawingCoordinateSystem.Tests` and `Tests/GisNewDrawingAppearance.Tests`; the unused profile/SDF/native-output test projects and their fake/fixture files were removed with the automatic import implementation. Shared Autodesk references used by other features remain.
 
 ## 2026-10-07 - Managed storm pipeline and durable cleanup R5

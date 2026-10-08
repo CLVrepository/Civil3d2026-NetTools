@@ -28,20 +28,20 @@ namespace CLV_CivilTools.Gis
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (!SurveyDatabaseAccessCommands.CanOpenCreateData(doc?.Editor, out _))
             {
-                doc?.Editor.WriteMessage("\nCREATE DATA access denied.");
+                doc?.Editor.WriteMessage("\nADD TO DATABASE access denied.");
                 return;
             }
 
             if (_paletteSet == null)
             {
                 _paletteControl = new GisCreateDataPaletteControl();
-                _paletteSet = new PaletteSet("CREATE DATA")
+                _paletteSet = new PaletteSet("ADD TO DATABASE")
                 {
                     DockEnabled = DockSides.Left | DockSides.Right | DockSides.Top | DockSides.Bottom
                 };
 
 
-                _paletteSet.Add("CREATE DATA", _paletteControl);
+                _paletteSet.Add("ADD TO DATABASE", _paletteControl);
                 PalettePositionHelper.ConfigureSize(
                     _paletteSet,
                     new Size(340, 700),
@@ -79,7 +79,7 @@ namespace CLV_CivilTools.Gis
                 Dock = DockStyle.Fill
             };
 
-            var dataPage = new TabPage("CREATE DATA")
+            var dataPage = new TabPage("ADD TO DATABASE")
             {
                 Padding = new Padding(3)
             };
@@ -94,16 +94,11 @@ namespace CLV_CivilTools.Gis
             var layout = CreateMainFlowPanel();
 
             layout.Controls.Add(CreateSectionLabel("STORM DRAIN"));
+            layout.Controls.Add(CreateCommandButton("CREATE GIS DRAWING", "CLV-GIS-NEW-DRAWING"));
             layout.Controls.Add(CreateCommandButton("GIS PREP - ALL", "CLV-GIS-STORM-GIS"));
-            layout.Controls.Add(CreateCommandButton("JUNCTIONS AND INLETS - ALL", "CLV-GIS-STRM-AUTO"));
-            layout.Controls.Add(CreateCommandButton("DROP INLET - SINGLE", "CLV-GIS-DI-EXPLODE"));
-            layout.Controls.Add(CreateCommandButton("JUNCTION STRUCTURE - SINGLE", "CLV-GIS-JS-FROM-POINT"));
-            layout.Controls.Add(CreateCommandButton("PIPE", "CLV-GIS-PIPE-OFFSET-OD"));
 
             layout.Controls.Add(CreateSectionLabel("SEWER"));
             layout.Controls.Add(CreateCommandButton("GIS PREP - ALL", "CLV-GIS-SSWR-GIS"));
-            layout.Controls.Add(CreateCommandButton("MANHOLE", "CLV-GIS-SSWR-MH"));
-            layout.Controls.Add(CreateCommandButton("PIPE", "CLV-GIS-SSWR-PIPE"));
 
             layout.Controls.Add(CreateSectionLabel("OBJECT DATA"));
             layout.Controls.Add(CreateCommandButton("XFER OBJECT DATA", "CLV-GIS-OD-XFER"));
@@ -178,3 +173,4 @@ namespace CLV_CivilTools.Gis
         }
     }
 }
+

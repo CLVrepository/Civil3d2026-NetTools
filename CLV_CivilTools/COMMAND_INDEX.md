@@ -1,5 +1,10 @@
+## 2026-10-08 - Add to Database menu
+- Q2 > GIS > GIS TOOLS > `ADD TO DATABASE` opens the renamed palette. The legacy `CLV-GIS-CREATE-DATA` command and existing access configuration remain unchanged.
+- STORM DRAIN contains `CREATE GIS DRAWING` first, then `GIS PREP - ALL`. SEWER contains `GIS PREP - ALL`. The six individual storm/sewer buttons were removed from this palette; their backing commands remain available.
+- OBJECT DATA, CLEANUP, EXPORT and TOOLS retain their existing buttons and order. DATA in Q2 retains `IMPORT GIS`.
+
 ## 2026-10-07 - Create GIS Drawing
-- `CLV-GIS-NEW-DRAWING` - Q2 > GIS > DATA > `CREATE GIS DRAWING`. Creates Blank, matches source units/CRS and clones/verifies eligible survey geometry. Prompts for a new DWG filename, verifies the saved copy, and reopens it; cancel/save failure keeps the prepared drawing open. Shows the matching IPF for manual MAPIMPORT. No SDF prompt or automatic import. See `Docs/GIS_NEW_DRAWING.md`.
+- `CLV-GIS-NEW-DRAWING` - Q2 > GIS > GIS TOOLS > ADD TO DATABASE > STORM DRAIN > `CREATE GIS DRAWING`. Creates Blank, matches source units/CRS and clones/verifies eligible survey geometry. Prompts for a new DWG filename, verifies the saved copy, and reopens it; cancel/save failure keeps the prepared drawing open. Shows the matching IPF for manual MAPIMPORT. No SDF prompt or automatic import. See `Docs/GIS_NEW_DRAWING.md`.
 
 ## 2026-10-07 - Managed storm preparation and cleanup R5
 - `CLV-GIS-STORM-GIS` / storm GIS PREP-ALL: revision `2026.10.07-R5` performs managed storm pipe offsets, owned-wall trim at verified straight DI/box outers, and verified point/marker cleanup after structure preparation. It records pipe/structure ownership for reruns; any dependent failure rolls back the pipe/trim/cleanup transaction. No LISP helper is required by this ALL path.
@@ -378,7 +383,7 @@ NEW IN THIS REVISION
 - `Q1` - UFLS palette GIS tab now groups buttons under `STORM DRAIN`, `SEWER`, `OBJECT DATA`, `CLEANUP`, and `EXPORT`. The storm buttons are `GIS PREP - ALL`, `JUNCTIONS AND INLETS - ALL`, `DROP INLET - SINGLE`, `JUNCTION STRUCTURE - SINGLE`, and `PIPE`; the sewer section exposes `GIS PREP - ALL`, `MANHOLE`, and `PIPE`; the new `OBJECT DATA` section exposes `XFER OBJECT DATA`; `ERASE POINTS` remains under `CLEANUP`; and `FINALIZE STRUCTURES` / `FINALIZE PIPES` live under the `EXPORT` section.
 - `Q2` - Retired `JOIN CENTERLINES` is no longer defined or shown on the GIS palette.
 
-- `CLV-GIS-TRIM-INSIDE` - CREATE DATA > TOOLS > `TRIM INSIDE`. Select one closed structure boundary, then trims only storm/sewer pipe wall linework on `C-STRM-PIPE-E` and `C-SSWR-PIPE-E` inside that boundary. Runs single-boundary mode directly; centerline layers such as `C-STRM-PIPE-CNTR-E` and `C-SSWR-PIPE-CNTR-E` are ignored.
+- `CLV-GIS-TRIM-INSIDE` - ADD TO DATABASE > TOOLS > `TRIM INSIDE`. Select one closed structure boundary, then trims only storm/sewer pipe wall linework on `C-STRM-PIPE-E` and `C-SSWR-PIPE-E` inside that boundary. Runs single-boundary mode directly; centerline layers such as `C-STRM-PIPE-CNTR-E` and `C-SSWR-PIPE-CNTR-E` are ignored.
 - `CLV-GIS-PIPE-EXTEND` - Select one pipe wall near the end to adjust; moves the nearest endpoint to the closest `C-STRM-STRC-INNR` wall.
 - `CLV-GIS-PIPE-TRIM` - Select one pipe wall near the end to adjust; moves the nearest endpoint to the closest `C-STRM-STRC-INNR` wall.
 

@@ -24,7 +24,7 @@ namespace CLV_CivilTools.Clv
         private const string DefaultTechnicalReviewsLaunchPath = @"F:\PW_Survey_ROW\Job Database\Technical Reviews.xlsm";
 
         private static readonly UserAccessProfile CreateDataProfile =
-            new("CREATE DATA", "CREATE DATA-USERS.md", DefaultFallbackPin);
+            new("ADD TO DATABASE", "CREATE DATA-USERS.md", DefaultFallbackPin);
 
         [CommandMethod("CLV-PROJECTS", CommandFlags.Modal)]
         [CommandMethod("PROJECTS", CommandFlags.Modal)]
@@ -159,3 +159,4 @@ namespace CLV_CivilTools.Clv
         }
     }
 }
+

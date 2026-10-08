@@ -1,6 +1,6 @@
 # Create GIS Drawing
 
-`CLV-GIS-NEW-DRAWING` (Q2 > GIS > DATA > **CREATE GIS DRAWING**) prepares a separate drawing for **manual MAPIMPORT**, then prompts for a new DWG filename and saves/reopens it. Run it from the original survey/network drawing. It uses that drawing's assigned coordinate system and automatically finds the supported survey linework and DI/MH blocks; there is no geometry-selection or SDF prompt.
+`CLV-GIS-NEW-DRAWING` (Q2 > GIS > GIS TOOLS > ADD TO DATABASE > STORM DRAIN > **CREATE GIS DRAWING**) prepares a separate drawing for **manual MAPIMPORT**, then prompts for a new DWG filename and saves/reopens it. Run it from the original survey/network drawing. It uses that drawing's assigned coordinate system and automatically finds the supported survey linework and DI/MH blocks; there is no geometry-selection or SDF prompt.
 
 ## Workflow
 

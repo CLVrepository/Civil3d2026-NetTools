@@ -215,28 +215,15 @@ namespace CLV_CivilTools.Gis
             };
             btnImport.Click += (s, e) => GisImportCommands.RunFromPalette();
 
-            var btnCreateData = new Button
+            var btnAddToDatabase = new Button
             {
-                Text = "CREATE DATA",
+                Text = "ADD TO DATABASE",
                 Width = ButtonWidth,
                 Height = ButtonHeight,
                 TextAlign = ContentAlignment.MiddleCenter,
                 Font = new Font(SystemFonts.DefaultFont.FontFamily, PaletteFontSize, FontStyle.Regular)
             };
-            btnCreateData.Click += (s, e) => GisCreateDataPaletteCommands.ShowCreateDataPalette();
-
-            var btnNewGisDrawing = new Button
-            {
-                Text = "CREATE GIS DRAWING",
-                Width = ButtonWidth,
-                Height = ButtonHeight,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Font = new Font(SystemFonts.DefaultFont.FontFamily, PaletteFontSize, FontStyle.Regular)
-            };
-            // Queue the Session command; cross-document work cannot run in a palette
-            // click handler's document context.
-            btnNewGisDrawing.Click += (s, e) => Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager
-                .MdiActiveDocument?.SendStringToExecute("CLV-GIS-NEW-DRAWING ", true, false, false);
+            btnAddToDatabase.Click += (s, e) => GisCreateDataPaletteCommands.ShowCreateDataPalette();
 
             var toolsSection = new Label
             {
@@ -328,14 +315,13 @@ namespace CLV_CivilTools.Gis
             panel.Controls.Add(btnLocateParcel);
             panel.Controls.Add(section);
             panel.Controls.Add(btnImport);
-            panel.Controls.Add(btnNewGisDrawing);
-            panel.Controls.Add(btnCreateData);
             panel.Controls.Add(referenceSection);
             panel.Controls.Add(btnLoadReferenceLayers);
             panel.Controls.Add(btnUnloadReferenceLayers);
             panel.Controls.Add(btnDisplaySections);
             panel.Controls.Add(btnUnloadSections);
             panel.Controls.Add(toolsSection);
+            panel.Controls.Add(btnAddToDatabase);
             panel.Controls.Add(btnSurveyReportHtml);
             panel.Controls.Add(xdataSection);
             panel.Controls.Add(btnCacheInspect);
