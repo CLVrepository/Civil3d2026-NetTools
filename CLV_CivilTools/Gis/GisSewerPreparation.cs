@@ -66,7 +66,7 @@ namespace CLV_CivilTools.Gis
                         return true;
                     }
 
-                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.08-S3: checking sewer OD, evaluated manhole circles and pipe connections...");
+                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.12-S4: checking sewer OD, evaluated manhole circles and pipe connections...");
                     SewerManholeBatch manholes = GisSewerManholePlanner.Plan(db, transaction);
                     var reviews = new List<string>(manholes.Reviews);
                     IReadOnlyList<PipePlan> plannedPipes = PlanPipes(db, transaction, model, manholes.Structures, reviews);
@@ -356,15 +356,42 @@ namespace CLV_CivilTools.Gis
             var circle = (Circle)source.Clone();
             try
             {
+                NormalizeCircleRepresentation(circle, source, plan, destinationHandle: string.Empty);
                 circle.Center = plan.Center; circle.Normal = plan.Normal; circle.Radius = plan.Radius; circle.Layer = layer;
                 if (!model.IsWriteEnabled) model.UpgradeOpen();
                 model.AppendEntity(circle); tr.AddNewlyCreatedDBObject(circle, true);
+                NormalizeCircleRepresentation(circle, source, plan, circle.Handle.ToString());
+                RequireOd(circle.ObjectId, GisImportCommands.ObjectDataFingerprintState.Empty, string.Empty);
                 if (circle.Center != plan.Center || circle.Normal != plan.Normal || circle.Radius != plan.Radius ||
                     !string.Equals(circle.Layer, layer, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Materialized CIRCLE differs from the evaluated visible geometry.");
                 return circle;
             }
             catch { if (circle.ObjectId.IsNull) circle.Dispose(); throw; }
+        }
+        private static void NormalizeCircleRepresentation(Circle circle, Circle source, SewerManholeCircle plan, string destinationHandle)
+        {
+            using ResultBuffer? data = circle.XData;
+            var values = (data?.AsArray() ?? Array.Empty<TypedValue>())
+                .Select(value => new SewerRepresentationTag.Value(value.TypeCode, value.Value)).ToArray();
+            if (!SewerRepresentationTag.AcceptClone(values, source.Handle.ToString(), destinationHandle,
+                plan.HasRepresentationTag, !circle.ExtensionDictionary.IsNull))
+                throw new InvalidOperationException("Cloned sewer circle carries unexpected representation metadata; no source cleanup is permitted.");
+            if (values.Length != 0)
+            {
+                // Only the proved native application on this NEW output is removed.
+                using var removal = new ResultBuffer(new TypedValue(1001, SewerRepresentationTag.Application));
+                circle.XData = removal;
+            }
+            RequireCircleOutputMetadata(circle);
+        }
+        private static void RequireCircleOutputMetadata(Entity entity)
+        {
+            using ResultBuffer? data = entity.XData;
+            if ((data?.AsArray().Length ?? 0) != 0)
+                throw new InvalidOperationException("Generated sewer circle has unexpected XData; representation tag removal did not verify.");
+            // Native OD may own extension data after transfer. Its complete fingerprint
+            // is verified separately; do not reject or clear that native storage.
         }
         private static Line AppendWall(BlockTableRecord model, Transaction tr, Line source, Segment plan)
         {
@@ -389,6 +416,7 @@ namespace CLV_CivilTools.Gis
         }
         private static void RequireOd(ObjectId id, GisImportCommands.ObjectDataFingerprintState expected, string fingerprint)
         {
+
             var state = GisImportCommands.InspectObjectDataFingerprint(id, out string actual, out string detail);
             if (state != expected || (expected == GisImportCommands.ObjectDataFingerprintState.Present && actual != fingerprint))
                 throw new InvalidOperationException($"Entity {id.Handle}: complete typed OD differs: {detail}");
@@ -422,11 +450,47 @@ namespace CLV_CivilTools.Gis
             string text = entity is DBPoint point
                 ? FormattableString.Invariant($"POINT|{point.Position.X:R}|{point.Position.Y:R}|{point.Position.Z:R}|{point.Layer}|{point.Visible}")
                 : GisNewDrawingClone.ReadPrimitiveSignature(entity, tr);
+            if (entity is Circle)
+            {
+                RequireCircleOutputMetadata(entity);
+                var metadata = new StringBuilder();
+                AppendOutputDictionaryMetadata(tr, entity.ExtensionDictionary, metadata, 0);
+                text += metadata.ToString();
+            }
             return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
+        }
+        private static void AppendOutputDictionaryMetadata(Transaction tr, ObjectId id, StringBuilder text, int depth)
+        {
+            if (id.IsNull) { text.Append("|NOEXT|"); return; }
+            if (depth > 16) throw new InvalidOperationException("Output metadata nesting requires review.");
+            DBObject value = tr.GetObject(id, OpenMode.ForRead);
+            text.Append('|').Append(id.Handle).Append('|').Append(id.ObjectClass.Name).Append('|');
+            if (value is DBDictionary dictionary)
+            {
+                var entries = new List<DBDictionaryEntry>();
+                foreach (DBDictionaryEntry entry in dictionary) entries.Add(entry);
+                foreach (var entry in entries.OrderBy(item => item.Key, StringComparer.Ordinal))
+                {
+                    text.Append(entry.Key.Length).Append(':').Append(entry.Key);
+                    AppendOutputDictionaryMetadata(tr, entry.Value, text, depth + 1);
+                }
+            }
+            else if (value is Xrecord record)
+            {
+                using ResultBuffer? data = record.Data;
+                foreach (TypedValue item in data?.AsArray() ?? Array.Empty<TypedValue>())
+                {
+                    string content = Convert.ToString(item.Value, CultureInfo.InvariantCulture) ?? string.Empty;
+                    text.Append(item.TypeCode).Append(':').Append(content.Length).Append(':').Append(content);
+                }
+            }
+            // Native OD payloads are verified by the separate complete typed OD
+            // fingerprint. This snapshot additionally detects dictionary topology edits.
         }
         private static Output CaptureOutput(Transaction tr, ObjectId id, string role, string name)
         {
             var entity = (Entity)tr.GetObject(id, OpenMode.ForRead, false);
+            if (role == "ManholeOuter" || role == "ManholeInner") RequireCircleOutputMetadata(entity);
             var state = GisImportCommands.InspectObjectDataFingerprint(id, out string fingerprint, out string detail);
             if (state == GisImportCommands.ObjectDataFingerprintState.ReadFailed) throw new InvalidOperationException(detail);
             return new Output(id, role, name, Shape(tr, entity), state, fingerprint);
@@ -468,7 +532,7 @@ namespace CLV_CivilTools.Gis
         {
             var root = (DBDictionary)tr.GetObject(db.NamedObjectsDictionaryId, OpenMode.ForWrite);
             if (root.Contains(ArchiveKey)) throw new InvalidOperationException("A sewer ownership archive already exists.");
-            var values = new List<TypedValue> { Text(ArchiveKey), Count(archive.Outputs.Count) };
+            var values = new List<TypedValue> { Text(SewerArchiveVersion.Current), Count(archive.Outputs.Count) };
             foreach (Output output in archive.Outputs)
             {
                 values.Add(new TypedValue((int)DxfCode.SoftPointerId, output.Id));
@@ -521,7 +585,7 @@ namespace CLV_CivilTools.Gis
                 return result.ToString();
             }
             ObjectId ReadId() => Take(DxfCode.SoftPointerId) is ObjectId id ? id : throw new InvalidOperationException("Sewer archive reference is invalid.");
-            if (ReadText() != ArchiveKey) throw new InvalidOperationException("Sewer archive version is unsupported.");
+            SewerArchiveVersion.Require(ReadText());
             var outputs = new List<Output>();
             for (int remaining = ReadCount(); remaining > 0; remaining--)
             {
@@ -552,6 +616,7 @@ namespace CLV_CivilTools.Gis
                 if (!ids.Add(expected.Id) || expected.Id.IsNull || !expected.Id.IsValid || expected.Id.IsErased || expected.Id.Database != db ||
                     tr.GetObject(expected.Id, OpenMode.ForRead, false) is not Entity entity || entity.OwnerId != model)
                     throw new InvalidOperationException("Sewer archive has missing, duplicated or foreign output references.");
+                if (expected.Role == "ManholeOuter" || expected.Role == "ManholeInner") RequireCircleOutputMetadata(entity);
                 if (Shape(tr, entity) != expected.Shape) throw new InvalidOperationException($"Owned sewer output {expected.Id.Handle} was edited; no duplicate or repair was attempted.");
                 RequireOd(expected.Id, expected.OdState, expected.OdFingerprint);
             }

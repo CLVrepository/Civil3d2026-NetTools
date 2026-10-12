@@ -1,3 +1,9 @@
+## 2026-10-12 - Sewer evaluated circle representation tag S4
+- Accepts only the observed exact AcDbBlockRepETag payload (1070 short 1, 1071 int 0, 1005 self handle) on a circle directly owned by a verified evaluated dynamic block. The self handle must resolve to that leaf. Unknown XData, extension data, native OD and unsupported geometry still require review.
+- Captures the source leaf payload and evaluated owner/context in the block signature, rechecked before retirement. Source definition metadata is never edited.
+- Newly cloned ordinary GIS circles normalize only that validated application, with readback; empty-source/unexpected-clone tags fail. Output XData must stay empty. Output extension topology is archived after native OD transfer, while complete OD fingerprints are checked separately. Source/clone tag removal and rollback need a native disposable drawing trial.
+- S4 writes an explicit V2 metadata-signature header under the existing archive key. Earlier S1-S3 archives stop with a version diagnostic directing the operator to an untouched input copy; archives and existing outputs are not migrated, deleted or reprocessed.
+- Sewer banner is 2026.10.12-S4. Pipe clipping, exact -CONN/null identity, cache finalization and standalone/Storm routes are unchanged.
 # Sewer GIS preparation
 
 `CLV-GIS-SSWR-GIS` is the managed **GIS PREP - ALL** button under Q2 > GIS > GIS TOOLS > ADD TO DATABASE > SEWER. The section now has the same two labels as Storm: **CREATE GIS DRAWING**, then **GIS PREP - ALL**.

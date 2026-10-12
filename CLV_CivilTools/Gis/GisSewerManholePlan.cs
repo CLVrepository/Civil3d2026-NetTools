@@ -12,13 +12,14 @@ namespace CLV_CivilTools.Gis
 {
     internal sealed class SewerManholeCircle
     {
-        internal SewerManholeCircle(ObjectId sourceEntityId, Point3d center, Vector3d normal, double radius, string originalLayer)
-        { SourceEntityId = sourceEntityId; Center = center; Normal = normal; Radius = radius; OriginalLayer = originalLayer; }
+        internal SewerManholeCircle(ObjectId sourceEntityId, Point3d center, Vector3d normal, double radius, string originalLayer, bool representationTag = false)
+        { SourceEntityId = sourceEntityId; Center = center; Normal = normal; Radius = radius; OriginalLayer = originalLayer; HasRepresentationTag = representationTag; }
         internal ObjectId SourceEntityId { get; }
         internal Point3d Center { get; }
         internal Vector3d Normal { get; }
         internal double Radius { get; }
         internal string OriginalLayer { get; }
+        internal bool HasRepresentationTag { get; }
     }
 
     internal sealed class SewerManholePlan
@@ -355,19 +356,19 @@ namespace CLV_CivilTools.Gis
                     // Always inspect the evaluated BTR, never DynamicBlockTableRecord.
                     foreach (ObjectId id in definition)
                         if (tr.GetObject(id, OpenMode.ForRead, false) is Entity child)
-                            children.Add(new GeometryNode(child, transform));
+                            children.Add(new GeometryNode(child, transform, definition.ObjectId, nested.IsDynamicBlock));
                     return children;
                 },
                 node =>
                 {
                     Entity entity = node.Entity;
-                    RequireEmptyLeafData(entity);
+                    bool representationTag = RequireSupportedLeafData(entity, node, signature);
                     bool isOuter = OuterLayer.IsMatch(entity.Layer ?? string.Empty);
                     bool isInner = InnerLayer.IsMatch(entity.Layer ?? string.Empty);
                     if (!isOuter && !isInner && IsAnnotation(entity)) return;
                     if ((!isOuter && !isInner) || entity.GetType() != typeof(Circle))
                         throw new InvalidOperationException($"unsupported visible {entity.GetType().Name} on layer '{entity.Layer}'");
-                    SewerManholeCircle circle = ReadCircle((Circle)entity, node.ToWorld);
+                    SewerManholeCircle circle = ReadCircle((Circle)entity, node.ToWorld, representationTag);
                     signature.Add(Handle(entity.ObjectId)); signature.Add(entity.Layer);
                     signature.Add(circle.Center); signature.Add(circle.Normal); signature.Add(circle.Radius);
                     signature.Add(GisNewDrawingClone.ReadPrimitiveSignature(entity, tr));
@@ -390,7 +391,7 @@ namespace CLV_CivilTools.Gis
             return new CapturedBlock(boundary, inner, signature.Finish());
         }
 
-        private static SewerManholeCircle ReadCircle(Circle circle, Matrix3d transform)
+        private static SewerManholeCircle ReadCircle(Circle circle, Matrix3d transform, bool representationTag)
         {
             if (circle.Color.ColorMethod == Autodesk.AutoCAD.Colors.ColorMethod.ByBlock ||
                 string.Equals(circle.Linetype, "ByBlock", StringComparison.OrdinalIgnoreCase) ||
@@ -416,19 +417,28 @@ namespace CLV_CivilTools.Gis
                 Math.Abs(Math.Abs(worldNormal.Z) - 1.0) > TransformTolerance)
                 throw new InvalidOperationException("transformed circle is invalid or is not in a world-XY plane");
             // Preserve the computed XYZ and normal, including nonzero elevation. No flattening.
-            return new SewerManholeCircle(circle.ObjectId, center, worldNormal, radius, circle.Layer);
+            return new SewerManholeCircle(circle.ObjectId, center, worldNormal, radius, circle.Layer, representationTag);
         }
 
-        private static void RequireEmptyLeafData(Entity entity)
+        private static bool RequireSupportedLeafData(Entity entity, GeometryNode node, Signature signature)
         {
             using ResultBuffer? xdata = entity.XData;
-            if ((xdata?.AsArray().Length ?? 0) != 0 || !entity.ExtensionDictionary.IsNull)
-                throw new InvalidOperationException($"visible block entity {Handle(entity.ObjectId)} carries XData or extension data requiring review");
-            if (GisImportCommands.InspectObjectDataFingerprint(entity.ObjectId, out _, out string detail) !=
-                GisImportCommands.ObjectDataFingerprintState.Empty)
-                throw new InvalidOperationException($"visible block entity {Handle(entity.ObjectId)} carries unverified native OD: {detail}");
+            TypedValue[] values = xdata?.AsArray() ?? Array.Empty<TypedValue>();
+            var payload = values.Select(value => new SewerRepresentationTag.Value(value.TypeCode, value.Value)).ToArray();
+            bool ownerVerified = !node.EvaluatedOwner.IsNull && entity.OwnerId == node.EvaluatedOwner;
+            bool selfResolves = false;
+            if (values.Length != 0 && SewerRepresentationTag.IsExact(payload, Handle(entity.ObjectId)))
+                selfResolves = entity.Database.GetObjectId(false, entity.Handle, 0) == entity.ObjectId;
+            var odState = GisImportCommands.InspectObjectDataFingerprint(entity.ObjectId, out _, out string detail);
+            if (!SewerRepresentationTag.AcceptSource(payload, Handle(entity.ObjectId),
+                node.DynamicOwner && entity.GetType() == typeof(Circle), ownerVerified, selfResolves,
+                !entity.ExtensionDictionary.IsNull, odState == GisImportCommands.ObjectDataFingerprintState.Empty))
+                throw new InvalidOperationException($"visible block entity {Handle(entity.ObjectId)} carries unverified metadata/OD requiring review: {detail}");
+            signature.Add(Handle(node.EvaluatedOwner)); signature.Add(node.DynamicOwner);
+            signature.Add(values.Length);
+            foreach (TypedValue value in values) { signature.Add(value.TypeCode); signature.Add(value.Value); }
+            return values.Length != 0;
         }
-
         private static void RequireUniformTransform(Matrix3d transform)
         {
             if (transform.ToArray().Any(value => !double.IsFinite(value)))
@@ -598,7 +608,7 @@ namespace CLV_CivilTools.Gis
             internal string Fingerprint { get; set; } = string.Empty;
             internal string Problem { get; set; } = string.Empty;
         }
-        private sealed record GeometryNode(Entity Entity, Matrix3d ToWorld);
+        private sealed record GeometryNode(Entity Entity, Matrix3d ToWorld, ObjectId EvaluatedOwner = default, bool DynamicOwner = false);
         private sealed record CapturedBlock(SewerManholeCircle Outer, IReadOnlyList<SewerManholeCircle> Inner, string Signature);
         private sealed class Signature
         {
