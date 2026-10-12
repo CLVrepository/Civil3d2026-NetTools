@@ -1,3 +1,7 @@
+## 2026-10-12 - Retire standalone manual OD transfer and broad point erasure
+- Removed the OBJECT DATA / XFER OBJECT DATA and CLEANUP / ERASE POINTS sections from ADD TO DATABASE, together with the unused standalone CLV-GIS-OD-XFER and CLV-GIS-ERASE-POINTS command implementations. Storm and sewer GIS PREP - ALL already perform managed native OD transfer and verified owned-source cleanup directly.
+- The native OD readers/copy/verification helpers in GisImport.cs, verified storm/sewer cleanup, OD inspection and shared CLV_GIS_OD_HELPERS.lsp remain required. Retained single-structure commands still use that shared helper.
+- CREATE GIS DRAWING, both GIS PREP - ALL buttons, FINALIZE STRUCTURES/PIPES and all other TOOLS buttons retain their existing routing. External scripts invoking the two retired command names need updating; those wrappers are no longer registered.
 ## 2026-10-12 - Verified sewer manhole source-point cleanup S8-POINTS
 - CLV-GIS-SSWR-GIS now uses one exact archive-based source-point cleanup path for both fresh conversion and existing managed S4-S7 V2 results. Existing results and absence of new/untracked inputs are verified before cleanup; converted pipe/lateral geometry is not rebuilt.
 - Only a unique RetainedSourcePoint -> original source handle/provenance -> exact ManholeOuter ID/name can be erased. Complete current native OD must match both archive fingerprints and pass source-to-owned-outer readback. Source geometry and identity must remain verified; the original 0.10 XY manhole association allowance is retained. Inner circles intentionally lack OD and are not transfer destinations.
@@ -354,7 +358,6 @@ SOURCE FILE RESPONSIBILITIES
 - Supports existing closed-polyline or temporary drawn-polygon boundaries.
 - Includes `CLV-GIS-CLEANUP` duplicate-linework cleanup for imported GIS line layers and `CLV-GIS-CACHE-STATUS` for cache / layer-master status.
 - Includes `CLV-GIS-OD-INSPECT`, which now proxies to an ADE/LISP helper so command-line OD diagnostics match what the Map 3D Properties palette sees. The helper is resolved only from `\\ci.las-vegas.nv.us\pw_data_depot\PW_AutoCAD_Support\2026_Civil3D\Lisp\Lisp\CLV_GIS_OD_HELPERS.lsp`. No local or project-tree fallback is used.
-- `Gis/GisObjectDataTransfer.cs`: wrapper command that loads `CLV_GIS_OD_HELPERS.lsp` from the shared Civil 3D server path and launches the ADE/LISP manual OD transfer workflow so source/destination picks stay inside the helper.
 
 **Gis/GisPalette.cs**
 - `Q2` palette host.
@@ -869,8 +872,6 @@ NOTES / DESIGN RULES
   - Adds `CLV-GIS-PIPE-EXTEND` and `CLV-GIS-PIPE-TRIM` cleanup commands for single-click pipe-wall endpoint adjustment to the nearest `C-STRM-STRC-INNR` wall.
 
 
-- Gis/GisEraseImportedStructurePoints.cs
-  - `CLV-GIS-ERASE-POINTS`: Erases imported map structure DBPoint entities on layer `Structures`.
 
 ### Survey Auto Closure Review Additions
 

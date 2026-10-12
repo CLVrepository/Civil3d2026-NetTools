@@ -1,3 +1,7 @@
+## 2026-10-12 - Retire standalone manual OD transfer and broad point erasure
+- Removed the OBJECT DATA / XFER OBJECT DATA and CLEANUP / ERASE POINTS sections from ADD TO DATABASE, together with the unused standalone CLV-GIS-OD-XFER and CLV-GIS-ERASE-POINTS command implementations. Storm and sewer GIS PREP - ALL already perform managed native OD transfer and verified owned-source cleanup directly.
+- The native OD readers/copy/verification helpers in GisImport.cs, verified storm/sewer cleanup, OD inspection and shared CLV_GIS_OD_HELPERS.lsp remain required. Retained single-structure commands still use that shared helper.
+- CREATE GIS DRAWING, both GIS PREP - ALL buttons, FINALIZE STRUCTURES/PIPES and all other TOOLS buttons retain their existing routing. External scripts invoking the two retired command names need updating; those wrappers are no longer registered.
 ## 2026-10-12 - Verified sewer manhole source-point cleanup S8-POINTS
 - CLV-GIS-SSWR-GIS now uses one exact archive-based source-point cleanup path for both fresh conversion and existing managed S4-S7 V2 results. Existing results and absence of new/untracked inputs are verified before cleanup; converted pipe/lateral geometry is not rebuilt.
 - Only a unique RetainedSourcePoint -> original source handle/provenance -> exact ManholeOuter ID/name can be erased. Complete current native OD must match both archive fingerprints and pass source-to-owned-outer readback. Source geometry and identity must remain verified; the original 0.10 XY manhole association allowance is retained. Inner circles intentionally lack OD and are not transfer destinations.
@@ -339,7 +343,6 @@ NEW IN THIS REVISION
 - `CLV-GIS-CLEANUP` - Removes exact duplicate imported GIS linework on the CLV GIS line layers after import.
 - `CLV-GIS-OD-INSPECT` - Loads `CLV_GIS_OD_HELPERS.lsp` only from `\\ci.las-vegas.nv.us\pw_data_depot\PW_AutoCAD_Support\2026_Civil3D\Lisp\Lisp` and launches the ADE-backed `CLV-GIS-OD-INSPECT-LSP` routine so OD diagnostics reflect the same Object Data tables and fields shown in the Map 3D Properties palette.
 - `CLV-GIS-OD-COPY` - ADE/LISP helper command resolved only from the shared Civil 3D Lisp server path for manual Object Data copy from one entity to another when users want to verify or repair GIS OD outside the join routine.
-- `CLV-GIS-OD-XFER` - .NET wrapper that loads `CLV_GIS_OD_HELPERS.lsp` from the shared Civil 3D server path, then launches the ADE/LISP `CLV-GIS-OD-COPY` workflow so users pick a source object and then a destination object entirely through the helper routine.
 - `CLV-GIS-DI-EXPLODE` - Prompts for a drop inlet block, explodes it in place, deletes marker / curb / text remnants, moves the exploded inner/outer linework onto `C-STRM-STRC-INNR` and `C-STRM-STRC-E`, then queues ADE/LISP OD copy from the aligned imported `Structures` point to all eligible exploded outer structure entities created from the selected drop inlet block.
 - `CLV-GIS-JS-FROM-POINT` - Prompts for a single imported `Structures` point, automatically finds the paired closed junction-structure outer and inner polylines around that point, moves them to `C-STRM-STRC-E` and `C-STRM-STRC-INNR`, then queues ADE/LISP OD copy from the selected point to the detected outer polyline.
 
@@ -411,7 +414,6 @@ NEW IN THIS REVISION
 - `CLV-GIS-PIPE-TRIM` - Select one pipe wall near the end to adjust; moves the nearest endpoint to the closest `C-STRM-STRC-INNR` wall.
 
 
-- `CLV-GIS-ERASE-POINTS` — Erase imported structure point objects on layer `Structures`.
 
 ### Survey Auto Closure Review
 

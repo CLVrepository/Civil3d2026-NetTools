@@ -101,12 +101,6 @@ namespace CLV_CivilTools.Gis
             layout.Controls.Add(CreateCommandButton("CREATE GIS DRAWING", "CLV-GIS-NEW-DRAWING"));
             layout.Controls.Add(CreateCommandButton("GIS PREP - ALL", "CLV-GIS-SSWR-GIS"));
 
-            layout.Controls.Add(CreateSectionLabel("OBJECT DATA"));
-            layout.Controls.Add(CreateCommandButton("XFER OBJECT DATA", "CLV-GIS-OD-XFER"));
-
-            layout.Controls.Add(CreateSectionLabel("CLEANUP"));
-            layout.Controls.Add(CreateCommandButton("ERASE POINTS", "CLV-GIS-ERASE-POINTS"));
-
             layout.Controls.Add(CreateSectionLabel("EXPORT"));
             layout.Controls.Add(CreateCommandButton("FINALIZE STRUCTURES", "CLV-GIS-FINALIZE-STRC"));
             layout.Controls.Add(CreateCommandButton("FINALIZE PIPES", "CLV-GIS-FINALIZE-PIPES"));
