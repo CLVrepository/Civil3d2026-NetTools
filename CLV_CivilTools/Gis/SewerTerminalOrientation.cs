@@ -16,33 +16,38 @@ namespace CLV_CivilTools.Gis
     internal static class SewerTerminalOrientation
     {
         internal static SewerOrientationDecision Plan(SewerPoint3 start, SewerPoint3 end,
-            SewerTerminal first, SewerTerminal last)
+            SewerTerminal? first, SewerTerminal? last)
         {
             bool forward = Try(start, end, first, last, out string forwardReason);
+            // Two present blank OD endpoints have no structure association to
+            // orient. Preserve the source LINE direction after geometry proof.
+            if (first == null && last == null)
+                return new SewerOrientationDecision(forward, false, forwardReason, "No named endpoints; source direction is preserved.");
             bool reverse = Try(start, end, last, first, out string reverseReason);
             return new SewerOrientationDecision(forward, reverse, forwardReason, reverseReason);
         }
 
-        private static bool Try(SewerPoint3 start, SewerPoint3 end, SewerTerminal first,
-            SewerTerminal last, out string reason)
+        private static bool Try(SewerPoint3 start, SewerPoint3 end, SewerTerminal? first,
+            SewerTerminal? last, out string reason)
         {
             reason = "";
             if (!Finite(start) || !Finite(end) || start.Z != end.Z)
             { reason = "LINE coordinates are nonfinite or have different endpoint elevations."; return false; }
-            if (string.Equals(first.Name, last.Name, StringComparison.OrdinalIgnoreCase))
+            if (first != null && last != null && string.Equals(first.Name, last.Name, StringComparison.OrdinalIgnoreCase))
             { reason = "Both OD terminals claim the same structure identity."; return false; }
             if (!Terminal(start, first, out reason)) { reason = "Start: " + reason; return false; }
             if (!Terminal(end, last, out reason)) { reason = "End: " + reason; return false; }
             var clip = SewerCircleTrim.Plan(new SewerPoint2(start.X, start.Y), new SewerPoint2(end.X, end.Y),
-                first.Kind == SewerOpenEndKind.None ? first.Circle : null,
-                last.Kind == SewerOpenEndKind.None ? last.Circle : null);
+                first?.Kind == SewerOpenEndKind.None ? first.Circle : null,
+                last?.Kind == SewerOpenEndKind.None ? last.Circle : null);
             reason = clip.Reason;
             return clip.Kind != SewerClipKind.Review;
         }
 
-        private static bool Terminal(SewerPoint3 endpoint, SewerTerminal terminal, out string reason)
+        private static bool Terminal(SewerPoint3 endpoint, SewerTerminal? terminal, out string reason)
         {
             reason = "";
+            if (terminal == null) return true; // Present blank field, authorized by the batch planner.
             if (string.IsNullOrWhiteSpace(terminal.Name) || !Finite(terminal.Point))
             { reason = "Terminal identity or imported point is invalid."; return false; }
             if (terminal.Kind == SewerOpenEndKind.NullStub)

@@ -7,6 +7,7 @@ using System.Text;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
+using Autodesk.AutoCAD.EditorInput;
 using CLV_CivilTools.Shared;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
@@ -66,10 +67,11 @@ namespace CLV_CivilTools.Gis
                         return true;
                     }
 
-                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.12-S6: checking sewer OD, evaluated manhole circles and pipe connections...");
+                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.12-S7-LATERALS: checking sewer OD, evaluated manhole circles and pipe connections...");
                     SewerManholeBatch manholes = GisSewerManholePlanner.Plan(db, transaction);
                     var reviews = new List<string>(manholes.Reviews);
                     IReadOnlyList<PipePlan> plannedPipes = PlanPipes(db, transaction, model, manholes.Structures, reviews);
+                    ConfirmGenericLaterals(document, transaction, plannedPipes, reviews);
                     foreach (SewerManholePlan manhole in manholes.Structures.Where(item => !item.IsOpenEnd))
                     {
                         try
@@ -234,7 +236,7 @@ namespace CLV_CivilTools.Gis
                 try
                 {
                     if (IsExcludedStormPipe(id, entity.Layer)) continue;
-                    if (!GisImportCommands.TryReadSewerPipeData(id, out var data, out string detail) || data == null)
+                    if (!GisImportCommands.TryReadSewerPipeData(id, out var data, out string detail, allowBlankEndpoints: true) || data == null)
                         throw new InvalidOperationException(detail);
                     if (!names.Add(data.Name)) throw new InvalidOperationException("Duplicate sewer pipe Name.");
                     if (entity.GetType() != typeof(Line))
@@ -242,21 +244,23 @@ namespace CLV_CivilTools.Gis
                     var line = (Line)entity;
                     RequirePlanarLine(line);
                     RequireUnlocked(tr, id);
-                    if (!byName.TryGetValue(data.StructureStart, out SewerManholePlan? first) ||
-                        !byName.TryGetValue(data.StructureEnd, out SewerManholePlan? last))
+                    SewerManholePlan? first = null, last = null;
+                    if ((data.StructureStart.Length != 0 && !byName.TryGetValue(data.StructureStart, out first)) ||
+                        (data.StructureEnd.Length != 0 && !byName.TryGetValue(data.StructureEnd, out last)))
                         throw new InvalidOperationException("StructureStart/StructureEnd does not resolve to a unique verified sewer structure, exact -CONN connection, or explicit null end.");
                     SewerOrientationDecision orientation = SewerTerminalOrientation.Plan(
-                        Coordinates(line.StartPoint), Coordinates(line.EndPoint), Terminal(first), Terminal(last));
+                        Coordinates(line.StartPoint), Coordinates(line.EndPoint), first == null ? null : Terminal(first), last == null ? null : Terminal(last));
                     if (!orientation.Unique)
                         throw new InvalidOperationException("Pipe endpoints do not establish one unique OD-bound circular/open-end orientation. " +
                             $"Forward={orientation.Forward}: {orientation.ForwardReason}; Reverse={orientation.Reverse}: {orientation.ReverseReason}. " +
                             "Run CLV-GIS-SSWR-DIAG for the complete batch coordinates and clipping probes.");
                     bool forward = orientation.Forward;
-                    SewerManholePlan start = forward ? first : last, end = forward ? last : first;
-                    if (Math.Abs(start.SourcePosition.Z - line.StartPoint.Z) > Tolerance ||
-                        Math.Abs(end.SourcePosition.Z - line.EndPoint.Z) > Tolerance)
+                    SewerManholePlan? start = forward ? first : last, end = forward ? last : first;
+                    if ((start != null && Math.Abs(start.SourcePosition.Z - line.StartPoint.Z) > Tolerance) ||
+                        (end != null && Math.Abs(end.SourcePosition.Z - line.EndPoint.Z) > Tolerance))
                         throw new InvalidOperationException("Pipe and imported endpoint points have different elevations; no flattening was applied.");
-                    SewerCircle? startCircle = Boundary(start, line.StartPoint.Z), endCircle = Boundary(end, line.StartPoint.Z);
+                    SewerCircle? startCircle = start == null ? null : Boundary(start, line.StartPoint.Z),
+                        endCircle = end == null ? null : Boundary(end, line.StartPoint.Z);
                     Segment center = Clip(line.StartPoint, line.EndPoint, startCircle, endCircle);
                     Segment? positive = null, negative = null;
                     SewerPipeSizeKind size = SewerPreparationRules.ClassifyDiameter(data.DiameterFeet);
@@ -278,6 +282,46 @@ namespace CLV_CivilTools.Gis
                 catch (System.Exception error) { reviews.Add($"Pipe handle {id.Handle}: {error.Message}"); }
             }
             return Array.AsReadOnly(result.ToArray());
+        }
+
+        private static void ConfirmGenericLaterals(Document document, Transaction tr,
+            IReadOnlyList<PipePlan> plans, List<string> reviews)
+        {
+            if (reviews.Count != 0) return; // No prompt for a batch that already fails preflight.
+            var generic = new List<PipePlan>();
+            foreach (PipePlan plan in plans.Where(plan => plan.Data.StructureStart.Length == 0 || plan.Data.StructureEnd.Length == 0))
+            {
+                var source = (Entity)tr.GetObject(plan.Id, OpenMode.ForRead);
+                if (!GisImportCommands.TryReadPipeUtilityEvidence(plan.Id, out var tables, out var identities, out string detail))
+                    throw new InvalidOperationException(detail);
+                SewerPipeUtilityKind kind = SewerPreparationRules.ClassifyUtility(source.Layer, tables, identities, out string reason);
+                if (kind != SewerPipeUtilityKind.Candidate) throw new InvalidOperationException(reason);
+                if (!SewerPreparationRules.HasPositiveSewerEvidence(source.Layer, tables, identities)) generic.Add(plan);
+            }
+            if (generic.Count == 0) return;
+            document.Editor.WriteMessage("\nGeneric blank-end candidates (handle / Name): {0}",
+                string.Join(", ", generic.Select(plan => plan.Id.Handle + " / " + plan.Data.Name)));
+            var prompt = new PromptKeywordOptions($"\nTreat these {generic.Count} blank-end Pipes records in {System.IO.Path.GetFileName(document.Name)} as sewer laterals? [Yes/No] <No>: ")
+                { AllowNone = true };
+            prompt.Keywords.Add("Yes");
+            prompt.Keywords.Add("No");
+            prompt.Keywords.Default = "No";
+            PromptResult answer = document.Editor.GetKeywords(prompt);
+            if (answer.Status != PromptStatus.OK || !string.Equals(answer.StringResult, "Yes", StringComparison.OrdinalIgnoreCase))
+            {
+                reviews.Add("Generic blank-end sewer lateral classification was not approved; the batch and its source entities remain unchanged.");
+                return;
+            }
+            // Consent applies only to these captured plans in this transaction.
+            // Revalidate their full source geometry and typed OD before any writes.
+            foreach (PipePlan plan in generic)
+            {
+                if (tr.GetObject(plan.Id, OpenMode.ForRead) is not Line line ||
+                    !string.Equals(GisNewDrawingClone.ReadPrimitiveSignature(line, tr), plan.OriginalSignature, StringComparison.Ordinal))
+                    throw new InvalidOperationException("A confirmed lateral changed during the batch prompt.");
+                RequireOd(plan.Id, GisImportCommands.ObjectDataFingerprintState.Present, plan.Data.ObjectDataFingerprint);
+            }
+            document.Editor.WriteMessage("\nConfirmed {0} generic blank-end sewer lateral segments for this batch only. Native endpoint fields and unstructured endpoint coordinates will be preserved.", generic.Count);
         }
 
         private static bool IsRawPipeLayer(string layer) => string.Equals(layer, "Pipes", StringComparison.OrdinalIgnoreCase) ||

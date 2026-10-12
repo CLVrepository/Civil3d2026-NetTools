@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace CLV_CivilTools.Gis
@@ -36,6 +37,24 @@ namespace CLV_CivilTools.Gis
         internal static SewerPipeUtilityKind ClassifyUtility(string layer, IReadOnlyList<string> tables,
             IReadOnlyList<string> identityValues)
             => ClassifyUtility(layer, tables, identityValues, out _);
+
+        // Call only after ClassifyUtility has rejected malformed/conflicting or
+        // storm evidence. A generic Pipes table and PVC size are not sewer proof.
+        internal static bool HasPositiveSewerEvidence(string layer, IReadOnlyList<string> tables,
+            IReadOnlyList<string> identities)
+            => SewerToken.IsMatch(layer) || tables.Any(table =>
+                string.Equals(table, "SS_Pipes", StringComparison.OrdinalIgnoreCase) || SewerToken.IsMatch(table)) ||
+                identities.Any(value => SewerToken.IsMatch(value));
+
+        internal static bool TryNormalizePipeEndpoint(int fieldCount, string? kind, object? value,
+            bool allowBlank, out string endpoint)
+        {
+            endpoint = "";
+            if (fieldCount != 1 || kind != "Character" || value is not string text ||
+                (!allowBlank && string.IsNullOrWhiteSpace(text))) return false;
+            endpoint = text.Trim();
+            return true;
+        }
 
         internal static SewerPipeUtilityKind ClassifyUtility(string layer, IReadOnlyList<string> tables,
             IReadOnlyList<string> identityValues, out string detail)

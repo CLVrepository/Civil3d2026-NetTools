@@ -261,7 +261,8 @@ namespace CLV_CivilTools.Gis
         /// in all attached records. The fingerprint covers the complete typed snapshot.
         /// The caller must hold the active document lock.
         /// </summary>
-        internal static bool TryReadSewerPipeData(ObjectId entityId, out SewerPipeData? data, out string detail)
+        internal static bool TryReadSewerPipeData(ObjectId entityId, out SewerPipeData? data, out string detail,
+            bool allowBlankEndpoints = false)
         {
             data = null;
             try
@@ -279,8 +280,8 @@ namespace CLV_CivilTools.Gis
 
                 string name = ReadVerifiedOdIdentityField(first, "Name", "Pipes");
                 string partSizeName = ReadVerifiedOdIdentityField(first, "PartSizeName", "Pipes");
-                string structureStart = ReadVerifiedOdIdentityField(first, "StructureStart", "Pipes");
-                string structureEnd = ReadVerifiedOdIdentityField(first, "StructureEnd", "Pipes");
+                string structureStart = ReadVerifiedOdPipeEndpoint(first, "StructureStart", allowBlankEndpoints);
+                string structureEnd = ReadVerifiedOdPipeEndpoint(first, "StructureEnd", allowBlankEndpoints);
                 if (!first.Fields.Any(field => string.Equals(field.Name, "InsideDiameter", StringComparison.OrdinalIgnoreCase)))
                     throw new VerifiedOdPipeDiameterException("The Pipes record has no InsideDiameter field.");
 
@@ -824,6 +825,19 @@ namespace CLV_CivilTools.Gis
 
         private static string ReadVerifiedOdIdentityField(VerifiedOdRecord record, string fieldName)
             => ReadVerifiedOdIdentityField(record, fieldName, "Structures");
+
+        private static string ReadVerifiedOdPipeEndpoint(VerifiedOdRecord record, string fieldName, bool allowBlank)
+        {
+            if (!allowBlank) return ReadVerifiedOdIdentityField(record, fieldName, "Pipes");
+            var fields = record.Fields.Where(field => string.Equals(field.Name, fieldName, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (!SewerPreparationRules.TryNormalizePipeEndpoint(fields.Count,
+                fields.Count == 1 ? fields[0].Kind : null, fields.Count == 1 ? fields[0].Value : null,
+                allowBlank: true, out string endpoint))
+                throw new VerifiedOdIdentityException("Pipes must have exactly one Character field named " + fieldName + "; missing, duplicate or incorrectly typed fields are not blank endpoints.");
+            // The complete raw typed record remains in the OD fingerprint. This
+            // normalized planning value never replaces the native field contents.
+            return endpoint;
+        }
 
         private static string ReadVerifiedOdIdentityField(VerifiedOdRecord record, string fieldName, string identityTableName)
         {

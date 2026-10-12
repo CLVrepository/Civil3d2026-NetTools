@@ -48,7 +48,7 @@ namespace CLV_CivilTools.Gis
                             if (IsExcludedStormPipe(id, entity.Layer)) continue;
                             count++;
                             report.AppendLine($"PIPE handle={id.Handle}, type={entity.GetType().Name}, layer={entity.Layer}");
-                            if (!GisImportCommands.TryReadSewerPipeData(id, out var data, out string detail) || data == null)
+                            if (!GisImportCommands.TryReadSewerPipeData(id, out var data, out string detail, allowBlankEndpoints: true) || data == null)
                                 throw new InvalidOperationException(detail);
                             report.AppendLine($"  OD Name={data.Name}; StructureStart={data.StructureStart}; StructureEnd={data.StructureEnd}; diameterFeet={N(data.DiameterFeet)}; size={SewerPreparationRules.ClassifyDiameter(data.DiameterFeet)}");
                             var sourceLayer = (LayerTableRecord)tr.GetObject(entity.LayerId, OpenMode.ForRead);
@@ -59,6 +59,20 @@ namespace CLV_CivilTools.Gis
                             bool planar = true;
                             try { RequirePlanarLine(line); }
                             catch (System.Exception ex) { planar = false; report.AppendLine("  PLANAR REVIEW: " + ex.Message); }
+                            if (data.StructureStart.Length == 0 || data.StructureEnd.Length == 0)
+                            {
+                                SewerManholePlan? namedFirst = null, namedLast = null;
+                                if ((data.StructureStart.Length != 0 && !byName.TryGetValue(data.StructureStart, out namedFirst)) ||
+                                    (data.StructureEnd.Length != 0 && !byName.TryGetValue(data.StructureEnd, out namedLast)))
+                                    throw new InvalidOperationException("Nonblank OD endpoint does not resolve to a verified structure.");
+                                var blankDecision = SewerTerminalOrientation.Plan(Coordinates(line.StartPoint), Coordinates(line.EndPoint),
+                                    namedFirst == null ? null : Terminal(namedFirst), namedLast == null ? null : Terminal(namedLast));
+                                report.AppendLine($"  Present blank endpoints: start={data.StructureStart.Length == 0}, end={data.StructureEnd.Length == 0}; source endpoints preserved where unstructured. Orientation forward={blankDecision.Forward}, reverse={blankDecision.Reverse}, unique={blankDecision.Unique}; {blankDecision.ForwardReason}; {blankDecision.ReverseReason}");
+                                if (!GisImportCommands.TryReadPipeUtilityEvidence(id, out var tables, out var identities, out string utilityDetail))
+                                    throw new InvalidOperationException(utilityDetail);
+                                report.AppendLine($"  Generic lateral batch confirmation required={!SewerPreparationRules.HasPositiveSewerEvidence(entity.Layer, tables, identities)}. Diagnostic does not grant confirmation.");
+                                continue;
+                            }
                             if (!byName.TryGetValue(data.StructureStart, out var first) || !byName.TryGetValue(data.StructureEnd, out var last))
                                 throw new InvalidOperationException("OD endpoints are not uniquely represented in verified structure plans; see structure reviews.");
                             Pair("Start -> OD first", line.StartPoint, first);

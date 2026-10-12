@@ -51,4 +51,28 @@ foreach (double offset in new[] { -0.5, 0.0, 0.5 })
         reversed.Kind == SewerClipKind.Trimmed && Math.Abs(8 - 6 * reversed.StartParameter - (10 - expected)) < 1e-8 && Math.Abs(8 - 6 * reversed.EndParameter - expected) < 1e-8);
 }
 Check("Offset wall gap is not extended", SewerCircleTrim.Plan(new(2, 0.5), new(8, 0.5), a.Circle, b.Circle).Kind == SewerClipKind.Review);
-Console.WriteLine($"{passed}/{passed} production-linked checks passed. Native OD, locks, appearance and transactions require host testing.");
+Check("Observed both-blank lateral keeps source direction", SewerTerminalOrientation.Plan(
+    new(865656.3249999999, 1287950.260000000, 0), new(865634.2809999999, 1287961.410000000, 0), null, null) is { Unique: true, Forward: true, Reverse: false });
+Check("Observed kink segment remains separate and directed", SewerTerminalOrientation.Plan(
+    new(865634.2809999999, 1287961.410000000, 0), new(865633.6500952667, 1287963.092239749, 0), null, null) is { Unique: true, Forward: true });
+Check("Blank-end degenerate segment rejected", !SewerTerminalOrientation.Plan(P(0), P(0), null, null).Unique);
+Check("Blank-end nonflat segment rejected", !SewerTerminalOrientation.Plan(P(0), P(10, z: 1), null, null).Unique);
+Check("Blank-end nonfinite segment rejected", !SewerTerminalOrientation.Plan(P(0), P(double.NaN), null, null).Unique);
+Check("One blank endpoint clips only named manhole", SewerTerminalOrientation.Plan(P(1), P(10), a, null) is { Unique: true, Forward: true });
+Check("Reversed one-blank endpoint keeps unique named association", SewerTerminalOrientation.Plan(P(10), P(1), a, null) is { Unique: true, Reverse: true });
+Check("One blank endpoint cannot extend to named circle", !SewerTerminalOrientation.Plan(P(3), P(10), a, null).Unique);
+Check("One blank endpoint cannot flatten named circle", !SewerTerminalOrientation.Plan(P(1), P(10), a with { CircleZ = 1 }, null).Unique);
+Check("Present empty Character endpoint accepted explicitly", SewerPreparationRules.TryNormalizePipeEndpoint(1, "Character", "", true, out var blank) && blank == "");
+Check("Whitespace planning endpoint retains blank semantics", SewerPreparationRules.TryNormalizePipeEndpoint(1, "Character", "  ", true, out blank) && blank == "");
+Check("Legacy strict reader still rejects empty endpoints", !SewerPreparationRules.TryNormalizePipeEndpoint(1, "Character", "", false, out _));
+Check("Missing endpoint is not blank", !SewerPreparationRules.TryNormalizePipeEndpoint(0, null, null, true, out _));
+Check("Duplicate endpoint is not blank", !SewerPreparationRules.TryNormalizePipeEndpoint(2, "Character", "", true, out _));
+Check("Wrong endpoint type is not blank", !SewerPreparationRules.TryNormalizePipeEndpoint(1, "Real", 0.0, true, out _));
+Check("Unavailable Character value is not blank", !SewerPreparationRules.TryNormalizePipeEndpoint(1, "Character", null, true, out _));
+Check("Nonblank unresolved name is never normalized to blank", SewerPreparationRules.TryNormalizePipeEndpoint(1, "Character", " UNKNOWN ", true, out var named) && named == "UNKNOWN");
+Check("Observed generic lateral needs batch consent", !SewerPreparationRules.HasPositiveSewerEvidence("Pipes", new[] { "Pipes" }, new[] { "Pipe - (221)", "", "" }));
+Check("Named sewer main supplies positive evidence", SewerPreparationRules.HasPositiveSewerEvidence("Pipes", new[] { "Pipes" }, new[] { "Pipe - (12)", "L24-01394-SSMH-12", "L24-01394-SSMH-13" }));
+Check("Sewer table supplies positive evidence", SewerPreparationRules.HasPositiveSewerEvidence("Pipes", new[] { "SS_Pipes" }, new[] { "Pipe - (221)", "", "" }));
+Check("Explicit storm still excluded before consent", SewerPreparationRules.ClassifyUtility("Pipes", new[] { "SD_Pipes" }, new[] { "Pipe - (221)", "", "" }) == SewerPipeUtilityKind.ExcludedStorm);
+Check("Conflicting storm and sewer cannot be approved", SewerPreparationRules.ClassifyUtility("Pipes", new[] { "SD_Pipes" }, new[] { "L24-01394-SSMH-12" }) == SewerPipeUtilityKind.Review);
+Console.WriteLine($"{passed}/{passed} production-linked checks passed. Native OD, locks, appearance, prompts and transactions require host testing.");
