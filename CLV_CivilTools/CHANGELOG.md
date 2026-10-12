@@ -1,3 +1,7 @@
+## 2026-10-12 - Sewer representation tag payload and diagnostics S5
+- Adds only the second observed AcDbBlockRepETag Int32 1071 value, 1 (F40 outer circle), alongside 0 (F3F inner circle). These observations do not establish general inner/outer semantics. All existing dynamic-owner, exact-circle, self-handle, empty-extension and empty-native-OD checks remain required.
+- Source signatures retain the actual payload. Clone normalization requires the exact same 1071 value as its source; changed or unknown values stop conversion. Only the validated application on new output is removed; source definitions are preserved.
+- Metadata reviews identify failed predicates, native type, evaluated owner/context, extension handle and XData code/type summaries. Empty native OD is reported as a successful state, not a rejection explanation. S5 banner is 2026.10.12-S5. S4 V2 archive schema is unchanged; earlier S1-S3 archives still require an untouched input copy.
 ## 2026-10-12 - Sewer evaluated circle representation tag S4
 - Accepts only the observed exact AcDbBlockRepETag payload (1070 short 1, 1071 int 0, 1005 self handle) on a circle directly owned by a verified evaluated dynamic block. The self handle must resolve to that leaf. Unknown XData, extension data, native OD and unsupported geometry still require review.
 - Captures the source leaf payload and evaluated owner/context in the block signature, rechecked before retirement. Source definition metadata is never edited.

@@ -66,7 +66,7 @@ namespace CLV_CivilTools.Gis
                         return true;
                     }
 
-                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.12-S4: checking sewer OD, evaluated manhole circles and pipe connections...");
+                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.12-S5: checking sewer OD, evaluated manhole circles and pipe connections...");
                     SewerManholeBatch manholes = GisSewerManholePlanner.Plan(db, transaction);
                     var reviews = new List<string>(manholes.Reviews);
                     IReadOnlyList<PipePlan> plannedPipes = PlanPipes(db, transaction, model, manholes.Structures, reviews);
@@ -375,7 +375,7 @@ namespace CLV_CivilTools.Gis
             var values = (data?.AsArray() ?? Array.Empty<TypedValue>())
                 .Select(value => new SewerRepresentationTag.Value(value.TypeCode, value.Value)).ToArray();
             if (!SewerRepresentationTag.AcceptClone(values, source.Handle.ToString(), destinationHandle,
-                plan.HasRepresentationTag, !circle.ExtensionDictionary.IsNull))
+                plan.RepresentationTagValue, !circle.ExtensionDictionary.IsNull))
                 throw new InvalidOperationException("Cloned sewer circle carries unexpected representation metadata; no source cleanup is permitted.");
             if (values.Length != 0)
             {

@@ -12,14 +12,14 @@ namespace CLV_CivilTools.Gis
 {
     internal sealed class SewerManholeCircle
     {
-        internal SewerManholeCircle(ObjectId sourceEntityId, Point3d center, Vector3d normal, double radius, string originalLayer, bool representationTag = false)
-        { SourceEntityId = sourceEntityId; Center = center; Normal = normal; Radius = radius; OriginalLayer = originalLayer; HasRepresentationTag = representationTag; }
+        internal SewerManholeCircle(ObjectId sourceEntityId, Point3d center, Vector3d normal, double radius, string originalLayer, int? representationTagValue = null)
+        { SourceEntityId = sourceEntityId; Center = center; Normal = normal; Radius = radius; OriginalLayer = originalLayer; RepresentationTagValue = representationTagValue; }
         internal ObjectId SourceEntityId { get; }
         internal Point3d Center { get; }
         internal Vector3d Normal { get; }
         internal double Radius { get; }
         internal string OriginalLayer { get; }
-        internal bool HasRepresentationTag { get; }
+        internal int? RepresentationTagValue { get; }
     }
 
     internal sealed class SewerManholePlan
@@ -362,7 +362,7 @@ namespace CLV_CivilTools.Gis
                 node =>
                 {
                     Entity entity = node.Entity;
-                    bool representationTag = RequireSupportedLeafData(entity, node, signature);
+                    int? representationTag = RequireSupportedLeafData(entity, node, signature);
                     bool isOuter = OuterLayer.IsMatch(entity.Layer ?? string.Empty);
                     bool isInner = InnerLayer.IsMatch(entity.Layer ?? string.Empty);
                     if (!isOuter && !isInner && IsAnnotation(entity)) return;
@@ -391,7 +391,7 @@ namespace CLV_CivilTools.Gis
             return new CapturedBlock(boundary, inner, signature.Finish());
         }
 
-        private static SewerManholeCircle ReadCircle(Circle circle, Matrix3d transform, bool representationTag)
+        private static SewerManholeCircle ReadCircle(Circle circle, Matrix3d transform, int? representationTag)
         {
             if (circle.Color.ColorMethod == Autodesk.AutoCAD.Colors.ColorMethod.ByBlock ||
                 string.Equals(circle.Linetype, "ByBlock", StringComparison.OrdinalIgnoreCase) ||
@@ -420,7 +420,7 @@ namespace CLV_CivilTools.Gis
             return new SewerManholeCircle(circle.ObjectId, center, worldNormal, radius, circle.Layer, representationTag);
         }
 
-        private static bool RequireSupportedLeafData(Entity entity, GeometryNode node, Signature signature)
+        private static int? RequireSupportedLeafData(Entity entity, GeometryNode node, Signature signature)
         {
             using ResultBuffer? xdata = entity.XData;
             TypedValue[] values = xdata?.AsArray() ?? Array.Empty<TypedValue>();
@@ -433,11 +433,20 @@ namespace CLV_CivilTools.Gis
             if (!SewerRepresentationTag.AcceptSource(payload, Handle(entity.ObjectId),
                 node.DynamicOwner && entity.GetType() == typeof(Circle), ownerVerified, selfResolves,
                 !entity.ExtensionDictionary.IsNull, odState == GisImportCommands.ObjectDataFingerprintState.Empty))
-                throw new InvalidOperationException($"visible block entity {Handle(entity.ObjectId)} carries unverified metadata/OD requiring review: {detail}");
+            {
+                string reason = SewerRepresentationTag.SourceReviewReason(payload, Handle(entity.ObjectId),
+                    node.DynamicOwner && entity.GetType() == typeof(Circle), ownerVerified, selfResolves,
+                    !entity.ExtensionDictionary.IsNull, odState == GisImportCommands.ObjectDataFingerprintState.Empty);
+                string tagSummary = SewerRepresentationTag.Describe(payload);
+                throw new InvalidOperationException($"visible block entity {Handle(entity.ObjectId)} retained for metadata review: {reason}. " +
+                    $"type={entity.GetType().Name}, owner={Handle(entity.OwnerId)}, evaluatedOwner={Handle(node.EvaluatedOwner)}, " +
+                    $"dynamicOwner={node.DynamicOwner}, extension={Handle(entity.ExtensionDictionary)}, XData=[{tagSummary}], OD={odState}." +
+                    (odState == GisImportCommands.ObjectDataFingerprintState.Empty ? string.Empty : " OD detail: " + detail));
+            }
             signature.Add(Handle(node.EvaluatedOwner)); signature.Add(node.DynamicOwner);
             signature.Add(values.Length);
             foreach (TypedValue value in values) { signature.Add(value.TypeCode); signature.Add(value.Value); }
-            return values.Length != 0;
+            return values.Length == 0 ? null : (int)values[2].Value;
         }
         private static void RequireUniformTransform(Matrix3d transform)
         {
