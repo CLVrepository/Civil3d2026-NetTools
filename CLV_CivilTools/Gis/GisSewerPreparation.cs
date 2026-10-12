@@ -17,7 +17,7 @@ namespace CLV_CivilTools.Gis
     /// structure materialization, pipe clipping, OD proof and owned-source cleanup
     /// share one transaction. Legacy standalone and Storm commands are unchanged.
     /// </summary>
-    internal static class GisSewerPreparation
+    internal static partial class GisSewerPreparation
     {
         private const string ArchiveKey = "CLV_SEWER_PREP_V1";
         private const string PipeLayer = "C-SSWR-PIPE-E";
@@ -66,7 +66,7 @@ namespace CLV_CivilTools.Gis
                         return true;
                     }
 
-                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.12-S5: checking sewer OD, evaluated manhole circles and pipe connections...");
+                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.12-S6: checking sewer OD, evaluated manhole circles and pipe connections...");
                     SewerManholeBatch manholes = GisSewerManholePlanner.Plan(db, transaction);
                     var reviews = new List<string>(manholes.Reviews);
                     IReadOnlyList<PipePlan> plannedPipes = PlanPipes(db, transaction, model, manholes.Structures, reviews);
@@ -245,9 +245,13 @@ namespace CLV_CivilTools.Gis
                     if (!byName.TryGetValue(data.StructureStart, out SewerManholePlan? first) ||
                         !byName.TryGetValue(data.StructureEnd, out SewerManholePlan? last))
                         throw new InvalidOperationException("StructureStart/StructureEnd does not resolve to a unique verified sewer structure, exact -CONN connection, or explicit null end.");
-                    bool forward = MatchesTerminal(line.StartPoint, first) && MatchesTerminal(line.EndPoint, last);
-                    bool reverse = MatchesTerminal(line.StartPoint, last) && MatchesTerminal(line.EndPoint, first);
-                    if (forward == reverse) throw new InvalidOperationException("Pipe endpoints do not establish one unambiguous connection orientation to their OD structures. A -CONN point must coincide with the pipe endpoint; no relocation or extension is inferred.");
+                    SewerOrientationDecision orientation = SewerTerminalOrientation.Plan(
+                        Coordinates(line.StartPoint), Coordinates(line.EndPoint), Terminal(first), Terminal(last));
+                    if (!orientation.Unique)
+                        throw new InvalidOperationException("Pipe endpoints do not establish one unique OD-bound circular/open-end orientation. " +
+                            $"Forward={orientation.Forward}: {orientation.ForwardReason}; Reverse={orientation.Reverse}: {orientation.ReverseReason}. " +
+                            "Run CLV-GIS-SSWR-DIAG for the complete batch coordinates and clipping probes.");
+                    bool forward = orientation.Forward;
                     SewerManholePlan start = forward ? first : last, end = forward ? last : first;
                     if (Math.Abs(start.SourcePosition.Z - line.StartPoint.Z) > Tolerance ||
                         Math.Abs(end.SourcePosition.Z - line.EndPoint.Z) > Tolerance)
@@ -291,11 +295,13 @@ namespace CLV_CivilTools.Gis
         }
         private static bool NearXY(Point3d a, Point3d b)
             => Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y)) <= StormStructureMatching.MatchTolerance;
-        private static bool MatchesTerminal(Point3d endpoint, SewerManholePlan structure)
-            => structure.OpenEndKind == SewerOpenEndKind.Connection
-                ? SewerPreparationRules.ConnectionAnchorMatches(endpoint.X, endpoint.Y, endpoint.Z,
-                    structure.SourcePosition.X, structure.SourcePosition.Y, structure.SourcePosition.Z)
-                : NearXY(endpoint, structure.SourcePosition);
+        private static SewerPoint3 Coordinates(Point3d point) => new(point.X, point.Y, point.Z);
+        private static SewerTerminal Terminal(SewerManholePlan structure)
+            => new(structure.Name, structure.OpenEndKind, Coordinates(structure.SourcePosition),
+                structure.IsOpenEnd ? null : new SewerCircle(structure.Name, structure.Outer!.Center.X,
+                    structure.Outer.Center.Y, structure.Outer.Radius), structure.IsOpenEnd ? 0 : structure.Outer!.Center.Z);
+        private static bool LegacyMatchesTerminal(Point3d endpoint, SewerManholePlan structure)
+            => SewerTerminalOrientation.LegacyPointMatches(Coordinates(endpoint), Terminal(structure), StormStructureMatching.MatchTolerance);
         private static Point3d Offset(Point3d point, Vector3d shift)
         {
             Point3d result = point + shift;

@@ -5,6 +5,13 @@ namespace CLV_CivilTools.Gis
 {
     public static class GisSewerGisCommands
     {
+        [CommandMethod("CLV-GIS-SSWR-DIAG", CommandFlags.Modal)]
+        public static void DiagnoseSewerGis()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc != null) GisSewerPreparation.Diagnose(doc);
+        }
+
         [CommandMethod("CLV-GIS-SSWR-GIS", CommandFlags.Modal)]
         public static void RunSewerGis()
         {
