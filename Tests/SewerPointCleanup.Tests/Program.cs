@@ -64,6 +64,30 @@ Check("Orphan stub without owned named pipe is protected", !SewerPointCleanup.Ca
 Check("Stub XData is preserved", !SewerPointCleanup.CanArchiveStub("OpenNullEnd", true, true, 1, native with { HasXData = true }));
 Check("Stub mixed extension data is preserved", !SewerPointCleanup.CanArchiveStub("OpenNullEnd", true, true, 1, native with { DictionaryHasExtraMetadata = true }));
 
+Check("S10 verified owned connection accepted", SewerPointCleanup.CanArchiveOpenEnd("OpenConnectionEnd", "Connection", true, true, 1, native));
+Check("S10 verified owned null/STUB accepted", SewerPointCleanup.CanArchiveOpenEnd("OpenNullEnd", "NullStub", true, true, 1, native));
+Check("Connection cannot use stub role", !SewerPointCleanup.CanArchiveOpenEnd("OpenNullEnd", "Connection", true, true, 1, native));
+Check("Stub cannot use connection role", !SewerPointCleanup.CanArchiveOpenEnd("OpenConnectionEnd", "NullStub", true, true, 1, native));
+Check("Unknown open kind rejected", !SewerPointCleanup.CanArchiveOpenEnd("OpenConnectionEnd", "Other", true, true, 1, native));
+Check("Connection without pipe link retained", !SewerPointCleanup.CanArchiveOpenEnd("OpenConnectionEnd", "Connection", true, true, 0, native));
+Check("Connection extra metadata retained", !SewerPointCleanup.CanArchiveOpenEnd("OpenConnectionEnd", "Connection", true, true, 1, native with { HasXData = true }));
+Check("Connection changed ownership retained", !SewerPointCleanup.CanArchiveOpenEnd("OpenConnectionEnd", "Connection", true, false, 1, native));
+Check("Connection changed identity retained", !SewerPointCleanup.CanArchiveOpenEnd("OpenConnectionEnd", "Connection", false, true, 1, native));
+Check("Reported FD9 exact connection convention", SewerPreparationRules.IsExplicitSewerConnectionName("L24-00066-SSWR-64+88-CONN"));
+Check("Storm connection convention rejected", !SewerPreparationRules.IsExplicitSewerConnectionName("L24-STRM-64+88-CONN"));
+Check("Reported FD9 exact anchor accepted", SewerPreparationRules.ConnectionAnchorMatches(867983.4039999999, 1295548.377, 0, 867983.4039999999, 1295548.377, 0));
+Check("Connection cannot borrow stub XY allowance", !SewerPreparationRules.ConnectionAnchorMatches(0.05, 0, 0, 0, 0, 0));
+Check("Connection Z mismatch rejected", !SewerPreparationRules.ConnectionAnchorMatches(0, 0, 0.0001, 0, 0, 0));
+Check("Connection diagonal outside 1e-8 rejected", !SewerPreparationRules.ConnectionAnchorMatches(0.9e-8, 0.9e-8, 0, 0, 0, 0));
+Check("Connection finite guard", !SewerPreparationRules.ConnectionAnchorMatches(double.NaN, 0, 0, 0, 0, 0));
+Check("Connection part may remain absent", SewerPointCleanup.ArchivedIdentityValueMatches(0, null, null, "", true));
+Check("Connection part may remain blank Character", SewerPointCleanup.ArchivedIdentityValueMatches(1, "Character", "  ", "", true));
+Check("Present connection part retained", SewerPointCleanup.ArchivedIdentityValueMatches(1, "Character", "UFLS-Null Structure", "UFLS-Null Structure", true));
+Check("Absent part cannot stand for nonblank part", !SewerPointCleanup.ArchivedIdentityValueMatches(0, null, null, "UFLS-Null Structure", true));
+Check("Stub part cannot be absent", !SewerPointCleanup.ArchivedIdentityValueMatches(0, null, null, "", false));
+Check("Duplicate connection part rejected", !SewerPointCleanup.ArchivedIdentityValueMatches(2, "Character", "", "", true));
+Check("Wrong-type connection part rejected", !SewerPointCleanup.ArchivedIdentityValueMatches(1, "Integer", "0", "0", true));
+
 // A fake transactional store exercises the production ordering and exception
 // propagation. It is not a substitute for native AutoCAD rollback/Undo testing.
 foreach (string failure in new[] { "", "acquire:B", "revalidate", "readback", "erase:A", "erase:B", "final" })

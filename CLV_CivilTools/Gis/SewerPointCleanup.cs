@@ -67,6 +67,19 @@ namespace CLV_CivilTools.Gis
             => role == "OpenNullEnd" && exactNullStubIdentity && uniqueUnchangedOwnership &&
                verifiedPipeLinks > 0 && Classify(metadata) != SewerPointMetadataKind.Review;
 
+        internal static bool ArchivedIdentityValueMatches(int fields, string? kind, string? raw,
+            string expected, bool allowMissing)
+            => fields == 0 ? allowMissing && expected.Length == 0 :
+               fields == 1 && kind == "Character" && raw != null && string.Equals(raw.Trim(), expected, StringComparison.Ordinal);
+
+        internal static bool ValidOpenEndKindRole(string kind, string role)
+            => kind == "NullStub" && role == "OpenNullEnd" || kind == "Connection" && role == "OpenConnectionEnd";
+
+        internal static bool CanArchiveOpenEnd(string role, string kind, bool exactIdentity,
+            bool uniqueUnchangedOwnership, int verifiedPipeLinks, SewerPointMetadata metadata)
+            => ValidOpenEndKindRole(kind, role) && exactIdentity && uniqueUnchangedOwnership &&
+               verifiedPipeLinks > 0 && Classify(metadata) != SewerPointMetadataKind.Review;
+
         // The caller owns a real transaction. Exceptions are deliberately allowed
         // to escape: it must not commit a partially rewritten archive or erasure.
         internal static void Apply<T>(IReadOnlyList<T> points, Action<T> acquireWrite,

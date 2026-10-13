@@ -7,5 +7,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="../../CLV_CivilTools/Gis/SewerPointCleanup.cs" Link="SewerPointCleanup.cs" />
+    <Compile Include="../../CLV_CivilTools/Gis/SewerPreparationRules.cs" Link="SewerPreparationRules.cs" />
   </ItemGroup>
 </Project>
+
