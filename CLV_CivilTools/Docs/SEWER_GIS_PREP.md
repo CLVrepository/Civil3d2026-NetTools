@@ -1,3 +1,23 @@
+## 2026-10-13 - Verified sewer STUB cleanup S9-STUBS
+- GIS PREP - ALL now removes only unchanged, uniquely archive-owned OpenNullEnd POINTs with the exact supported -STUB / UFLS-Null Structure identity and verified OD-named owned pipe terminals. Connection, unrelated, orphaned, edited, ambiguous and unsupported-metadata points remain protected; no layer/proximity sweep is used.
+- Before erasure, a versioned drawing-local stub archive preserves original handle, identity, XYZ, shape fingerprint, every native OD record/field/type/value and exact linked pipe endpoint coordinates. Typed payload readback reproduces the native fingerprint, including duplicate records. The main archive upgrades to V3 with a required companion digest; missing/changed archives or live restored source handles fail verification. Existing V2 archives are read without rebuilding pipe geometry.
+- Uses the same bounded native OD-only metadata guard established by S8. Pipe endpoints, walls and manhole geometry are not changed by stub cleanup; no artificial outer structure is created. All write acquisition, revalidation, archive readback, point erasure and final verification share the batch transaction.
+- Added production-linked native OD codec and stub eligibility tests. Static review only in this authoring environment: executable tests, full build, native rollback/Undo and save/reopen trials remain required on a disposable drawing copy. Banner: 2026.10.13-S9-STUBS.
+
+### S9 archive and recovery
+
+The diagnostic POINT FCA (`L24-00066-SSWR-57+60-STUB`, `UFLS-Null Structure`) established the exact supported stub convention and native OD-only storage shape. Every candidate is re-read and proved independently; the screenshot and one diagnostic do not authorize deleting other point categories.
+
+`CLV_SEWER_STUB_ARCHIVE_V1` is a drawing-local Xrecord containing an ASCII-safe JSON payload split into Xrecord text chunks. It preserves original source handles, names/parts, XYZ, original shape signatures, full typed native OD values (original table/field spelling and order, record boundaries and multiplicity), and owned pipe handle/name/physical terminal coordinates. Native `Character`, `Integer`, `Real`, and `Point` values are recoverable from the versioned payload; unsupported types stop cleanup. This is a data archive, not a replacement graphical structure or a copy of arbitrary point extension data. Unknown extra metadata keeps the original point live.
+
+After the first successful stub cleanup, the main ownership record uses `CLV_SEWER_PREP_V3_S9_STUBS` and stores the required complete companion digest. Do not delete or edit either archive. V2 input archives remain supported; earlier S1-S3 restrictions remain unchanged. Prior DLL versions intentionally reject the new main archive header rather than ignoring the saved stub data. There is no automatic restore command in this revision: Undo reverses the transaction; later recovery tools can reconstruct the archived identity, XYZ and typed OD. Keep a drawing backup and validate on a copy first.
+
+Required host trial: build/load S9; rerun GIS PREP - ALL on a copy of the reported existing batch; confirm the eligible stubs disappear, connections and unsupported points remain, and every pipe/wall endpoint is unchanged. Then rerun, Undo, save/reopen and rerun. Test locked points, changed OD/metadata, ambiguous/orphaned links, missing/altered companion archive, live restored source handles, and injected readback/erase failures. Verify full rollback rather than treating the pure tests as a native transaction test.
+
+Pure regression commands:
+- `dotnet run --project Tests/NativeOdArchive.Tests/NativeOdArchive.Tests.csproj`
+- `dotnet run --project Tests/SewerPointCleanup.Tests/SewerPointCleanup.Tests.csproj`
+
 ## 2026-10-12 - Retire standalone manual OD transfer and broad point erasure
 - Removed the OBJECT DATA / XFER OBJECT DATA and CLEANUP / ERASE POINTS sections from ADD TO DATABASE, together with the unused standalone CLV-GIS-OD-XFER and CLV-GIS-ERASE-POINTS command implementations. Storm and sewer GIS PREP - ALL already perform managed native OD transfer and verified owned-source cleanup directly.
 - The native OD readers/copy/verification helpers in GisImport.cs, verified storm/sewer cleanup, OD inspection and shared CLV_GIS_OD_HELPERS.lsp remain required. Retained single-structure commands still use that shared helper.
@@ -95,3 +115,4 @@ The user defines exact `-CONN` names as ties to an existing network; the physica
 The source pipe endpoint stays exactly where imported at a connection. Large-pipe walls remain at their original offset terminal station there. The connection POINT and all native OD remain unchanged, are rechecked before commit and are included in rerun ownership. No block/marker is erased for a connection. Duplicate/missing identities, inconsistent coordinates and mixed utility evidence still leave the batch unchanged. Existing null/STUB conventions are not broadened.
 
 Use the corrected/re-exported SDF in the prepared test drawing. Verify Pipe8 reaches its connection point without trimming or extension at that end, its other end meets the SSMH01 outer circle, and the connection point/OD remains. Verify reversed orientation and a 12-inch-or-larger connection fixture, then rerun and save/reopen/rerun without duplicates. The new pure cases cover exact suffix/utility and clipping behavior; native point ownership, optional PartSizeName, OD retention and full S3 integration remain unrun.
+

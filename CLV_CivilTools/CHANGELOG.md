@@ -1,3 +1,9 @@
+## 2026-10-13 - Verified sewer STUB cleanup S9-STUBS
+- GIS PREP - ALL now removes only unchanged, uniquely archive-owned OpenNullEnd POINTs with the exact supported -STUB / UFLS-Null Structure identity and verified OD-named owned pipe terminals. Connection, unrelated, orphaned, edited, ambiguous and unsupported-metadata points remain protected; no layer/proximity sweep is used.
+- Before erasure, a versioned drawing-local stub archive preserves original handle, identity, XYZ, shape fingerprint, every native OD record/field/type/value and exact linked pipe endpoint coordinates. Typed payload readback reproduces the native fingerprint, including duplicate records. The main archive upgrades to V3 with a required companion digest; missing/changed archives or live restored source handles fail verification. Existing V2 archives are read without rebuilding pipe geometry.
+- Uses the same bounded native OD-only metadata guard established by S8. Pipe endpoints, walls and manhole geometry are not changed by stub cleanup; no artificial outer structure is created. All write acquisition, revalidation, archive readback, point erasure and final verification share the batch transaction.
+- Added production-linked native OD codec and stub eligibility tests. Static review only in this authoring environment: executable tests, full build, native rollback/Undo and save/reopen trials remain required on a disposable drawing copy. Banner: 2026.10.13-S9-STUBS.
+
 ## 2026-10-12 - Retire standalone manual OD transfer and broad point erasure
 - Removed the OBJECT DATA / XFER OBJECT DATA and CLEANUP / ERASE POINTS sections from ADD TO DATABASE, together with the unused standalone CLV-GIS-OD-XFER and CLV-GIS-ERASE-POINTS command implementations. Storm and sewer GIS PREP - ALL already perform managed native OD transfer and verified owned-source cleanup directly.
 - The native OD readers/copy/verification helpers in GisImport.cs, verified storm/sewer cleanup, OD inspection and shared CLV_GIS_OD_HELPERS.lsp remain required. Retained single-structure commands still use that shared helper.
@@ -1990,3 +1996,4 @@ CHANGELOG
 - Corrected first-page `BY:`, `P.R. BY:`, and `PAGE X OF Y` placement by retaining the original leading tab runs from the City Surveyor template.
 - APN and date replacement now changes only the placeholder text nodes and leaves all original header layout controls intact.
 - Page-number fields are inserted after the preserved template tabs and inherit the original PAGE run formatting.
+

@@ -881,6 +881,24 @@ namespace CLV_CivilTools.Gis
             return agreedDiameter;
         }
 
+        // Recoverable, typed values rather than a digest. The native reader remains
+        // authoritative; a second read prevents archiving a changing source.
+        internal static string CaptureNativeObjectDataArchive(ObjectId id, string expectedFingerprint)
+        {
+            RequireActiveOdEntity(id);
+            List<VerifiedOdRecord> source = ReadVerifiedOdRecords(id);
+            var records = source.Select(record => new NativeOdArchiveRecord(record.TableName,
+                record.Fields.Select(field => new NativeOdArchiveField(field.Name, field.Kind,
+                    field.Value is Point3d point
+                        ? new[] { point.X.ToString("R", CultureInfo.InvariantCulture), point.Y.ToString("R", CultureInfo.InvariantCulture), point.Z.ToString("R", CultureInfo.InvariantCulture) }
+                        : new[] { field.Value is double real ? real.ToString("R", CultureInfo.InvariantCulture) : Convert.ToString(field.Value, CultureInfo.InvariantCulture)! })).ToArray())).ToArray();
+            string payload = NativeOdArchive.Serialize(records);
+            if (NativeOdArchive.Fingerprint(NativeOdArchive.Deserialize(payload)) != expectedFingerprint ||
+                !SameVerifiedOdRecords(source, ReadVerifiedOdRecords(id)))
+                throw new InvalidOperationException("Complete native OD archive did not match the unchanged source.");
+            return payload;
+        }
+
         private static bool SameVerifiedOdRecords(List<VerifiedOdRecord> a, List<VerifiedOdRecord> b)
             => a.Select(r => r.Key).OrderBy(k => k, StringComparer.Ordinal)
                 .SequenceEqual(b.Select(r => r.Key).OrderBy(k => k, StringComparer.Ordinal), StringComparer.Ordinal);
@@ -3648,3 +3666,4 @@ namespace CLV_CivilTools.Gis
         }
     }
 }
+

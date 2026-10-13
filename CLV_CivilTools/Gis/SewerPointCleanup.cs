@@ -58,6 +58,15 @@ namespace CLV_CivilTools.Gis
             return reason.Length == 0;
         }
 
+        internal static bool ValidStubArchiveLink(string expectedDigest, int savedCount, string actualDigest)
+            => expectedDigest.Length == 0 ? savedCount == 0 :
+               expectedDigest.Length == 64 && savedCount > 0 && expectedDigest == actualDigest;
+
+        internal static bool CanArchiveStub(string role, bool exactNullStubIdentity,
+            bool uniqueUnchangedOwnership, int verifiedPipeLinks, SewerPointMetadata metadata)
+            => role == "OpenNullEnd" && exactNullStubIdentity && uniqueUnchangedOwnership &&
+               verifiedPipeLinks > 0 && Classify(metadata) != SewerPointMetadataKind.Review;
+
         // The caller owns a real transaction. Exceptions are deliberately allowed
         // to escape: it must not commit a partially rewritten archive or erasure.
         internal static void Apply<T>(IReadOnlyList<T> points, Action<T> acquireWrite,
@@ -72,3 +81,4 @@ namespace CLV_CivilTools.Gis
         }
     }
 }
+

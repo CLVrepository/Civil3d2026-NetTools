@@ -47,6 +47,23 @@ for (int slot = 0; slot < 6; slot++)
         Check($"Missing/ambiguous archive link slot {slot} count {count}", !SewerPointCleanup.UniqueLinks(counts[0], counts[1], counts[2], counts[3], counts[4], counts[5]));
     }
 
+string archiveDigest = new string('A', 64);
+Check("Legacy V2 accepts no stub payload", SewerPointCleanup.ValidStubArchiveLink("", 0, archiveDigest));
+Check("Legacy V2 rejects unlinked stub payload", !SewerPointCleanup.ValidStubArchiveLink("", 1, archiveDigest));
+Check("V3 requires its complete saved payload", SewerPointCleanup.ValidStubArchiveLink(archiveDigest, 1, archiveDigest));
+Check("V3 missing companion rejected", !SewerPointCleanup.ValidStubArchiveLink(archiveDigest, 0, archiveDigest));
+Check("V3 altered payload rejected", !SewerPointCleanup.ValidStubArchiveLink(archiveDigest, 1, new string('B', 64)));
+Check("V3 invalid digest rejected", !SewerPointCleanup.ValidStubArchiveLink("short", 1, "short"));
+
+Check("Verified archive-owned null/STUB with native OD-only metadata accepted", SewerPointCleanup.CanArchiveStub("OpenNullEnd", true, true, 1, native));
+Check("Connection points are protected", !SewerPointCleanup.CanArchiveStub("OpenConnectionEnd", true, true, 1, native));
+Check("Unowned ordinary points are protected", !SewerPointCleanup.CanArchiveStub("UnrelatedPoint", true, true, 1, native));
+Check("Unproved STUB convention is protected", !SewerPointCleanup.CanArchiveStub("OpenNullEnd", false, true, 1, native));
+Check("Edited or ambiguous ownership is protected", !SewerPointCleanup.CanArchiveStub("OpenNullEnd", true, false, 1, native));
+Check("Orphan stub without owned named pipe is protected", !SewerPointCleanup.CanArchiveStub("OpenNullEnd", true, true, 0, native));
+Check("Stub XData is preserved", !SewerPointCleanup.CanArchiveStub("OpenNullEnd", true, true, 1, native with { HasXData = true }));
+Check("Stub mixed extension data is preserved", !SewerPointCleanup.CanArchiveStub("OpenNullEnd", true, true, 1, native with { DictionaryHasExtraMetadata = true }));
+
 // A fake transactional store exercises the production ordering and exception
 // propagation. It is not a substitute for native AutoCAD rollback/Undo testing.
 foreach (string failure in new[] { "", "acquire:B", "revalidate", "readback", "erase:A", "erase:B", "final" })
@@ -84,3 +101,4 @@ foreach (string failure in new[] { "", "acquire:B", "revalidate", "readback", "e
     }
 }
 Console.WriteLine($"Sewer point cleanup: {passed} passed, 0 failed. Native OD API, locks, transaction rollback, Undo and save/reopen require host validation.");
+

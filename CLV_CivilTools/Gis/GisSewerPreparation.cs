@@ -36,13 +36,13 @@ namespace CLV_CivilTools.Gis
             string BlockHandle, string MarkerHandle, ObjectId OuterId, string OriginalBlockState);
         private sealed record BatchArchive(IReadOnlyList<Output> Outputs,
             IReadOnlyList<(ObjectId Id, string Name, string Geometry)> OriginalPipes,
-            IReadOnlyList<StructureArchive> Structures);
+            IReadOnlyList<StructureArchive> Structures, string StubArchiveDigest = "");
 
         internal static bool Run(Document document)
         {
             if (document != AcadApp.DocumentManager.MdiActiveDocument)
                 throw new InvalidOperationException("Sewer preparation requires the active drawing.");
-            int structures = 0, pipes = 0, walls = 0, singleLines = 0, markers = 0, erasedPoints = 0;
+            int structures = 0, pipes = 0, walls = 0, singleLines = 0, markers = 0, erasedPoints = 0, erasedStubs = 0;
             var retainedPoints = new HashSet<ObjectId>();
             bool committed = false;
             try
@@ -57,22 +57,23 @@ namespace CLV_CivilTools.Gis
                     if (!string.Equals(model.Name, BlockTableRecord.ModelSpace, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidOperationException("Sewer preparation requires model space.");
 
-                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.12-S8-POINTS: checking sewer OD, archive ownership and verified manhole point cleanup...");
+                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.13-S9-STUBS: checking sewer OD, archive ownership and verified source point cleanup...");
                     BatchArchive? prior = ReadArchive(db, transaction);
                     if (prior != null)
                     {
                         VerifyArchive(db, transaction, model.ObjectId, prior);
                         RequireNoNewInputs(model, transaction, prior.Outputs.Select(output => output.Id).ToHashSet());
                         BatchArchive cleaned = CleanupArchivedManholePoints(document, transaction, model, prior, out erasedPoints);
+                        cleaned = CleanupArchivedStubPoints(document, transaction, model, cleaned, out erasedStubs);
                         transaction.TransactionManager.QueueForGraphicsFlush();
                         transaction.Commit();
                         committed = true;
-                        if (erasedPoints > 0)
+                        if (erasedPoints > 0 || erasedStubs > 0)
                         {
                             try { document.Editor.Regen(); document.Editor.UpdateScreen(); }
                             catch (System.Exception error) { document.Editor.WriteMessage("\nSEWER DISPLAY WARNING: {0}", error.Message); }
                         }
-                        document.Editor.WriteMessage($"\nCLV-GIS-SSWR-GIS: existing managed sewer results verified ({cleaned.Outputs.Count} owned entities); verified manhole points removed={erasedPoints}, retained={cleaned.Outputs.Count(output => output.Role == "RetainedSourcePoint")}. No duplicate pipe geometry was created; source provenance was preserved.");
+                        document.Editor.WriteMessage($"\nCLV-GIS-SSWR-GIS: existing managed sewer results verified ({cleaned.Outputs.Count} owned entities); verified manhole points removed={erasedPoints}, verified stub points archived/removed={erasedStubs}, retained={cleaned.Outputs.Count(output => output.Role == "RetainedSourcePoint")}. No duplicate pipe geometry was created; source provenance was preserved.");
                         return true;
                     }
 
@@ -198,6 +199,7 @@ namespace CLV_CivilTools.Gis
                         structures++;
                     }
                     stored = CleanupArchivedManholePoints(document, transaction, model, stored, out erasedPoints);
+                    stored = CleanupArchivedStubPoints(document, transaction, model, stored, out erasedStubs);
                     retainedPoints.RemoveWhere(id => id.IsErased);
                     foreach (var output in outputIds)
                         if (output.Role != "OpenNullEnd" && output.Role != "OpenConnectionEnd" && output.Role != "RetainedSourcePoint")
@@ -210,7 +212,7 @@ namespace CLV_CivilTools.Gis
                 }
                 try { document.Editor.Regen(); document.Editor.UpdateScreen(); }
                 catch (System.Exception error) { document.Editor.WriteMessage("\nSEWER DISPLAY WARNING: {0}", error.Message); }
-                document.Editor.WriteMessage($"\nCLV-GIS-SSWR-GIS: verified manholes={structures}, pipes={pipes}, under-12-inch single lines={singleLines}, offset walls={walls}, owned markers removed={markers}, verified manhole points removed={erasedPoints}. Pipe linework was clipped at verified manhole outer circles; explicit open connection/null terminals were retained. Object Data and ownership were read back; no broad cleanup or LISP command was queued.");
+                document.Editor.WriteMessage($"\nCLV-GIS-SSWR-GIS: verified manholes={structures}, pipes={pipes}, under-12-inch single lines={singleLines}, offset walls={walls}, owned markers removed={markers}, verified manhole points removed={erasedPoints}, verified stub points archived/removed={erasedStubs}. Pipe linework was clipped at verified manhole outer circles; open pipe terminal geometry and connection points were retained. Object Data and ownership were read back; no broad cleanup or LISP command was queued.");
                 if (retainedPoints.Count > 0)
                     document.Editor.WriteMessage("\nRetained imported points requiring ownership/metadata review: {0}. Their complete native OD is also on the new outer circles; other instance data was left on the points.",
                         string.Join(", ", retainedPoints.Select(id => id.Handle.ToString())));
@@ -602,7 +604,7 @@ namespace CLV_CivilTools.Gis
         }
         private static TypedValue[] SerializeArchive(BatchArchive archive)
         {
-            var values = new List<TypedValue> { Text(SewerArchiveVersion.Current), Count(archive.Outputs.Count) };
+            var values = new List<TypedValue> { Text(archive.StubArchiveDigest.Length == 0 ? SewerArchiveVersion.Current : StubLinkedArchiveVersion), Count(archive.Outputs.Count) };
             foreach (Output output in archive.Outputs)
             {
                 values.Add(new TypedValue((int)DxfCode.SoftPointerId, output.Id));
@@ -624,6 +626,7 @@ namespace CLV_CivilTools.Gis
                 values.Add(new TypedValue((int)DxfCode.SoftPointerId, structure.OuterId));
                 AddTextChunks(values, structure.OriginalBlockState);
             }
+            if (archive.StubArchiveDigest.Length != 0) values.Add(Text(archive.StubArchiveDigest));
             return values.ToArray();
         }
         private static BatchArchive? ReadArchive(Database db, Transaction tr)
@@ -654,7 +657,9 @@ namespace CLV_CivilTools.Gis
                 return result.ToString();
             }
             ObjectId ReadId() => Take(DxfCode.SoftPointerId) is ObjectId id ? id : throw new InvalidOperationException("Sewer archive reference is invalid.");
-            SewerArchiveVersion.Require(ReadText());
+            string version = ReadText();
+            bool stubLinked = version == StubLinkedArchiveVersion;
+            if (!stubLinked) SewerArchiveVersion.Require(version);
             var outputs = new List<Output>();
             for (int remaining = ReadCount(); remaining > 0; remaining--)
             {
@@ -674,10 +679,12 @@ namespace CLV_CivilTools.Gis
                 string block = ReadText(), marker = ReadText(); ObjectId outer = ReadId();
                 structures.Add(new StructureArchive(handle, name, part, point, block, marker, outer, ReadChunks()));
             }
+            string stubDigest = stubLinked ? ReadText() : "";
+            if (stubLinked && stubDigest.Length != 64) throw new InvalidOperationException("Linked stub archive digest is invalid.");
             if (index != values.Length || outputs.Count == 0) throw new InvalidOperationException("Sewer archive has invalid trailing or empty data.");
-            return new BatchArchive(outputs.AsReadOnly(), pipes.AsReadOnly(), structures.AsReadOnly());
+            return new BatchArchive(outputs.AsReadOnly(), pipes.AsReadOnly(), structures.AsReadOnly(), stubDigest);
         }
-        private static void VerifyArchive(Database db, Transaction tr, ObjectId model, BatchArchive archive)
+        private static void VerifyArchive(Database db, Transaction tr, ObjectId model, BatchArchive archive, ISet<ObjectId>? pendingStubErases = null)
         {
             var ids = new HashSet<ObjectId>();
             foreach (Output expected in archive.Outputs)
@@ -696,12 +703,13 @@ namespace CLV_CivilTools.Gis
                 if (!ids.Contains(structure.OuterId) || !Finite(structure.Position) || string.IsNullOrEmpty(structure.Name) ||
                     string.IsNullOrEmpty(structure.OriginalBlockState))
                     throw new InvalidOperationException("Sewer archive structure provenance is incomplete.");
+            VerifyStubArchive(db, tr, archive, pendingStubErases);
         }
         private static void RequireSameArchive(BatchArchive expected, BatchArchive actual)
         {
             if (!expected.Outputs.SequenceEqual(actual.Outputs) ||
                 !expected.OriginalPipes.SequenceEqual(actual.OriginalPipes) ||
-                !expected.Structures.SequenceEqual(actual.Structures))
+                !expected.Structures.SequenceEqual(actual.Structures) || expected.StubArchiveDigest != actual.StubArchiveDigest)
                 throw new InvalidOperationException("Sewer ownership/provenance archive did not read back exactly; no source cleanup is permitted.");
         }
         private static TypedValue Text(string value) => new((int)DxfCode.Text, value);
@@ -713,3 +721,4 @@ namespace CLV_CivilTools.Gis
         }
     }
 }
+
