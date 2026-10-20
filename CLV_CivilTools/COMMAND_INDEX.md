@@ -1,3 +1,10 @@
+## 2026-10-20 - Storm null connection recognition R6-CONNECTIONS
+- Storm GIS PREP accepts a nonempty name ending exactly -CONN with exact UFLS-Null Structure PartSizeName, using the same role-conflict, identity, duplicate and coordinate checks as -STUB. These non-graphic source points remain retained and do not consume structure geometry.
+- Fixes UnknownRole for L24-01007-STRM-80+67-CONN, which stopped ALL before managed pipe conversion. Genuine review items still block downstream processing.
+- Open-wall gap exemption remains restricted to -STUB; connection names do not inherit it. No endpoint movement, tolerance, cleanup archive format, command alias or framework changes.
+- Added production-linked regression coverage for the reported record, case/trim handling, duplicates, invalid coordinates, conflicts and rejection of connection gap exemption.
+- Static review completed. C# tests, full plugin build and native Civil 3D rerun remain required; no .NET SDK or Autodesk host is available in the authoring workspace.
+
 ## 2026-10-13 - Verified sewer connection-point cleanup S10-CONNECTIONS
 - Extends the approved source-point cleanup to unchanged, uniquely owned OpenConnectionEnd points with the exact sewer -CONN identity. Each requires a verified OD-named owned pipe endpoint and the same native-OD-only metadata gate. Unknown, unrelated, orphaned, edited or metadata-bearing points remain protected.
 - Connection endpoints retain their original 1e-8 XYZ/radial-XY association rule; the STUB 0.10 XY allowance is never applied to connections. No pipe endpoint, wall, manhole geometry or native pipe OD is changed by cleanup.

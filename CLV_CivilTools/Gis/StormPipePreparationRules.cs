@@ -99,7 +99,8 @@ namespace CLV_CivilTools.Gis
             if (near.Length != 1) return false;
             StormStructureSource candidate = near[0];
             if (string.IsNullOrWhiteSpace(candidate.Id) || string.IsNullOrWhiteSpace(candidate.Name) ||
-                StormStructureMatching.Classify(candidate.Name, candidate.PartSizeName) != StormStructureRole.NullPipeEnd)
+                StormStructureMatching.Classify(candidate.Name, candidate.PartSizeName) != StormStructureRole.NullPipeEnd ||
+                !candidate.Name.Trim().EndsWith("-STUB", StringComparison.OrdinalIgnoreCase))
                 return false;
             // A repeated identity is not a valid unique null source even when its other
             // occurrence lies outside the local endpoint tolerance.

@@ -272,7 +272,7 @@ namespace CLV_CivilTools.Gis
                     try { ed.Regen(); ed.UpdateScreen(); }
                     catch (System.Exception ex) { ed.WriteMessage($"\nStorm GIS display refresh failed: {ex.Message}. Verified geometry remains in the drawing; inspect it after changing space or reopening the test copy."); }
                 }
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.07-R5: converted/OD verified={converted}, already verified={alreadyVerified}, review items={reviews.Count}, intentionally retained null pipe ends={preservedPipeEndNotices.Count}. Live Structures points retained={sources.Values.Count(s => s.Archive == null)}; archived completions={sources.Values.Count(s => s.Archive != null)}; no broad cleanup run. Planned targets: total={targets.Count}, existing outlines={targets.Values.Count(t => t.Data.IsExistingOutline)}.");
+                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.20-R6-CONNECTIONS: converted/OD verified={converted}, already verified={alreadyVerified}, review items={reviews.Count}, intentionally retained null pipe ends={preservedPipeEndNotices.Count}. Live Structures points retained={sources.Values.Count(s => s.Archive == null)}; archived completions={sources.Values.Count(s => s.Archive != null)}; no broad cleanup run. Planned targets: total={targets.Count}, existing outlines={targets.Values.Count(t => t.Data.IsExistingOutline)}.");
                 foreach (string preserved in preservedPipeEndNotices)
                     ed.WriteMessage("\n  PRESERVED NULL PIPE END (no geometry expected): " + preserved);
                 foreach (string review in reviews.Distinct(StringComparer.Ordinal))
@@ -281,7 +281,7 @@ namespace CLV_CivilTools.Gis
             }
             catch (System.Exception ex)
             {
-                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.07-R5 stopped: {ex.Message}. Unverified source geometry and all imported source points are retained. No downstream cleanup was queued.");
+                ed.WriteMessage($"\nCLV-GIS-STRM-AUTO revision 2026.10.20-R6-CONNECTIONS stopped: {ex.Message}. Unverified source geometry and all imported source points are retained. No downstream cleanup was queued.");
                 return false;
             }
         }

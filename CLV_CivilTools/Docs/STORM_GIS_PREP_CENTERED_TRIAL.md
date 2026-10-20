@@ -1,3 +1,10 @@
+## 2026-10-20 - Storm null connection recognition R6-CONNECTIONS
+- Storm GIS PREP accepts a nonempty name ending exactly -CONN with exact UFLS-Null Structure PartSizeName, using the same role-conflict, identity, duplicate and coordinate checks as -STUB. These non-graphic source points remain retained and do not consume structure geometry.
+- Fixes UnknownRole for L24-01007-STRM-80+67-CONN, which stopped ALL before managed pipe conversion. Genuine review items still block downstream processing.
+- Open-wall gap exemption remains restricted to -STUB; connection names do not inherit it. No endpoint movement, tolerance, cleanup archive format, command alias or framework changes.
+- Added production-linked regression coverage for the reported record, case/trim handling, duplicates, invalid coordinates, conflicts and rejection of connection gap exemption.
+- Static review completed. C# tests, full plugin build and native Civil 3D rerun remain required; no .NET SDK or Autodesk host is available in the authoring workspace.
+
 # Storm GIS PREP-ALL: role-safe trial
 
 Revision: 2026.10.07-R5. Use a disposable copy of the test drawing first.

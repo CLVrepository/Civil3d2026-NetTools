@@ -70,9 +70,10 @@ namespace CLV_CivilTools.Gis
             {
                 // This exact OD convention identifies a non-graphic pipe end. Do
                 // not generalize it to other null parts or unknown/missing OD.
-                bool stub = cleanName.EndsWith("-STUB", StringComparison.OrdinalIgnoreCase) &&
+                bool pipeEnd = (cleanName.EndsWith("-STUB", StringComparison.OrdinalIgnoreCase) ||
+                    cleanName.EndsWith("-CONN", StringComparison.OrdinalIgnoreCase)) &&
                     cleanName.Substring(0, cleanName.Length - 5).Trim().Length > 0;
-                return stub && !di && !box && !JunctionNameToken.IsMatch(cleanName) &&
+                return pipeEnd && !di && !box && !JunctionNameToken.IsMatch(cleanName) &&
                     !access && !AccessToken.IsMatch(cleanName)
                     ? StormStructureRole.NullPipeEnd
                     : StormStructureRole.Unknown;

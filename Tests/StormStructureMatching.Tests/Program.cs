@@ -11,6 +11,7 @@ internal static class Program
             ("JS suffix has box precedence", BoxPrecedence),
             ("Conflicting DI roles stay unknown", ConflictingRoles),
             ("Preserves verified UFLS null STUB pipe end", VerifiedNullPipeEnd),
+            ("Preserves exact null CONN without geometry or gap exemption", VerifiedNullConnection),
             ("Null pipe-end convention is case and trim insensitive", NullPipeEndCaseAndTrim),
             ("Other null or incomplete OD is not exempt", NullPipeEndRequiresExactConvention),
             ("Contradictory null pipe-end roles stay unknown", ConflictingNullPipeEnd),
@@ -281,6 +282,27 @@ internal static class Program
         var result = Match(new[] { source });
         Count(result, 0); Check(result.Issues.Count == 0);
         Check(result.PreservedPipeEndSourceIds.SequenceEqual(new[] { "D5C4A" }));
+    }
+    private static void VerifiedNullConnection()
+    {
+        foreach (string name in new[] { "L24-01007-STRM-80+67-CONN", " l24-01007-strm-80+67-conn " })
+        {
+            var source = new StormStructureSource("13B8", name, " UFLS-Null Structure ", 864258.7327725969, 1287971.783625855);
+            Check(StormStructureMatching.Classify(source.Name, source.PartSizeName) == StormStructureRole.NullPipeEnd);
+            var result = Match(new[] { source });
+            Count(result, 0); Check(result.Issues.Count == 0);
+            Check(result.PreservedPipeEndSourceIds.SequenceEqual(new[] { "13B8" }));
+            var competing = Match(new[] { source, source with { Id = "OTHER" } });
+            Check(competing.PreservedPipeEndSourceIds.Count == 0);
+            Check(!OpenNull(TrimPath((0, 1), (10, 1)),
+                anchors: new[] { new StormStructureSource("C", name, "UFLS-Null Structure", 0, 0) }));
+        }
+        foreach (string name in new[] { "-CONN", "A-CONN-EXTRA", "A-JS-CONN", "SDDI-1-CONN", "A-ACCESS STRUCTURE-CONN" })
+            Check(StormStructureMatching.Classify(name, "UFLS-Null Structure") == StormStructureRole.Unknown);
+        Check(StormStructureMatching.Classify("A-CONN", "") == StormStructureRole.Unknown);
+        Check(StormStructureMatching.Classify("A-CONN", "Null Structure") == StormStructureRole.Unknown);
+        var invalid = Match(new[] { new StormStructureSource("C", "A-CONN", "UFLS-Null Structure", double.NaN, 0) });
+        Check(invalid.PreservedPipeEndSourceIds.Count == 0 && invalid.Issues.Count > 0);
     }
     private static void NullPipeEndCaseAndTrim()
     {
