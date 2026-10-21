@@ -1,3 +1,9 @@
+## 2026-10-21 - Sewer observed representation tag value 2
+- Recognizes the reported AcDbBlockRepETag Int32 value 2 alongside 0 and 1 for verified dynamic circle leaves. Exact payload codes/types, evaluated owner, self-handle resolution, empty native OD and absent extension dictionary remain required. No ring or stub role is inferred from this integer.
+- Clone verification preserves the actual source value and rejects changed values. Unknown values still require review. Fixes the first preflight rejection for L25-01338-SSMH-01/02 (leaf F41); the pipe endpoint reviews must be retested after those manholes can be planned.
+- Stub/connection rules, storm behavior, geometry tolerances and archive formats are unchanged. Added regression coverage for value 2 source/clone acceptance, changed clone values and ownership/metadata guards.
+- Static review completed; executable tests were blocked by denied .NET first-run sentinel access in the authoring environment. Full plugin build and native Civil 3D tests remain required on a disposable drawing copy.
+
 ## 2026-10-20 - Storm null connection recognition R6-CONNECTIONS
 - Storm GIS PREP accepts a nonempty name ending exactly -CONN with exact UFLS-Null Structure PartSizeName, using the same role-conflict, identity, duplicate and coordinate checks as -STUB. These non-graphic source points remain retained and do not consume structure geometry.
 - Fixes UnknownRole for L24-01007-STRM-80+67-CONN, which stopped ALL before managed pipe conversion. Genuine review items still block downstream processing.

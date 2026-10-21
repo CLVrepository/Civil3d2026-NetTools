@@ -12,7 +12,7 @@ namespace CLV_CivilTools.Gis
         internal static bool IsExact(IReadOnlyList<Value> values, string selfHandle)
             => values.Count == 4 && values[0].Code == 1001 && values[0].Data is string app && app == Application
             && values[1].Code == 1070 && values[1].Data is short small && small == 1
-            && values[2].Code == 1071 && values[2].Data is int large && large is 0 or 1
+            && values[2].Code == 1071 && values[2].Data is int large && large is 0 or 1 or 2
             && values[3].Code == 1005 && values[3].Data is string handle
             && !string.IsNullOrEmpty(selfHandle) && string.Equals(handle, selfHandle, StringComparison.OrdinalIgnoreCase);
 
@@ -43,8 +43,8 @@ namespace CLV_CivilTools.Gis
                         reasons.Add("XData[0] application is not exact AcDbBlockRepETag");
                     if (values[1].Data is not short small || small != 1)
                         reasons.Add("XData[1] must be Int16 value 1");
-                    if (values[2].Data is not int large || large is not (0 or 1))
-                        reasons.Add("XData[2] must be Int32 value 0 or 1");
+                    if (values[2].Data is not int large || large is not (0 or 1 or 2))
+                        reasons.Add("XData[2] must be Int32 value 0, 1 or 2");
                     if (values[3].Data is not string handle || string.IsNullOrEmpty(selfHandle) ||
                         !string.Equals(handle, selfHandle, StringComparison.OrdinalIgnoreCase))
                         reasons.Add("XData[3] must reference the leaf's own handle");
