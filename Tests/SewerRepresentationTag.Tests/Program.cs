@@ -15,7 +15,7 @@ Check("Extension data rejected", !Source(Tag(), extension: true));
 Check("Native OD rejected", !Source(Tag(), od: false));
 Check("Wrong self handle rejected", !Source(Tag("ABC")));
 for (int i = 0; i < 4; i++) { var v = Tag(); v[i] = new V(v[i].Code + 1, v[i].Data); Check("Wrong code " + i, !Source(v)); }
-foreach (var pair in new[] { (0, (object)"OTHER"), (1, (object)1), (1, (object)(short)2), (2, (object)(short)0), (2, (object)3), (3, (object)42) })
+foreach (var pair in new[] { (0, (object)"OTHER"), (1, (object)1), (1, (object)(short)2), (2, (object)(short)0), (3, (object)42) })
 { var v = Tag(); v[pair.Item1] = new V(v[pair.Item1].Code, pair.Item2); Check("Wrong value/type " + pair, !Source(v)); }
 Check("Extra application rejected", !Source(Tag().Concat(new[] { new V(1001, "OTHER") }).ToArray()));
 Check("Truncated payload rejected", !Source(Tag().Take(3).ToArray()));
@@ -28,9 +28,9 @@ Check("Empty clone accepted", SewerRepresentationTag.AcceptClone(Array.Empty<V>(
 Check("Clone extension rejected", !SewerRepresentationTag.AcceptClone(Tag(), "F3F", "A01", 0, true));
 Check("Empty source has no review reason", SewerRepresentationTag.SourceReviewReason(Array.Empty<V>(), "F3F", false, false, false, false, true) == "");
 Check("Exact accepted tag has no review reason", SewerRepresentationTag.SourceReviewReason(Tag(), "F3F", true, true, true, false, true) == "");
-var changed = Tag(); changed[2] = new V(1071, 3);
+var changed = Tag(); changed[2] = new V(1071, (short)3);
 string changedReason = SewerRepresentationTag.SourceReviewReason(changed, "F3F", true, true, false, false, true);
-Check("Wrong tag value identifies predicate without blaming empty OD", changedReason.Contains("XData[2] must be Int32 value 0, 1 or 2") && !changedReason.Contains("OD") && !changedReason.Contains("resolve"));
+Check("Wrong tag value identifies predicate without blaming empty OD", changedReason.Contains("XData[2] must be Int32") && !changedReason.Contains("OD") && !changedReason.Contains("resolve"));
 Check("Extension diagnostic identifies extension", SewerRepresentationTag.SourceReviewReason(Tag(), "F3F", true, true, true, true, true).Contains("extension dictionary"));
 Check("OD failure has its own predicate", SewerRepresentationTag.SourceReviewReason(Tag(), "F3F", true, true, true, false, false).Contains("native OD"));
 Check("Unresolved exact tag identifies resolution", SewerRepresentationTag.SourceReviewReason(Tag(), "F3F", true, true, false, false, true).Contains("did not resolve"));
@@ -39,12 +39,10 @@ Check("Value 1 clone keeps actual source value", SewerRepresentationTag.AcceptCl
 Check("Value 1 clone remapped self keeps actual value", SewerRepresentationTag.AcceptClone(Tag("A01", 1), "F40", "A01", 1, false));
 Check("Changed clone value 0 to 1 rejected", !SewerRepresentationTag.AcceptClone(Tag("F3F", 1), "F3F", "A01", 0, false));
 Check("Changed clone value 1 to 0 rejected", !SewerRepresentationTag.AcceptClone(Tag("F40", 0), "F40", "A01", 1, false));
-Check("Unknown tag negative rejected", !Source(Tag("F3F", -1)));
-Check("Unknown tag value 3 rejected", !Source(Tag("F3F", 3)));
 Check("Value 1 with unknown source rejected", !SewerRepresentationTag.AcceptClone(Tag("F40", 1), "F40", "A01", null, false));
 Check("Value 1 still rejects non-dynamic context", !Source(Tag("F3F", 1), dynamic: false));
 Check("Value 1 still rejects native OD", !Source(Tag("F3F", 1), od: false));
-Check("Diagnostic reports actual tag value", SewerRepresentationTag.Describe(changed).Contains("1071:Int32=3"));
+Check("Diagnostic reports actual tag value", SewerRepresentationTag.Describe(changed).Contains("1071:Int16=3"));
 Check("Diagnostic escapes control text", !SewerRepresentationTag.Describe(new[] { new V(1001, "OTHER\r\n") }).Contains('\n'));
 Check("Value 1 still rejects extension dictionary", !Source(Tag("F3F", 1), extension: true));
 Check("Value 1 still rejects wrong owner", !Source(Tag("F3F", 1), owner: false));
@@ -66,6 +64,35 @@ Check("Tag 2 rejects wrong self", !Source(Tag("OTHER", 2)));
 Check("Tag 2 clone rejects extension", !SewerRepresentationTag.AcceptClone(Tag("F41", 2), "F41", "A01", 2, true));
 Check("Tag 2 clone rejects unknown source", !SewerRepresentationTag.AcceptClone(Tag("F41", 2), "F41", "A01", null, false));
 Check("Tag 2 clone rejects transient zero", !SewerRepresentationTag.AcceptClone(Tag("0", 2), "F41", "0", 2, false));
+// F42 regression and opaque signed Int32 policy: no role or allowed-value inference.
+foreach (int nativeValue in new[] { 0, 1, 2, 3, 4, 127, 65536, int.MaxValue, -1, int.MinValue })
+{
+    var observed = Tag("F42", nativeValue);
+    Check("Native Int32 source accepted " + nativeValue,
+        SewerRepresentationTag.AcceptSource(observed, "F42", true, true, true, false, true));
+    Check("Native Int32 has no review reason " + nativeValue,
+        SewerRepresentationTag.SourceReviewReason(observed, "F42", true, true, true, false, true) == "");
+    Check("Native Int32 clone preserves source self " + nativeValue,
+        SewerRepresentationTag.AcceptClone(observed, "F42", "A01", nativeValue, false));
+    Check("Native Int32 clone preserves remapped self " + nativeValue,
+        SewerRepresentationTag.AcceptClone(Tag("A01", nativeValue), "F42", "A01", nativeValue, false));
+    int different = nativeValue == int.MaxValue ? int.MinValue : nativeValue + 1;
+    Check("Native Int32 mutation rejected " + nativeValue,
+        !SewerRepresentationTag.AcceptClone(Tag("F42", different), "F42", "A01", nativeValue, false));
+    Check("Native Int32 requires dynamic context " + nativeValue, !Source(Tag("F3F", nativeValue), dynamic: false));
+    Check("Native Int32 requires owner " + nativeValue, !Source(Tag("F3F", nativeValue), owner: false));
+    Check("Native Int32 requires resolution " + nativeValue, !Source(Tag("F3F", nativeValue), resolves: false));
+    Check("Native Int32 rejects extension " + nativeValue, !Source(Tag("F3F", nativeValue), extension: true));
+    Check("Native Int32 rejects OD " + nativeValue, !Source(Tag("F3F", nativeValue), od: false));
+    Check("Native Int32 rejects wrong handle " + nativeValue, !Source(Tag("OTHER", nativeValue)));
+    Check("Native Int32 rejects extra app " + nativeValue,
+        !Source(Tag("F3F", nativeValue).Concat(new[] { new V(1001, "OTHER") }).ToArray()));
+}
+foreach (object wrongType in new object[] { (short)3, 3L, "3", 3.0 })
+{
+    var payload = Tag(); payload[2] = new V(1071, wrongType);
+    Check("Opaque metadata still rejects wrong type " + wrongType.GetType().Name, !Source(payload));
+}
 SewerArchiveVersion.Require(SewerArchiveVersion.Current);
 Check("Current S4 archive accepted", true);
 foreach (string version in new[] { "CLV_SEWER_PREP_V1", "UNKNOWN" })

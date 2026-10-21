@@ -57,7 +57,7 @@ namespace CLV_CivilTools.Gis
                     if (!string.Equals(model.Name, BlockTableRecord.ModelSpace, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidOperationException("Sewer preparation requires model space.");
 
-                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.13-S10-CONNECTIONS: checking sewer OD, archive ownership and verified source point cleanup...");
+                    document.Editor.WriteMessage("\nCLV-GIS-SSWR-GIS 2026.10.21-S11-TAG-METADATA: checking sewer OD, archive ownership and verified source point cleanup...");
                     BatchArchive? prior = ReadArchive(db, transaction);
                     if (prior != null)
                     {
