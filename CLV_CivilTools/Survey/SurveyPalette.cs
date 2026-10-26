@@ -141,6 +141,7 @@ namespace CLV_CivilTools.Survey
             layout.Controls.Add(CreateCommandButton("C3D TRANSFORM", "ADETRANSFORM"));
 
             layout.Controls.Add(CreateSectionLabel("TOOLS"));
+            layout.Controls.Add(CreateCommandButton("POINT INVERSE", "SURVEY-POINT-INVERSE"));
             layout.Controls.Add(CreateCommandButton("DRAW TIE LINE", "SURVEY-DRAW-TIE-LINE"));
             layout.Controls.Add(CreateCommandButton("PDF VIEWER", "PDFVIEW"));
             layout.Controls.Add(CreateCommandButton("PDF CLIP", "PDFC"));
