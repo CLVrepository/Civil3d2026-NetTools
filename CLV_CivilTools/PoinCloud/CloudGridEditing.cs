@@ -69,16 +69,40 @@ namespace CLV_CivilTools.PointCloud
             return ids.Length == 0 ? ObjectId.Null : ids[0];
         }
 
+
+        // Orthographic view projection uses AutoCAD geometry only. Editor.PointToScreen
+        // returns System.Windows.Point, which requires WPF's WindowsBase reference.
+        private sealed record ScreenProjection(Matrix3d WorldToView, double PixelsPerX, double PixelsPerY)
+        {
+            internal Point2d Project(Point3d world)
+            {
+                Point3d eye = world.TransformBy(WorldToView);
+                return new Point2d(eye.X * PixelsPerX, eye.Y * PixelsPerY);
+            }
+        }
+        private static ScreenProjection ProjectionFor(ViewTableRecord view)
+        {
+            if (view.PerspectiveEnabled) throw new InvalidOperationException("Use an orthographic plan or section view for point picking.");
+            if (AcadApp.GetSystemVariable("SCREENSIZE") is not Point2d pixels ||
+                pixels.X <= 0 || pixels.Y <= 0 || view.Width <= 0 || view.Height <= 0)
+                throw new InvalidOperationException("Cannot determine the active viewport size.");
+            Matrix3d toWorld = Matrix3d.PlaneToWorld(view.ViewDirection);
+            toWorld = Matrix3d.Displacement(view.Target - Point3d.Origin) * toWorld;
+            toWorld = Matrix3d.Rotation(-view.ViewTwist, view.ViewDirection, view.Target) * toWorld;
+            return new ScreenProjection(toWorld.Inverse(), pixels.X / view.Width, pixels.Y / view.Height);
+        }
+        private static Point2d ProjectToScreen(Editor ed, Point3d world)
+        {
+            using ViewTableRecord view = ed.GetCurrentView();
+            return ProjectionFor(view).Project(world);
+        }
+
         private static List<PickCandidate> Candidates(Document d, Review? state)
         {
             using ViewTableRecord view = d.Editor.GetCurrentView();
             if (view.PerspectiveEnabled) throw new InvalidOperationException("Use an orthographic plan or section view for point picking.");
-            int viewport = Convert.ToInt32(AcadApp.GetSystemVariable("CVPORT"), CultureInfo.InvariantCulture);
-            // WCS -> view coordinates, used to respect front/back clipping.
-            Matrix3d toWorld = Matrix3d.PlaneToWorld(view.ViewDirection);
-            toWorld = Matrix3d.Displacement(view.Target - Point3d.Origin) * toWorld;
-            toWorld = Matrix3d.Rotation(-view.ViewTwist, view.ViewDirection, view.Target) * toWorld;
-            Matrix3d toView = toWorld.Inverse();
+            ScreenProjection projection = ProjectionFor(view);
+            Matrix3d toView = projection.WorldToView;
             using Transaction tr = d.Database.TransactionManager.StartOpenCloseTransaction();
             var candidates = new List<PickCandidate>();
             foreach (ObjectId id in Model(d.Database, tr, OpenMode.ForRead))
@@ -93,7 +117,7 @@ namespace CLV_CivilTools.PointCloud
                 if (view.BackClipEnabled && eye.Z < view.BackClipDistance - 1e-8) continue;
                 if (Math.Abs(eye.X - view.CenterPoint.X) > view.Width / 2 ||
                     Math.Abs(eye.Y - view.CenterPoint.Y) > view.Height / 2) continue;
-                var screen = d.Editor.PointToScreen(point.Position, viewport);
+                Point2d screen = projection.Project(point.Position);
                 if (double.IsFinite(screen.X) && double.IsFinite(screen.Y))
                     candidates.Add(new PickCandidate(id, tag, screen.X, screen.Y));
             }
@@ -127,7 +151,6 @@ namespace CLV_CivilTools.PointCloud
                     List<PickCandidate> candidates = Candidates(d, state);
                     if (job != null) candidates = candidates.Where(p => p.Tag.Job == job).ToList();
                     var hits = new List<PickCandidate>();
-                    int viewport = Convert.ToInt32(AcadApp.GetSystemVariable("CVPORT"), CultureInfo.InvariantCulture);
                     if (pick.Status == PromptStatus.Keyword && pick.StringResult == "Window")
                     {
                         var first = ed.GetPoint("\nPoint-only window first corner: ");
@@ -137,8 +160,8 @@ namespace CLV_CivilTools.PointCloud
                         if (last.Status != PromptStatus.OK) return Array.Empty<ObjectId>();
                         candidates = Candidates(d, state);
                         if (job != null) candidates = candidates.Where(p => p.Tag.Job == job).ToList();
-                        var a = ed.PointToScreen(first.Value.TransformBy(ed.CurrentUserCoordinateSystem), viewport);
-                        var b = ed.PointToScreen(last.Value.TransformBy(ed.CurrentUserCoordinateSystem), viewport);
+                        Point2d a = ProjectToScreen(ed, first.Value.TransformBy(ed.CurrentUserCoordinateSystem));
+                        Point2d b = ProjectToScreen(ed, last.Value.TransformBy(ed.CurrentUserCoordinateSystem));
                         hits = candidates.Where(p => p.X >= Math.Min(a.X, b.X) && p.X <= Math.Max(a.X, b.X) &&
                             p.Y >= Math.Min(a.Y, b.Y) && p.Y <= Math.Max(a.Y, b.Y)).ToList();
                         if (job == null && hits.Select(p => p.Tag.Job).Distinct().Take(2).Count() > 1)
@@ -147,7 +170,7 @@ namespace CLV_CivilTools.PointCloud
                     }
                     else if (pick.Status == PromptStatus.OK)
                     {
-                        var cursor = ed.PointToScreen(pick.Value.TransformBy(ed.CurrentUserCoordinateSystem), viewport);
+                        Point2d cursor = ProjectToScreen(ed, pick.Value.TransformBy(ed.CurrentUserCoordinateSystem));
                         double radius = Math.Max(6, Convert.ToDouble(AcadApp.GetSystemVariable("PICKBOX"), CultureInfo.InvariantCulture) + 3);
                         var near = candidates.Select(p => (Point: p, Distance: Math.Sqrt(Math.Pow(p.X - cursor.X, 2) + Math.Pow(p.Y - cursor.Y, 2))))
                             .Where(p => p.Distance <= radius).OrderBy(p => p.Distance).Take(2).ToArray();

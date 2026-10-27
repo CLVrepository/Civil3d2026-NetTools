@@ -47,6 +47,10 @@ Finish review with CGEND. Build the final TIN from your breaklines plus ONLY the
 
 The temporary sampling surface remains separate. CGRID is the only elevation-sampling operation. Navigation never projects corrected points back onto it. No ground/grid reduction or coordinate-system transformation is applied.
 
+## Build-reference correction
+
+The follow-up picker fix removes the Editor.PointToScreen dependency on System.Windows.Point / WindowsBase that caused CS7069 in the WinForms build. Projection now uses AutoCAD geometry and SCREENSIZE. No WPF enablement, framework change or additional deployment dependency is required. The revised host code compiles with core, WinForms and Autodesk references only; verify the full solution build and live picks in both plan and rotated section views.
+
 ## Verification and first trial
 
 Production geometry tests: rotated and large-coordinate frames, concave/boundary inclusion, self-intersection rejection, negative indices, caps, row/column strip thickness and empty grids. 25/25 checks passed. New host code and its actual existing crop/view helpers compile against installed Autodesk assemblies. Full solution build, attached-cloud cloning/cropping, display clipping, large-coordinate cloud transformations, live editing and Undo remain native acceptance tests. The relative-Z/point-only selection revision compiles with the actual crop/view helpers; screen picking and cancellation remain host acceptance checks.
