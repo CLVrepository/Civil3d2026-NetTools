@@ -15,7 +15,7 @@ using TinSurface = Autodesk.Civil.DatabaseServices.TinSurface;
 
 namespace CLV_CivilTools.PointCloud
 {
-    public static class CloudGridCommands
+    public static partial class CloudGridCommands
     {
         private const string App = "CLV_CLOUD_GRID_V1";
         private sealed record Job(string Key, CloudGridFrame Frame, double MinU, double MaxU, double MinV, double MaxV,
@@ -28,7 +28,7 @@ namespace CLV_CivilTools.PointCloud
             internal ObjectId Cloud;
             internal int[] Rows = Array.Empty<int>();
             internal int Index;
-            internal bool Columns;
+            internal bool Columns, PlanView;
             internal double Thickness, MinZ, MaxZ;
             internal Matrix3d Ucs;
             internal ViewTableRecord View = null!;
@@ -140,7 +140,7 @@ namespace CLV_CivilTools.PointCloud
                 throw new InvalidOperationException("Finish the review in its original drawing with CGEND first.");
             EndReview(document);
             Editor ed = document.Editor;
-            ObjectId pointId = Pick(ed, "\nPick a generated grid POINT: ", typeof(DBPoint));
+            ObjectId pointId = PickGridPoint(document, null);
             if (pointId.IsNull) return;
             ObjectId cloudId = Pick(ed, "\nSelect attached point cloud to review: ", typeof(PointCloudEx));
             if (cloudId.IsNull) return;
@@ -203,6 +203,7 @@ namespace CLV_CivilTools.PointCloud
             Review state = NeedReview(d);
             d.Editor.CurrentUserCoordinateSystem = state.Ucs;
             d.Editor.SetCurrentView(state.View);
+            state.PlanView = true;
             d.Editor.Regen();
         });
         [CommandMethod("CGEND", CommandFlags.Modal)]
@@ -212,7 +213,7 @@ namespace CLV_CivilTools.PointCloud
         public static void SetElevation() => Run(d =>
         {
             Review state = NeedReview(d);
-            ObjectId id = Pick(d.Editor, "\nPick this row's generated POINT to adjust: ", typeof(DBPoint));
+            ObjectId id = PickGridPoint(d, state);
             if (id.IsNull) return;
             using Transaction tr = d.Database.TransactionManager.StartTransaction();
             var point = (DBPoint)tr.GetObject(id, OpenMode.ForRead);
@@ -233,7 +234,7 @@ namespace CLV_CivilTools.PointCloud
         public static void Toggle() => Run(d =>
         {
             Review state = NeedReview(d);
-            ObjectId id = Pick(d.Editor, "\nPick this row's generated POINT to exclude/restore: ", typeof(DBPoint));
+            ObjectId id = PickGridPoint(d, state);
             if (id.IsNull) return;
             using Transaction tr = d.Database.TransactionManager.StartTransaction();
             var point = (DBPoint)tr.GetObject(id, OpenMode.ForRead);
@@ -272,7 +273,7 @@ namespace CLV_CivilTools.PointCloud
         private static Tag RequireCurrent(Review state, DBPoint point)
         {
             Tag tag = ReadTag(point) ?? throw new InvalidOperationException("Not a generated grid POINT.");
-            if (tag.Job != state.Job.Key || (state.Columns ? tag.Column : tag.Row) != state.Rows[state.Index])
+            if (tag.Job != state.Job.Key || (!state.PlanView && (state.Columns ? tag.Column : tag.Row) != state.Rows[state.Index]))
                 throw new InvalidOperationException("Pick a point from the current job and slice.");
             return tag;
         }
@@ -318,7 +319,7 @@ namespace CLV_CivilTools.PointCloud
             view.Width = view.Height * aspect;
             view.FrontClipAtEye = false; view.FrontClipDistance = state.Thickness / 2; view.BackClipDistance = -state.Thickness / 2;
             view.FrontClipEnabled = true; view.BackClipEnabled = true;
-            ed.SetCurrentView(view); ed.Regen();
+            ed.SetCurrentView(view); state.PlanView = false; ed.Regen();
             ed.WriteMessage("\nCLOUD GRID TEST: " + (state.Columns ? "column " : "row ") + state.Rows[state.Index] +
                 " (" + (state.Index + 1) + "/" + state.Rows.Length + "), total thickness " + state.Thickness.ToString("F3", CultureInfo.InvariantCulture) +
                 ". NEXT/BACK changes view only; SET Z holds XY fixed. CGEND restores the source cloud.");

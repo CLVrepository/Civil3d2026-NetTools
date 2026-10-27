@@ -10,12 +10,16 @@ Q3 > ROADWAY > GROUND GRID - TEST:
 - CGREVIEW / REVIEW GRID: pick one generated AutoCAD POINT and the cloud. Choose Rows or Columns and total slice thickness. Defaults are 0.5 feet or 0.1524 meters (six inches total, three inches each side).
 - CGNEXT / CGBACK: next/previous populated grid row or column; stops at the ends. No elevations are resampled.
 - CGPLAN / CGSECTION: original overview versus current side-on review slice. The overview retains the cloud's current slice crop; END fully restores the original display.
-- CGSETZ: pick a generated POINT from the current job and slice; enter a new absolute Z. XY stays fixed and original sampled Z stays in metadata. This starter uses numeric elevation entry, not automatic cloud-return snapping or screen-picked heights.
+- CGMOVEZ / MOVE Z: click one or more generated points, or type Window and specify two corners; press Enter, then enter a relative WORLD Z offset such as -0.04 to lower four hundredths in a feet drawing. Positive raises. XY remains exact. Works in the rotated section, CGPLAN and ordinary plan views before review. During section review only the current job/row is eligible; in CGPLAN the current job is eligible. Before review, the first pick/window chooses one job. Repeating a click toggles that point out of the set; windows add points. Esc cancels the whole selection. Excluded points retain their exclusion when moved.
+- CGSELECT / SELECT POINTS: same point-only picker, leaves just those generated DBPoints selected for Properties or other commands. Those other commands still follow their own UCS rules; use CGMOVEZ for guaranteed world-Z offsets.
+- CGSETZ: pick a generated POINT from the current job and slice; enter a new absolute Z. XY stays fixed and original sampled Z stays in metadata. This starter uses numeric absolute elevation entry, not automatic cloud-return snapping or screen-picked heights. CGMOVEZ provides relative changes.
 - CGTOGGLE: exclude/restore a current-row generated point. Excluded points are red and remain recoverable on the job's nonplot EXCLUDED layer.
 - CGACCEPT: mark remaining Sampled points in the current row Accepted; adjusted/excluded states are retained.
 - CGEND / END / RESTORE: remove tagged review cloud copies and restore original cloud visibility. During the current session it also restores the original UCS/view. Grid points, corrections, exclusions and metadata remain.
 
 ## What is created
+
+Point selection in CGREVIEW (the initial grid point), CGSETZ, CGTOGGLE, CGMOVEZ and CGSELECT uses projected point centers, bypassing the cloud entity entirely. Click near the POINT center, or use Window for batches. The picker respects visible, thawed, unlocked point layers, orthographic view bounds and front/back clipping. Ambiguous projected centers require zooming or a narrower slice. Point markers can be enlarged with PTYPE. Snap and Ortho settings are temporarily disabled for picking and restored even on cancel. No cloud lock or global selection setting is changed: ordinary clicks outside these tools can still select the cloud. Cloud density does not need to be reduced for these picks. Single-point picks ignore cloud returns and grid guides.
 
 Each run creates a NEW job, with unique V-PNTC-GRID-<job>-POINTS, EXCLUDED and GUIDES layers. It does not update or replace earlier jobs.
 
@@ -45,7 +49,7 @@ The temporary sampling surface remains separate. CGRID is the only elevation-sam
 
 ## Verification and first trial
 
-Production geometry tests: rotated and large-coordinate frames, concave/boundary inclusion, self-intersection rejection, negative indices, caps, row/column strip thickness and empty grids. 25/25 checks passed. New host code and its actual existing crop/view helpers compile against installed Autodesk assemblies. Full solution build, attached-cloud cloning/cropping, display clipping, large-coordinate cloud transformations, live editing and Undo remain native acceptance tests.
+Production geometry tests: rotated and large-coordinate frames, concave/boundary inclusion, self-intersection rejection, negative indices, caps, row/column strip thickness and empty grids. 25/25 checks passed. New host code and its actual existing crop/view helpers compile against installed Autodesk assemblies. Full solution build, attached-cloud cloning/cropping, display clipping, large-coordinate cloud transformations, live editing and Undo remain native acceptance tests. The relative-Z/point-only selection revision compiles with the actual crop/view helpers; screen picking and cancellation remain host acceptance checks.
 
 Build:
 dotnet run --project .\Tests\CloudGrid.Tests\CloudGrid.Tests.csproj
@@ -56,7 +60,8 @@ Load the newest randomized development DLL, then:
 2. Inspect several POINT properties. Compare XYZ to the source TIN, including boundary nodes. Check no points appear outside the chosen boundary. Exercise a surface hole/out-of-range area.
 3. Run CGREVIEW; select a generated point, the attached cloud, Rows and 0.5 total thickness. Confirm a six-inch band and a side-on elevation view at correct project coordinates.
 4. Click next/back several times. Verify cloud crop, generated POINT visibility and row correspondence. Test Columns and a rotated grid in separate trials.
-5. Adjust a point with CGSETZ. Check XY unchanged and Z correct; move away and back to verify persistence.
+5. In the rotated section, run CGMOVEZ, pick one point and press Enter, then enter -0.04 in a feet drawing. Verify actual WCS X/Y unchanged and Z reduced by 0.04 in Properties. Use +0.04 to restore. Repeat with Window and several points, including an excluded point; verify original sampled Z/status metadata and exclusions. Navigate away/back and check corrections persist. Also test CGSETZ absolute elevation.
+   Test picks through a dense cloud without changing cloud density. Test initial CGREVIEW picking, CGSETZ, CGTOGGLE and CGSELECT. Test Escape during point/window selection and offset entry: no points move and snap/Ortho settings restore. In CGPLAN, select points across multiple rows of the current job. After CGEND, test CGMOVEZ/CGSELECT in plan. Hide/freeze/lock a point layer and confirm its points are ineligible; other jobs/off-slice points must remain unchanged. Test zoomed/rotated views and overlapping projected centers.
 6. Exclude and restore a point with CGTOGGLE. Check its layer/color and original Z metadata. Accept a row.
 7. Run CGEND. Verify original cloud crop/visibility and UCS/view are restored; generated points remain. Save/reopen and restart review by picking a generated point.
 8. On a separate disposable copy only, save while reviewing, reopen and run CGEND to verify recovery before trusting that path.
