@@ -22,6 +22,22 @@ namespace CLV_CivilTools.PointCloud
     public static class CloudGridMath
     {
         public const int CandidateLimit = 10000;
+        // Supplemental points between intersections belong to only one grid direction.
+        public const int OffGrid = int.MinValue;
+        public static GridNode ProjectToSlice(CloudGridFrame frame, bool columns, int index, GridXY picked)
+        {
+            frame.Validate();
+            if (index == OffGrid || !double.IsFinite(picked.X) || !double.IsFinite(picked.Y))
+                throw new ArgumentException("Slice and picked coordinates must be valid.");
+            GridXY local = frame.Local(picked);
+            double along = columns ? local.Y : local.X;
+            double nearest = Math.Round(along / frame.Spacing);
+            int crossing = nearest > int.MinValue && nearest <= int.MaxValue &&
+                Math.Abs(along - nearest * frame.Spacing) <= 1e-7 ? (int)nearest : OffGrid;
+            GridXY world = columns ? frame.World(index * frame.Spacing, along) : frame.World(along, index * frame.Spacing);
+            if (!double.IsFinite(world.X) || !double.IsFinite(world.Y)) throw new ArgumentException("Projected position must be finite.");
+            return new GridNode(columns ? index : crossing, columns ? crossing : index, world.X, world.Y);
+        }
         public static List<GridNode> Plan(CloudGridFrame frame, IReadOnlyList<GridXY> boundary)
         {
             frame.Validate();

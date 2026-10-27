@@ -20,7 +20,7 @@ namespace CLV_CivilTools.PointCloud
         private const string App = "CLV_CLOUD_GRID_V1";
         private sealed record Job(string Key, CloudGridFrame Frame, double MinU, double MaxU, double MinV, double MaxV,
             string SurfaceHandle, string Units, string Created);
-        private sealed record Tag(string Job, int Row, int Column, double OriginalZ, string Status);
+        private sealed record Tag(string Job, int Row, int Column, double OriginalZ, string Status, bool Added = false);
         private sealed class Review
         {
             internal Document Document = null!;
@@ -29,6 +29,10 @@ namespace CLV_CivilTools.PointCloud
             internal int[] Rows = Array.Empty<int>();
             internal int Index;
             internal bool Columns, PlanView;
+            internal double MarkerPercent = 1;
+            internal readonly List<Entity> Markers = new();
+            internal EventHandler? MarkerViewChanged, MarkerIdle;
+            internal bool MarkerPending = true;
             internal double Thickness, MinZ, MaxZ;
             internal Matrix3d Ucs;
             internal ViewTableRecord View = null!;
@@ -40,6 +44,7 @@ namespace CLV_CivilTools.PointCloud
             {
                 if (review != null && ReferenceEquals(review.Document, args.Document))
                 {
+                    StopReviewMarkers(review);
                     review.View.Dispose(); review = null;
                 }
             };
@@ -182,11 +187,13 @@ namespace CLV_CivilTools.PointCloud
             var state = new Review
             {
                 Document = document, Job = job, Cloud = clone.ObjectId, Columns = columns,
-                Thickness = thickness.Value, Rows = points.Select(p => columns ? p.Tag.Column : p.Tag.Row).Distinct().OrderBy(i => i).ToArray(),
+                Thickness = thickness.Value, Rows = points.Select(p => columns ? p.Tag.Column : p.Tag.Row).Where(i => i != CloudGridMath.OffGrid).Distinct().OrderBy(i => i).ToArray(),
                 MinZ = points.Min(p => p.Position.Z), MaxZ = points.Max(p => p.Position.Z),
                 Ucs = ed.CurrentUserCoordinateSystem, View = ed.GetCurrentView()
             };
+            if (state.Rows.Length == 0) { state.View.Dispose(); throw new InvalidOperationException("No points belong to grid lines in that direction."); }
             tr.Commit(); review = state;
+            StartReviewMarkers(state);
             ed.WriteMessage("\nReview uses a tagged temporary cloud copy; source is temporarily hidden. Run CGEND before saving/closing. CGEND also recovers saved review copies.");
             ShowRow(state);
         });
@@ -242,7 +249,7 @@ namespace CLV_CivilTools.PointCloud
             bool exclude = tag.Status != "Excluded";
             point.UpgradeOpen();
             point.Layer = Layer(state.Job, exclude ? "EXCLUDED" : "POINTS");
-            WriteTag(point, tag with { Status = exclude ? "Excluded" : point.Position.Z == tag.OriginalZ ? "Sampled" : "Adjusted" });
+            WriteTag(point, tag with { Status = exclude ? "Excluded" : !tag.Added && point.Position.Z == tag.OriginalZ ? "Sampled" : "Adjusted" });
             tr.Commit(); d.Editor.Regen();
             d.Editor.WriteMessage(exclude ? "\nPoint excluded on red nonplot EXCLUDED layer." : "\nPoint restored to POINTS layer.");
         });
@@ -346,6 +353,7 @@ namespace CLV_CivilTools.PointCloud
             tr.Commit();
             if (review != null && ReferenceEquals(review.Document, d))
             {
+                StopReviewMarkers(review);
                 d.Editor.CurrentUserCoordinateSystem = review.Ucs;
                 d.Editor.SetCurrentView(review.View); review.View.Dispose(); review = null;
             }
@@ -394,14 +402,16 @@ namespace CLV_CivilTools.PointCloud
         {
             using ResultBuffer? data = point.GetXDataForApplication(App);
             TypedValue[] v = data?.AsArray() ?? Array.Empty<TypedValue>();
-            if (v.Length != 7 || (string?)v[1].Value != "POINT" || v[2].Value is not string job || v[3].Value is not int row ||
+            if ((v.Length != 7 && v.Length != 8) || (string?)v[1].Value != "POINT" || v[2].Value is not string job || v[3].Value is not int row ||
                 v[4].Value is not int col || v[5].Value is not double z || v[6].Value is not string status) return null;
-            return new Tag(job, row, col, z, status);
+            if (v.Length == 8 && (v[7].TypeCode != 1070 || v[7].Value is not short added || added != 1)) return null;
+            return new Tag(job, row, col, z, status, v.Length == 8);
         }
         private static void WriteTag(DBPoint point, Tag tag)
         {
-            using var data = new ResultBuffer(new TypedValue(1001, App), new TypedValue(1000, "POINT"), new TypedValue(1000, tag.Job),
-                new TypedValue(1071, tag.Row), new TypedValue(1071, tag.Column), new TypedValue(1040, tag.OriginalZ), new TypedValue(1000, tag.Status));
+            var values = new[] { new TypedValue(1001, App), new TypedValue(1000, "POINT"), new TypedValue(1000, tag.Job),
+                new TypedValue(1071, tag.Row), new TypedValue(1071, tag.Column), new TypedValue(1040, tag.OriginalZ), new TypedValue(1000, tag.Status) };
+            using var data = new ResultBuffer(tag.Added ? values.Append(new TypedValue(1070, (short)1)).ToArray() : values);
             point.XData = data;
         }
         private static void Register(Database db, Transaction tr)
@@ -459,6 +469,15 @@ namespace CLV_CivilTools.PointCloud
             catch (System.Exception error)
             {
                 d.Editor.WriteMessage("\nCLOUD GRID TEST: " + error.Message + "\nIf a review was active, use CGEND to restore the original cloud/view.");
+            }
+            finally
+            {
+                if (review != null && ReferenceEquals(review.Document, d))
+                {
+                    review.MarkerPending = true;
+                    try { RefreshReviewMarkers(review); }
+                    catch (System.Exception error) { ClearReviewMarkers(review); d.Editor.WriteMessage("\nReview markers: " + error.Message); }
+                }
             }
         }
     }

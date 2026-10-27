@@ -104,10 +104,11 @@ namespace CLV_CivilTools
             layout.Controls.Add(CreateCommandButtonRow("CREATE GRID", "CGRID", "REVIEW GRID", "CGREVIEW"));
             layout.Controls.Add(CreateCommandButtonRow("PREVIOUS SLICE", "CGBACK", "NEXT SLICE", "CGNEXT"));
             layout.Controls.Add(CreateCommandButtonRow("PLAN", "CGPLAN", "SECTION", "CGSECTION"));
+            layout.Controls.Add(CreateCommandButton("ADD POINT IN SLICE", "CGADDPOINT"));
             layout.Controls.Add(CreateCommandButtonRow("MOVE Z", "CGMOVEZ", "SELECT POINTS", "CGSELECT"));
             layout.Controls.Add(CreateCommandButtonRow("SET Z", "CGSETZ", "EXCLUDE / RESTORE", "CGTOGGLE"));
             layout.Controls.Add(CreateCommandButtonRow("ACCEPT ROW", "CGACCEPT", "END / RESTORE", "CGEND"));
-            layout.Controls.Add(CreateCommandButton("RESTORE FULL CLOUD", "CGFULLCLOUD"));
+            layout.Controls.Add(CreateCommandButtonRow("RESTORE FULL CLOUD", "CGFULLCLOUD", "RESIZE POINTS", "CGPOINTSIZE"));
 
             // SAMPLE LINES
             layout.Controls.Add(CreateSectionLabel("SAMPLE LINES"));

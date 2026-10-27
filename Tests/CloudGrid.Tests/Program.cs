@@ -46,6 +46,24 @@ public static class CloudGridTests
         Reject("zero length edge", () => CloudGridMath.Plan(frame, new[] { new GridXY(0, 0), new GridXY(0, 0), new GridXY(1, 1) }));
         Reject("collinear boundary", () => CloudGridMath.Plan(frame, new[] { new GridXY(0, 0), new GridXY(1, 0), new GridXY(2, 0) }));
         Check("empty small polygon between grid nodes", CloudGridMath.Plan(frame, new[] { new GridXY(0.1, 0.1), new GridXY(0.2, 0.1), new GridXY(0.2, 0.2), new GridXY(0.1, 0.2) }).Count == 0);
+
+        var rowAdd = CloudGridMath.ProjectToSlice(frame, false, 2, new GridXY(0.7, 2.03));
+        Check("supplement stays on row", Math.Abs(rowAdd.Y - 2) < 1e-10 && rowAdd.Row == 2);
+        Check("supplement retains along-line station", Math.Abs(rowAdd.X - 0.7) < 1e-10);
+        Check("off-intersection has no fake column", rowAdd.Column == CloudGridMath.OffGrid);
+        var colAdd = CloudGridMath.ProjectToSlice(frame, true, -2, new GridXY(-1.96, 0.8));
+        Check("negative column projection", Math.Abs(colAdd.X + 2) < 1e-10 && colAdd.Column == -2);
+        Check("off-intersection has no fake row", colAdd.Row == CloudGridMath.OffGrid && Math.Abs(colAdd.Y - 0.8) < 1e-10);
+        var crossingAdd = CloudGridMath.ProjectToSlice(frame, false, 2, new GridXY(3, 2.04));
+        Check("intersection belongs to both directions", crossingAdd.Row == 2 && crossingAdd.Column == 3);
+        var rotatedFrame = new CloudGridFrame(800000, 26000000, Math.Cos(0.63), Math.Sin(0.63), 5);
+        var rotatedPick = rotatedFrame.World(7.4, 15.04);
+        var rotatedAdd = CloudGridMath.ProjectToSlice(rotatedFrame, false, 3, rotatedPick);
+        var rotatedLocal = rotatedFrame.Local(new GridXY(rotatedAdd.X, rotatedAdd.Y));
+        Check("rotated large-coordinate row exact", Math.Abs(rotatedLocal.Y - 15) < 1e-7);
+        Check("rotated added station retained", Math.Abs(rotatedLocal.X - 7.4) < 1e-7 && rotatedAdd.Column == CloudGridMath.OffGrid);
+        Reject("invalid supplemental pick", () => CloudGridMath.ProjectToSlice(frame, false, 2, new GridXY(double.NaN, 0)));
+        Reject("reserved non-grid slice", () => CloudGridMath.ProjectToSlice(frame, false, CloudGridMath.OffGrid, new GridXY(1, 0)));
         return count + "/" + count + " cloud grid geometry checks passed.";
     }
 }
