@@ -1,3 +1,8 @@
+## 2026-10-27 - Direct full-cloud display restoration
+- Adds CGFULLCLOUD and Q3 GROUND GRID - TEST > RESTORE FULL CLOUD for the reported invalid selection from POINTCLOUDUNCROP. Enumerates visible model-space PointCloudEx references directly; multiple clouds are chosen by numbered handle/layer list rather than native entity picking.
+- Requires CGEND first if a tagged review copy remains. After explicit Yes, clears all crops on the chosen cloud via clearCropping, resets crop inversion, disables view front/back clipping and regenerates. Includes pre-review crops; keeps point geometry/status and source RCP/RCS data. Does not change hidden scans/regions or limit boxes. CGEND continues to preserve the source's prior crop state.
+- New command compiled against Autodesk assemblies using core/WinForms references; full solution build, native crop recovery, locked-cloud behavior and multi-cloud selection remain workstation checks.
+
 ## 2026-10-27 - Fix ground-grid picker build reference failure
 - Fixes the reported CloudGridEditing.cs CS7069 errors for System.Windows.Point / WindowsBase. Replaces Editor.PointToScreen calls with orthographic WCS-to-view projection using AutoCAD Matrix3d/Point2d and SCREENSIZE pixel scaling. Keeps the existing WinForms project, target framework and host references unchanged.
 - Verified the previous picker fails when WPF references are absent and the revised host code plus actual crop/view helpers compiles with the same core/WinForms/Autodesk reference set. Full solution build and live rotated-view picking remain workstation acceptance checks. No change to relative world-Z editing, original-Z metadata or cloud handling.

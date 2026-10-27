@@ -15,6 +15,7 @@ Q3 > ROADWAY > GROUND GRID - TEST:
 - CGSETZ: pick a generated POINT from the current job and slice; enter a new absolute Z. XY stays fixed and original sampled Z stays in metadata. This starter uses numeric absolute elevation entry, not automatic cloud-return snapping or screen-picked heights. CGMOVEZ provides relative changes.
 - CGTOGGLE: exclude/restore a current-row generated point. Excluded points are red and remain recoverable on the job's nonplot EXCLUDED layer.
 - CGACCEPT: mark remaining Sampled points in the current row Accepted; adjusted/excluded states are retained.
+- CGFULLCLOUD / RESTORE FULL CLOUD: after CGEND, removes ALL crop boundaries from a chosen visible model-space cloud, resets crop inversion, disables view front/back clipping and regenerates. Selects the cloud by a numbered handle/layer list if more than one is visible; no native selection prompt. Explicit Yes confirmation defaults to No. Includes pre-review crops, so use only when the full uncropped display is desired. Does not change grid points, cloud file data, hidden scans/regions or limit boxes; zoom out as needed. If a cloud refuses crop clearing, check its Lock property. No automatic unlocking or layer-setting change.
 - CGEND / END / RESTORE: remove tagged review cloud copies and restore original cloud visibility. During the current session it also restores the original UCS/view. Grid points, corrections, exclusions and metadata remain.
 
 ## What is created
@@ -71,3 +72,5 @@ Load the newest randomized development DLL, then:
 8. On a separate disposable copy only, save while reviewing, reopen and run CGEND to verify recovery before trusting that path.
 9. Test command cancellation and Undo. Check existing points, breaklines, source TIN, cloud data and unrelated clouds remain unchanged.
 10. Return the full F2 log plus a screenshot of a slice showing the ground returns and generated points. This is the main acceptance check before larger-area use.
+
+Full-cloud recovery acceptance: after CGEND, run CGFULLCLOUD and Yes. Verify cropped display is restored and view clipping off, points/metadata unchanged; test cancellation, multiple cloud numbering, a locked cloud, Undo and an active review (must require CGEND). Pre-review crops are deliberately removed only by this explicit command.
