@@ -82,7 +82,7 @@ Add-point / marker acceptance: use a drawing copy with 5- or 10-foot spacing. In
 
 ## Persistent sliced-display diagnostic
 
-If CGEND/CGFULLCLOUD leave a narrow cloud with no ribbon crop indication, run CGCLOUDDIAG while the problem is visible. Copy the complete F2 block from CLOUD DISPLAY DIAGNOSTIC R1 through END CLOUD DISPLAY DIAGNOSTIC. It is read-only and reports both editor and stored viewport clipping, live sectioning, all model-space cloud IDs/crop flags and extents. Existing restore already saves/restores the initial view; this log is needed before attributing the symptom to a particular display restriction. No limit-box or scan/region settings are reset. Nested/xref clouds are not enumerated.
+If CGEND/CGFULLCLOUD leave a narrow cloud with no ribbon crop indication, run CGCLOUDDIAG while the problem is visible. Copy the complete F2 block from CLOUD DISPLAY DIAGNOSTIC R2 through END CLOUD DISPLAY DIAGNOSTIC. It is read-only and reports both editor and stored viewport clipping, live sectioning, all model-space cloud IDs/crop flags and extents. Existing restore already saves/restores the initial view; this log is needed before attributing the symptom to a particular display restriction. No limit-box or scan/region settings are reset. Nested/xref clouds are not enumerated.
 
 ## Optional COGO breakline points
 
@@ -91,3 +91,5 @@ CGADDCOGO uses the same persistent job metadata and view-facing section overlays
 COGO acceptance: on a disposable drawing, add TC, FL, LP and a custom code in both Cloud/Visual modes. Verify unique point numbers, raw descriptions, description-key/default styles and retained pick Z/grid-line alignment. Add a COGO at a ground point's XY and confirm both remain separate. Test duplicate COGO description/XYZ rejection; edit Z and verify exact N/E, then exclude/restore and confirm code/number/layer/provenance. Check markers, next/back, opposite review direction, Undo and save/reopen after CGEND. Confirm unrelated COGO points and existing ground DBPoints remain unchanged. Native point-group/style/label behavior and numbering require Civil 3D acceptance testing.
 
 The point-only picker now offers Type > All / Ground / Breakline. Ground limits picks to tagged AutoCAD DBPoints; Breakline limits picks to tagged COGO points. Use this to distinguish coincident ground/COGO markers. Changing Type clears the current selection and retains the chosen job. Window and Type have W/T accelerators; All/Ground/Breakline have A/G/B. Check both full keywords and single-letter input during native testing.
+
+Diagnostic R2 guards absent section-manager, viewport and cloud-definition IDs and continues past individual report failures. If the R1 report ended with eNullObjectId before CLOUD/Totals lines, use this revision and collect the complete R2 block. The diagnostic remains read-only; clipping-off results do not establish whether the cloud's own crop/display state is clear.

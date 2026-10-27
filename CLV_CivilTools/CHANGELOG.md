@@ -1,3 +1,8 @@
+## 2026-10-27 - Continue cloud diagnostics past missing optional objects
+- Fixes CGCLOUDDIAG R1 aborting with eNullObjectId after stored viewport output. R2 guards null viewport/section-manager/definition IDs and isolates each report block and model object so an unavailable optional item does not suppress the cloud scan.
+- R2 reports per-cloud crop flags, review tag, placement, elevation display settings, source/active file identities and bounds. The user's R1 output confirmed editor/stored viewport clipping off and VIEWMODE=0, but did not reach cloud data; the persistent sliced display cause remains unconfirmed.
+- Diagnostic is read-only and compiled against AutoCAD references without WPF dependencies. Runtime verification on the affected drawing remains required; no cloud display repair is claimed by this change.
+
 ## 2026-10-27 - Optional COGO breakline points in slices
 - Adds CGADDCOGO / Q3 ADD BREAKLINE POINT alongside native CGADDPOINT. Creates Civil 3D COGO points with a user-entered raw description (TC/FL/LP/custom), next-point-number settings and existing description-key/parameter matching, using the current Cloud/Visual pick and exact slice-line projection. No automatic breakline connections or new point styles/groups.
 - BREAKLINE-COGO / BREAKLINE-EXCLUDED layers keep those entities separate from the lightweight ground POINTS layer. Tagged COGO points participate in review markers, initial review picking, world-Z edits, selection and exclusion/restoration; point number/description and added provenance persist. Unrelated survey points are ineligible.
