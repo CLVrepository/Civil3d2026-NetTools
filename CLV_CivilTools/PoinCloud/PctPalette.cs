@@ -99,6 +99,14 @@ namespace CLV_CivilTools
             layout.Controls.Add(CreateTransparencyControlRow()); // under Attach/Intensity
             layout.Controls.Add(CreateCommandButtonRow("ON", "PCT7", "OFF", "PCT8"));
 
+            // CLOUD GRID STARTER
+            layout.Controls.Add(CreateSectionLabel("GROUND GRID - TEST"));
+            layout.Controls.Add(CreateCommandButtonRow("CREATE GRID", "CGRID", "REVIEW GRID", "CGREVIEW"));
+            layout.Controls.Add(CreateCommandButtonRow("PREVIOUS SLICE", "CGBACK", "NEXT SLICE", "CGNEXT"));
+            layout.Controls.Add(CreateCommandButtonRow("PLAN", "CGPLAN", "SECTION", "CGSECTION"));
+            layout.Controls.Add(CreateCommandButtonRow("SET Z", "CGSETZ", "EXCLUDE / RESTORE", "CGTOGGLE"));
+            layout.Controls.Add(CreateCommandButtonRow("ACCEPT ROW", "CGACCEPT", "END / RESTORE", "CGEND"));
+
             // SAMPLE LINES
             layout.Controls.Add(CreateSectionLabel("SAMPLE LINES"));
             layout.Controls.Add(CreateCommandButton("CREATE SAMPLE LINES", "PCT1"));
