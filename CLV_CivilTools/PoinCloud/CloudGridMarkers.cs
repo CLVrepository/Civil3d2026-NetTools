@@ -84,8 +84,8 @@ namespace CLV_CivilTools.PointCloud
             using Transaction tr = state.Document.Database.TransactionManager.StartOpenCloseTransaction();
             foreach (var item in Candidates(state.Document, state))
             {
-                var point = (DBPoint)tr.GetObject(item.Id, OpenMode.ForRead);
-                Point3d center = point.Position;
+                var point = (Entity)tr.GetObject(item.Id, OpenMode.ForRead);
+                Point3d center = PointPosition(point);
                 // Overlay graphics face the current view; native DBPoint orientation/XYZ is untouched.
                 AddReviewMarker(state, new Circle(center, view.ViewDirection.GetNormal(), radius), viewports, item.Tag);
                 AddReviewMarker(state, new Line(center - x, center + x), viewports, item.Tag);

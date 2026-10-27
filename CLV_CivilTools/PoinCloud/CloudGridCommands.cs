@@ -11,6 +11,7 @@ using Autodesk.AutoCAD.Runtime;
 using Autodesk.Civil.ApplicationServices;
 using CLV_CivilTools.Shared;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
+using CogoPoint = Autodesk.Civil.DatabaseServices.CogoPoint;
 using TinSurface = Autodesk.Civil.DatabaseServices.TinSurface;
 
 namespace CLV_CivilTools.PointCloud
@@ -155,7 +156,7 @@ namespace CLV_CivilTools.PointCloud
             if (answer.Status != PromptStatus.OK && answer.Status != PromptStatus.None) return;
             bool columns = answer.StringResult == "Columns";
             using Transaction tr = document.Database.TransactionManager.StartTransaction();
-            var point = (DBPoint)tr.GetObject(pointId, OpenMode.ForRead);
+            var point = (Entity)tr.GetObject(pointId, OpenMode.ForRead);
             Tag tag = ReadTag(point) ?? throw new InvalidOperationException("Select a POINT created by CGRID.");
             Job job = FindJob(document.Database, tr, tag.Job);
             double defaultThickness = job.Units.StartsWith("Feet", StringComparison.Ordinal) ? 0.5 : 0.1524;
@@ -223,15 +224,15 @@ namespace CLV_CivilTools.PointCloud
             ObjectId id = PickGridPoint(d, state);
             if (id.IsNull) return;
             using Transaction tr = d.Database.TransactionManager.StartTransaction();
-            var point = (DBPoint)tr.GetObject(id, OpenMode.ForRead);
+            var point = (Entity)tr.GetObject(id, OpenMode.ForRead);
             Tag tag = RequireCurrent(state, point);
             var options = new PromptDoubleOptions("\nNew absolute Z elevation (XY stays fixed)")
-            { DefaultValue = point.Position.Z, UseDefaultValue = true };
+            { DefaultValue = PointPosition(point).Z, UseDefaultValue = true };
             var z = d.Editor.GetDouble(options);
             if (z.Status != PromptStatus.OK) return;
             if (!double.IsFinite(z.Value)) throw new ArgumentException("Elevation must be finite.");
             point.UpgradeOpen();
-            point.Position = new Point3d(point.Position.X, point.Position.Y, z.Value);
+            SetPointElevation(point, z.Value);
             WriteTag(point, tag with { Status = tag.Status == "Excluded" ? "Excluded" : "Adjusted" });
             tr.Commit(); d.Editor.Regen();
             d.Editor.WriteMessage("\nZ updated; original sampled Z retained. Navigation will not resample.");
@@ -244,14 +245,14 @@ namespace CLV_CivilTools.PointCloud
             ObjectId id = PickGridPoint(d, state);
             if (id.IsNull) return;
             using Transaction tr = d.Database.TransactionManager.StartTransaction();
-            var point = (DBPoint)tr.GetObject(id, OpenMode.ForRead);
+            var point = (Entity)tr.GetObject(id, OpenMode.ForRead);
             Tag tag = RequireCurrent(state, point);
             bool exclude = tag.Status != "Excluded";
             point.UpgradeOpen();
-            point.Layer = Layer(state.Job, exclude ? "EXCLUDED" : "POINTS");
-            WriteTag(point, tag with { Status = exclude ? "Excluded" : !tag.Added && point.Position.Z == tag.OriginalZ ? "Sampled" : "Adjusted" });
+            point.Layer = Layer(state.Job, point is CogoPoint ? (exclude ? "BREAKLINE-EXCLUDED" : "BREAKLINE-COGO") : (exclude ? "EXCLUDED" : "POINTS"));
+            WriteTag(point, tag with { Status = exclude ? "Excluded" : !tag.Added && PointPosition(point).Z == tag.OriginalZ ? "Sampled" : "Adjusted" });
             tr.Commit(); d.Editor.Regen();
-            d.Editor.WriteMessage(exclude ? "\nPoint excluded on red nonplot EXCLUDED layer." : "\nPoint restored to POINTS layer.");
+            d.Editor.WriteMessage(exclude ? "\nPoint excluded on its red nonplot exclusion layer." : "\nPoint restored to its ground or breakline point layer.");
         });
 
         [CommandMethod("CGACCEPT", CommandFlags.Modal)]
@@ -263,7 +264,7 @@ namespace CLV_CivilTools.PointCloud
             foreach (var item in Points(d.Database, tr, state.Job.Key).Where(p => (state.Columns ? p.Tag.Column : p.Tag.Row) == state.Rows[state.Index]))
             {
                 if (item.Tag.Status != "Sampled") continue;
-                var point = (DBPoint)tr.GetObject(item.Id, OpenMode.ForWrite);
+                var point = (Entity)tr.GetObject(item.Id, OpenMode.ForWrite);
                 WriteTag(point, item.Tag with { Status = "Accepted" }); count++;
             }
             tr.Commit(); d.Editor.WriteMessage("\nMarked " + count + " sampled points accepted. This is a manual review mark, not an automatic accuracy test.");
@@ -277,7 +278,7 @@ namespace CLV_CivilTools.PointCloud
         }
         private static Review NeedReview(Document d) => review != null && ReferenceEquals(review.Document, d)
             ? review : throw new InvalidOperationException("Run CGREVIEW in this drawing first.");
-        private static Tag RequireCurrent(Review state, DBPoint point)
+        private static Tag RequireCurrent(Review state, Entity point)
         {
             Tag tag = ReadTag(point) ?? throw new InvalidOperationException("Not a generated grid POINT.");
             if (tag.Job != state.Job.Key || (!state.PlanView && (state.Columns ? tag.Column : tag.Row) != state.Rows[state.Index]))
@@ -391,14 +392,22 @@ namespace CLV_CivilTools.PointCloud
         {
             var points = new List<(ObjectId, Tag, Point3d)>();
             foreach (ObjectId id in Model(db, tr, OpenMode.ForRead))
-                if (tr.GetObject(id, OpenMode.ForRead) is DBPoint point && ReadTag(point) is Tag tag && tag.Job == key)
+                if (tr.GetObject(id, OpenMode.ForRead) is Entity point && (point is DBPoint || point is CogoPoint) && ReadTag(point) is Tag tag && tag.Job == key)
                 {
-                    if (!double.IsFinite(point.Position.Z)) throw new InvalidOperationException("Generated point has an invalid elevation.");
-                    points.Add((id, tag, point.Position));
+                    if (!double.IsFinite(PointPosition(point).Z)) throw new InvalidOperationException("Generated point has an invalid elevation.");
+                    points.Add((id, tag, PointPosition(point)));
                 }
             return points;
         }
-        private static Tag? ReadTag(DBPoint point)
+        private static Point3d PointPosition(Entity point) => point is DBPoint dbPoint ? dbPoint.Position :
+            point is CogoPoint cogo ? cogo.Location : throw new InvalidOperationException("Not a supported review point.");
+        private static void SetPointElevation(Entity point, double z)
+        {
+            if (point is CogoPoint cogo) cogo.Elevation = z;
+            else if (point is DBPoint dbPoint) dbPoint.Position = new Point3d(dbPoint.Position.X, dbPoint.Position.Y, z);
+            else throw new InvalidOperationException("Not a supported review point.");
+        }
+        private static Tag? ReadTag(Entity point)
         {
             using ResultBuffer? data = point.GetXDataForApplication(App);
             TypedValue[] v = data?.AsArray() ?? Array.Empty<TypedValue>();
@@ -407,7 +416,7 @@ namespace CLV_CivilTools.PointCloud
             if (v.Length == 8 && (v[7].TypeCode != 1070 || v[7].Value is not short added || added != 1)) return null;
             return new Tag(job, row, col, z, status, v.Length == 8);
         }
-        private static void WriteTag(DBPoint point, Tag tag)
+        private static void WriteTag(Entity point, Tag tag)
         {
             var values = new[] { new TypedValue(1001, App), new TypedValue(1000, "POINT"), new TypedValue(1000, tag.Job),
                 new TypedValue(1071, tag.Row), new TypedValue(1071, tag.Column), new TypedValue(1040, tag.OriginalZ), new TypedValue(1000, tag.Status) };

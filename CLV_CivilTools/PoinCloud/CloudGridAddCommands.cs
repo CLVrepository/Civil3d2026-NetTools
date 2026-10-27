@@ -7,18 +7,34 @@ using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using CLV_CivilTools.Shared;
+using Autodesk.Civil.ApplicationServices;
+using CogoPoint = Autodesk.Civil.DatabaseServices.CogoPoint;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace CLV_CivilTools.PointCloud
 {
     public static partial class CloudGridCommands
     {
+        private static string lastBreaklineDescription = "TC";
         [CommandMethod("CGADDPOINT", CommandFlags.Modal)]
-        public static void AddSlicePoint() => Run(d =>
+        public static void AddSlicePoint() => AddSlicePointCore(false);
+        [CommandMethod("CGADDCOGO", CommandFlags.Modal)]
+        public static void AddBreaklinePoint() => AddSlicePointCore(true);
+        private static void AddSlicePointCore(bool createCogo) => Run(d =>
         {
             Review state = NeedReview(d);
             if (state.PlanView) throw new InvalidOperationException("Use CGSECTION before adding points.");
             Job job = state.Job;
+            string description = "";
+            if (createCogo)
+            {
+                var desc = d.Editor.GetString(new PromptStringOptions("\nRaw description (TC, FL, LP or your own code)")
+                { AllowSpaces = true, DefaultValue = lastBreaklineDescription, UseDefaultValue = true });
+                if (desc.Status != PromptStatus.OK) return;
+                description = desc.StringResult.Trim();
+                if (description.Length == 0) throw new ArgumentException("A breakline point description is required.");
+                lastBreaklineDescription = description;
+            }
             Vector3d axis = state.Columns ? new Vector3d(-job.Frame.AxisY, job.Frame.AxisX, 0) :
                 new Vector3d(job.Frame.AxisX, job.Frame.AxisY, 0);
             Vector3d normal = axis.CrossProduct(Vector3d.ZAxis).GetNormal();
@@ -63,19 +79,40 @@ namespace CLV_CivilTools.PointCloud
                     if (!CloudGridMath.Contains(polygon, new GridXY(node.X, node.Y)))
                     { d.Editor.WriteMessage("\nProjected point is outside the job boundary; nothing added."); continue; }
                     if (Points(d.Database, tr, job.Key).Any(p => p.Tag.Status != "Excluded" &&
-                        Math.Abs(p.Position.X - node.X) <= 1e-7 && Math.Abs(p.Position.Y - node.Y) <= 1e-7))
-                    { d.Editor.WriteMessage("\nAn included point already occupies this XY. Use CGMOVEZ/CGSETZ instead."); continue; }
+                        Math.Abs(p.Position.X - node.X) <= 1e-7 && Math.Abs(p.Position.Y - node.Y) <= 1e-7 &&
+                        (createCogo ? tr.GetObject(p.Id, OpenMode.ForRead) is CogoPoint existing &&
+                            Math.Abs(p.Position.Z - picked.Z) <= 1e-7 && existing.RawDescription == description :
+                            tr.GetObject(p.Id, OpenMode.ForRead) is DBPoint)))
+                    { d.Editor.WriteMessage(createCogo ? "\nThis job already has that COGO description at the same XYZ." :
+                        "\nAn included ground point already occupies this XY. Use CGMOVEZ/CGSETZ instead."); continue; }
                     EnsureLayer(d.Database, tr, Layer(job, "POINTS"), 2, true);
                     Register(d.Database, tr);
-                    var point = new DBPoint(new Point3d(node.X, node.Y, picked.Z)) { Layer = Layer(job, "POINTS") };
+                    Entity point;
+                    string identity;
+                    if (createCogo)
+                    {
+                        EnsureLayer(d.Database, tr, Layer(job, "BREAKLINE-COGO"), 4, true);
+                        EnsureLayer(d.Database, tr, Layer(job, "BREAKLINE-EXCLUDED"), 1, false);
+                        ObjectId id = CivilDocument.GetCivilDocument(d.Database).CogoPoints.Add(
+                            new Point3d(node.X, node.Y, picked.Z), description, true, true, true);
+                        var cogo = (CogoPoint)tr.GetObject(id, OpenMode.ForWrite);
+                        cogo.Layer = Layer(job, "BREAKLINE-COGO");
+                        point = cogo;
+                        identity = "COGO " + cogo.PointNumber + " [" + cogo.RawDescription + "]";
+                    }
+                    else
+                    {
+                        point = new DBPoint(new Point3d(node.X, node.Y, picked.Z)) { Layer = Layer(job, "POINTS") };
+                        Model(d.Database, tr, OpenMode.ForWrite).AppendEntity(point); tr.AddNewlyCreatedDBObject(point, true);
+                        identity = "AutoCAD POINT";
+                    }
                     // Added provenance means OriginalZ is the first picked elevation, not a TIN sample.
                     WriteTag(point, new Tag(job.Key, node.Row, node.Column, picked.Z, "Adjusted", true));
-                    Model(d.Database, tr, OpenMode.ForWrite).AppendEntity(point); tr.AddNewlyCreatedDBObject(point, true);
                     tr.Commit(); added++;
                     state.MinZ = Math.Min(state.MinZ, picked.Z); state.MaxZ = Math.Max(state.MaxZ, picked.Z);
                     d.Editor.Regen();
                     RefreshReviewMarkers(state);
-                    d.Editor.WriteMessage("\nAdded POINT at Z " + picked.Z.ToString("F4") + " on current grid line. Earlier additions remain if you press Esc.");
+                    d.Editor.WriteMessage("\nAdded " + identity + " at Z " + picked.Z.ToString("F4") + " on current grid line. Earlier additions remain if you press Esc.");
                 }
             }
             finally
@@ -84,7 +121,7 @@ namespace CLV_CivilTools.PointCloud
                 AcadApp.SetSystemVariable("OSMODE", snap); AcadApp.SetSystemVariable("3DOSMODE", snap3d);
                 AcadApp.SetSystemVariable("OSNAPZ", snapZ); AcadApp.SetSystemVariable("ORTHOMODE", ortho);
                 AcadApp.SetSystemVariable("SNAPMODE", gridSnap);
-                d.Editor.WriteMessage("\nAdded " + added + " supplemental POINT(s); snap/UCS settings restored. Navigation will not resample.");
+                d.Editor.WriteMessage("\nAdded " + added + (createCogo ? " COGO breakline point(s)" : " supplemental AutoCAD POINT(s)") + "; snap/UCS settings restored. Navigation will not resample.");
             }
         });
 

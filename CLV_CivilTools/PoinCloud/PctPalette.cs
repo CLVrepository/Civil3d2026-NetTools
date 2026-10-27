@@ -105,6 +105,7 @@ namespace CLV_CivilTools
             layout.Controls.Add(CreateCommandButtonRow("PREVIOUS SLICE", "CGBACK", "NEXT SLICE", "CGNEXT"));
             layout.Controls.Add(CreateCommandButtonRow("PLAN", "CGPLAN", "SECTION", "CGSECTION"));
             layout.Controls.Add(CreateCommandButton("ADD POINT IN SLICE", "CGADDPOINT"));
+            layout.Controls.Add(CreateCommandButton("ADD BREAKLINE POINT", "CGADDCOGO"));
             layout.Controls.Add(CreateCommandButtonRow("MOVE Z", "CGMOVEZ", "SELECT POINTS", "CGSELECT"));
             layout.Controls.Add(CreateCommandButtonRow("SET Z", "CGSETZ", "EXCLUDE / RESTORE", "CGTOGGLE"));
             layout.Controls.Add(CreateCommandButtonRow("ACCEPT ROW", "CGACCEPT", "END / RESTORE", "CGEND"));

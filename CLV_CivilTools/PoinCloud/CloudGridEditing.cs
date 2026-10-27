@@ -7,15 +7,16 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
+using CogoPoint = Autodesk.Civil.DatabaseServices.CogoPoint;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace CLV_CivilTools.PointCloud
 {
     public static partial class CloudGridCommands
     {
-        // Picks are resolved against generated DBPoints in screen space. Native entity picking
+        // Picks are resolved against tagged AutoCAD/COGO points in screen space. Native entity picking
         // would hit the cloud first. No cloud, source layer or global selection setting is locked.
-        private sealed record PickCandidate(ObjectId Id, Tag Tag, double X, double Y);
+        private sealed record PickCandidate(ObjectId Id, Tag Tag, double X, double Y, bool IsCogo);
         private static Review? CurrentReview(Document d)
         {
             if (review != null && !ReferenceEquals(review.Document, d))
@@ -39,12 +40,12 @@ namespace CLV_CivilTools.PointCloud
                 using Transaction tr = d.Database.TransactionManager.StartTransaction();
                 foreach (ObjectId id in ids)
                 {
-                    var point = (DBPoint)tr.GetObject(id, OpenMode.ForWrite);
+                    var point = (Entity)tr.GetObject(id, OpenMode.ForWrite);
                     Tag tag = state == null ? ReadTag(point) ?? throw new InvalidOperationException("Grid point metadata missing.") : RequireCurrent(state, point);
-                    Point3d p = point.Position;
+                    Point3d p = PointPosition(point);
                     double z = p.Z + result.Value;
                     if (!double.IsFinite(z)) throw new ArgumentException("Resulting elevation must be finite.");
-                    point.Position = new Point3d(p.X, p.Y, z);
+                    SetPointElevation(point, z);
                     WriteTag(point, tag with { Status = tag.Status == "Excluded" ? "Excluded" : "Adjusted" });
                 }
                 tr.Commit(); d.Editor.Regen();
@@ -59,7 +60,7 @@ namespace CLV_CivilTools.PointCloud
         {
             ObjectId[] ids = PickGridPoints(d, CurrentReview(d), true);
             d.Editor.SetImpliedSelection(ids);
-            d.Editor.WriteMessage("\nSelected " + ids.Length + " grid POINT(s). Use Properties or another command; ordinary commands retain their own UCS behavior.");
+            d.Editor.WriteMessage("\nSelected " + ids.Length + " review point(s). Use Properties or another command; ordinary commands retain their own UCS behavior.");
         });
 
         private static ObjectId PickGridPoint(Document d, Review? state)
@@ -107,19 +108,19 @@ namespace CLV_CivilTools.PointCloud
             var candidates = new List<PickCandidate>();
             foreach (ObjectId id in Model(d.Database, tr, OpenMode.ForRead))
             {
-                if (tr.GetObject(id, OpenMode.ForRead) is not DBPoint point || ReadTag(point) is not Tag tag || !point.Visible) continue;
+                if (tr.GetObject(id, OpenMode.ForRead) is not Entity point || (point is not DBPoint && point is not CogoPoint) || ReadTag(point) is not Tag tag || !point.Visible) continue;
                 if (state != null && (tag.Job != state.Job.Key ||
                     (!state.PlanView && (state.Columns ? tag.Column : tag.Row) != state.Rows[state.Index]))) continue;
                 var layer = (LayerTableRecord)tr.GetObject(point.LayerId, OpenMode.ForRead);
                 if (layer.IsOff || layer.IsFrozen || layer.IsLocked) continue;
-                Point3d eye = point.Position.TransformBy(toView);
+                Point3d eye = PointPosition(point).TransformBy(toView);
                 if (view.FrontClipEnabled && !view.FrontClipAtEye && eye.Z > view.FrontClipDistance + 1e-8) continue;
                 if (view.BackClipEnabled && eye.Z < view.BackClipDistance - 1e-8) continue;
                 if (Math.Abs(eye.X - view.CenterPoint.X) > view.Width / 2 ||
                     Math.Abs(eye.Y - view.CenterPoint.Y) > view.Height / 2) continue;
-                Point2d screen = projection.Project(point.Position);
+                Point2d screen = projection.Project(PointPosition(point));
                 if (double.IsFinite(screen.X) && double.IsFinite(screen.Y))
-                    candidates.Add(new PickCandidate(id, tag, screen.X, screen.Y));
+                    candidates.Add(new PickCandidate(id, tag, screen.X, screen.Y, point is CogoPoint));
             }
             return candidates;
         }
@@ -129,6 +130,7 @@ namespace CLV_CivilTools.PointCloud
             Editor ed = d.Editor;
             var chosen = new HashSet<ObjectId>();
             string? job = state?.Job.Key;
+            int pointType = 0; // All=0, Ground=1, Breakline COGO=2.
             object snap = AcadApp.GetSystemVariable("OSMODE"), snap3d = AcadApp.GetSystemVariable("3DOSMODE");
             object ortho = AcadApp.GetSystemVariable("ORTHOMODE");
             bool finished = false;
@@ -140,15 +142,29 @@ namespace CLV_CivilTools.PointCloud
                 while (true)
                 {
                     var options = new PromptPointOptions(multiple ?
-                        "\nClick near grid POINT to add/remove [Window] (Enter finishes): " :
-                        "\nClick near generated grid POINT (cloud is ignored): ")
+                         "\nClick near review point to add/remove [Window/Type] (Enter finishes): " :
+                         "\nClick near review point [Type] (cloud is ignored): ")
                     { AllowNone = true };
                     if (multiple) options.Keywords.Add("Window");
+                    options.Keywords.Add("Type");
                     var pick = ed.GetPoint(options);
                     if (pick.Status == PromptStatus.None)
                     { finished = true; return chosen.ToArray(); }
                     if (pick.Status != PromptStatus.OK && pick.Status != PromptStatus.Keyword) return Array.Empty<ObjectId>();
+                    if (pick.Status == PromptStatus.Keyword && pick.StringResult == "Type")
+                    {
+                        var typeOptions = new PromptKeywordOptions("\nPoint type [All/Ground/Breakline] <All>: ");
+                        typeOptions.Keywords.Add("All"); typeOptions.Keywords.Add("Ground"); typeOptions.Keywords.Add("Breakline");
+                        typeOptions.Keywords.Default = "All"; typeOptions.AllowNone = true;
+                        var type = ed.GetKeywords(typeOptions);
+                        if (type.Status != PromptStatus.OK && type.Status != PromptStatus.None) return Array.Empty<ObjectId>();
+                        pointType = type.StringResult == "Ground" ? 1 : type.StringResult == "Breakline" ? 2 : 0;
+                        chosen.Clear(); ed.SetImpliedSelection(Array.Empty<ObjectId>());
+                        ed.WriteMessage("\nPoint type filter updated; selection cleared.");
+                        continue;
+                    }
                     List<PickCandidate> candidates = Candidates(d, state);
+                    candidates = candidates.Where(p => pointType == 0 || p.IsCogo == (pointType == 2)).ToList();
                     if (job != null) candidates = candidates.Where(p => p.Tag.Job == job).ToList();
                     var hits = new List<PickCandidate>();
                     if (pick.Status == PromptStatus.Keyword && pick.StringResult == "Window")
@@ -158,7 +174,7 @@ namespace CLV_CivilTools.PointCloud
                         var last = ed.GetPoint(new PromptPointOptions("\nPoint-only window opposite corner: ")
                         { BasePoint = first.Value, UseBasePoint = true });
                         if (last.Status != PromptStatus.OK) return Array.Empty<ObjectId>();
-                        candidates = Candidates(d, state);
+                        candidates = Candidates(d, state).Where(p => pointType == 0 || p.IsCogo == (pointType == 2)).ToList();
                         if (job != null) candidates = candidates.Where(p => p.Tag.Job == job).ToList();
                         Point2d a = ProjectToScreen(ed, first.Value.TransformBy(ed.CurrentUserCoordinateSystem));
                         Point2d b = ProjectToScreen(ed, last.Value.TransformBy(ed.CurrentUserCoordinateSystem));
