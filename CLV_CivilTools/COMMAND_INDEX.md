@@ -1,3 +1,8 @@
+## 2026-10-27 - Explicitly turn cropped display off during full-cloud restore
+- CGFULLCLOUD Restore R2 now calls clearCropping even with an empty crop list, sets ShowCropped=false and CroppingInverted=false, verifies zero remaining crop boundaries / cropped display off before committing, and prints the before/after crop state. Earlier restore only removed listed boundaries and left ShowCropped enabled; the user's R2 reports showed this remained true after reload.
+- Keeps existing cloud handle/definition, location/rotation/scale, scan/region visibility, point edits and RCS data. No internal limit-box setters, native API interop, reattachment or definition replacement. View clipping is still disabled.
+- Updated command compiles against AutoCAD references without WPF dependencies. Whether this resolves the reported persistent sliced display still requires native confirmation; diagnostic output and an independent blank-drawing attachment are the next checks if it persists.
+
 ## 2026-10-27 - Continue cloud diagnostics past missing optional objects
 - Fixes CGCLOUDDIAG R1 aborting with eNullObjectId after stored viewport output. R2 guards null viewport/section-manager/definition IDs and isolates each report block and model object so an unavailable optional item does not suppress the cloud scan.
 - R2 reports per-cloud crop flags, review tag, placement, elevation display settings, source/active file identities and bounds. The user's R1 output confirmed editor/stored viewport clipping off and VIEWMODE=0, but did not reach cloud data; the persistent sliced display cause remains unconfirmed.

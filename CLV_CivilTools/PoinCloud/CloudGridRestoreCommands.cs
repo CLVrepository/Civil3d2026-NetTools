@@ -49,7 +49,7 @@ namespace CLV_CivilTools.PointCloud
                 }
                 var target = (PointCloudEx)tr.GetObject(clouds[selected], OpenMode.ForRead);
                 ed.WriteMessage("\nRestore cloud handle " + target.Handle + " on layer " + target.Layer +
-                    ". This removes ALL crop boundaries on that cloud, including pre-review crops, and disables view front/back clipping.");
+                    ". Restore R2 removes ALL crop boundaries, explicitly turns cropped display OFF, and disables view front/back clipping.");
                 var options = new PromptKeywordOptions("\nRestore full cloud display [Yes/No] <No>: ");
                 options.Keywords.Add("Yes"); options.Keywords.Add("No");
                 options.Keywords.Default = "No"; options.AllowNone = true;
@@ -57,9 +57,18 @@ namespace CLV_CivilTools.PointCloud
                 if (answer.Status != PromptStatus.OK || answer.StringResult != "Yes") return;
                 // Direct managed API: no native cloud-selection prompt or implied selection.
                 target = (PointCloudEx)tr.GetObject(clouds[selected], OpenMode.ForWrite, false, true);
-                if (target.getCroppingCount() > 0 && !target.clearCropping())
+                int previousCrops = target.getCroppingCount();
+                ed.WriteMessage("\nBefore reset: crops=" + previousCrops + ", ShowCropped=" + target.ShowCropped);
+                // Clear even an empty boundary list, then explicitly disable crop filtering.
+                bool cleared = target.clearCropping();
+                if (previousCrops > 0 && !cleared)
                     throw new InvalidOperationException("Civil 3D refused to clear cloud crops. Check the cloud's Lock property in Properties.");
+                target.ShowCropped = false;
                 target.CroppingInverted = false;
+                int remainingCrops = target.getCroppingCount();
+                bool croppedDisplay = target.ShowCropped;
+                if (remainingCrops != 0 || croppedDisplay)
+                    throw new InvalidOperationException("Cloud crop state did not reset; no reset changes committed.");
                 target.RecordGraphicsModified(true);
                 tr.Commit();
                 using ViewTableRecord view = ed.GetCurrentView();
@@ -67,7 +76,8 @@ namespace CLV_CivilTools.PointCloud
                 ed.SetCurrentView(view);
                 ed.SetImpliedSelection(Array.Empty<ObjectId>());
                 ed.Regen();
-                ed.WriteMessage("\nCloud crop boundaries cleared and view clipping disabled. Grid points, exclusions and elevations retained. Zoom out if needed. Hidden scans/regions, limit boxes and source-file contents are unchanged.");
+                ed.WriteMessage("\nRestore R2: crops=" + remainingCrops + ", ShowCropped=" + croppedDisplay +
+                    "; front/back view clipping disabled. Grid points, exclusions and elevations retained. Check the display; if still restricted, run CGCLOUDDIAG. Hidden scans/regions and source-file contents are unchanged.");
             }
             catch (System.Exception error)
             {
