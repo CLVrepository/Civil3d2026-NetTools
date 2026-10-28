@@ -33,6 +33,7 @@ namespace CLV_CivilTools.PointCloud
             internal double MarkerPercent = 1;
             internal readonly List<Entity> Markers = new();
             internal EventHandler? MarkerViewChanged, MarkerIdle;
+            internal DocumentBeginCloseEventHandler? CloseGuard;
             internal bool MarkerPending = true;
             internal double Thickness, MinZ, MaxZ;
             internal Matrix3d Ucs;
@@ -43,14 +44,9 @@ namespace CLV_CivilTools.PointCloud
         {
             AcadApp.DocumentManager.DocumentToBeDestroyed += (_, args) =>
             {
-                // Surface-only best effort; never run cloud commands during close.
-                // Saved journals also permit restoration after reopening a review.
-                try { RestoreReviewSurfaces(args.Document.Database); }
-                catch (System.Exception error)
-                {
-                    System.Diagnostics.Trace.WriteLine("Review surface styles were not restored: " + error.Message +
-                        " Saved recovery records are retained; reopen and run CGEND.");
-                }
+                // Never open Civil database objects or write/erase surface styles
+                // during destruction. Use CGEND before saving/closing; saved R9
+                // surface journals remain recoverable by CGEND after reopening.
                 if (review != null && ReferenceEquals(review.Document, args.Document))
                 {
                     StopReviewMarkers(review);

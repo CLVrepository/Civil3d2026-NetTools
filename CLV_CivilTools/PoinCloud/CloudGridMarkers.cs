@@ -29,6 +29,15 @@ namespace CLV_CivilTools.PointCloud
 
         private static void StartReviewMarkers(Review state)
         {
+            state.CloseGuard = (_, args) =>
+            {
+                if (!ReferenceEquals(review, state)) return;
+                // This is the early, vetoable close request, not destruction.
+                // EndReview must run as an ordinary command, never in teardown.
+                args.Veto();
+                state.Document.Editor.WriteMessage("\nUse END / RESTORE (CGEND) before closing this review drawing, then save and close again.");
+            };
+            state.Document.BeginDocumentClose += state.CloseGuard;
             state.MarkerViewChanged = (_, _) => state.MarkerPending = true;
             state.MarkerIdle = (_, _) =>
             {
@@ -49,6 +58,8 @@ namespace CLV_CivilTools.PointCloud
 
         private static void StopReviewMarkers(Review state)
         {
+            if (state.CloseGuard != null) state.Document.BeginDocumentClose -= state.CloseGuard;
+            state.CloseGuard = null;
             if (state.MarkerViewChanged != null) state.Document.ViewChanged -= state.MarkerViewChanged;
             if (state.MarkerIdle != null) AcadApp.Idle -= state.MarkerIdle;
             state.MarkerViewChanged = null; state.MarkerIdle = null;

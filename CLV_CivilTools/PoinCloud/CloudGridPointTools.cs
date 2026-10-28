@@ -76,17 +76,30 @@ namespace CLV_CivilTools.PointCloud
             Matrix3d ucs = ed.CurrentUserCoordinateSystem;
             Point3d? lastSnap = null;
             string evidence = "no matching point-monitor callback";
+            bool monitoring = false;
             PointMonitorEventHandler monitor = (_, args) =>
             {
+                // A failed event detach must not leave a callback touching a
+                // document/native context after this command has finished.
+                if (!monitoring) return;
                 lastSnap = null;
                 evidence = "no verified object snap";
                 try
                 {
+                    // Borrowed callback context: inspect it only here; do not
+                    // retain or dispose it. This handler belongs to d.Editor.
                     InputPointContext context = args.Context;
                     PointHistoryBits reject = PointHistoryBits.FromKeyboard | PointHistoryBits.NotInteractive |
                         PointHistoryBits.CyclingPoint | PointHistoryBits.PickAborted | PointHistoryBits.AppFiltered;
-                    if (!ReferenceEquals(context.Document, d) || !context.PointComputed || (context.History & PointHistoryBits.ObjectSnapped) == 0 ||
-                        (context.History & reject) != 0) return;
+                    if (!context.PointComputed)
+                    { evidence = "native point not computed"; return; }
+                    PointHistoryBits history = context.History;
+                    if ((history & PointHistoryBits.ObjectSnapped) == 0)
+                    { evidence = "no native object-snap flag; history=" + history; return; }
+                    if ((history & reject) != 0)
+                    { evidence = "native input flags rejected: " + (history & reject); return; }
+                    if ((context.ObjectSnapMask & ObjectSnapMasks.Node) == 0)
+                    { evidence = "native snap was not NODE; mask=" + context.ObjectSnapMask; return; }
                     var paths = context.GetKeyPointEntities();
                     // Evidence must identify the active review cloud, not merely
                     // an entity under the cursor or a nearby point/line.
@@ -99,13 +112,16 @@ namespace CLV_CivilTools.PointCloud
                     lastSnap = snapped;
                     evidence = "returned pick differed from the native snapped coordinates";
                 }
-                catch (System.Exception) { lastSnap = null; evidence = "native snap evidence unavailable"; }
+                catch (System.Exception error) { lastSnap = null; evidence = "native snap evidence unavailable: " + error.Message; }
             };
             try
             {
-                AcadApp.SetSystemVariable("OSMODE", 0); AcadApp.SetSystemVariable("3DOSMODE", 128);
+                // AutoCAD NODE is OSMODE=8. 3DOSMODE=1 disables face snaps;
+                // 128 is not a documented AutoCAD NODE mode.
+                AcadApp.SetSystemVariable("OSMODE", 8); AcadApp.SetSystemVariable("3DOSMODE", 1);
                 AcadApp.SetSystemVariable("OSNAPZ", 0); AcadApp.SetSystemVariable("ORTHOMODE", 0);
                 AcadApp.SetSystemVariable("SNAPMODE", 0);
+                monitoring = true;
                 ed.PointMonitor += monitor;
                 while (true)
                 {
@@ -121,16 +137,19 @@ namespace CLV_CivilTools.PointCloud
             }
             finally
             {
-                ed.PointMonitor -= monitor;
+                monitoring = false;
                 System.Exception? restoreError = null;
+                try { ed.PointMonitor -= monitor; }
+                catch (System.Exception error) { restoreError = error; }
                 for (int i = 0; i < names.Length; i++)
                 {
                     try { AcadApp.SetSystemVariable(names[i], saved[i]); }
                     catch (System.Exception error) { restoreError ??= error; }
                 }
-                ed.SetImpliedSelection(Array.Empty<ObjectId>());
+                try { ed.SetImpliedSelection(Array.Empty<ObjectId>()); }
+                catch (System.Exception error) { restoreError ??= error; }
                 if (restoreError != null)
-                    throw new InvalidOperationException("Snap settings could not all be restored; no elevation edit applied. " + restoreError.Message);
+                    throw new InvalidOperationException("Snap callback/settings cleanup failed; no elevation edit applied. " + restoreError.Message);
             }
         }
 
