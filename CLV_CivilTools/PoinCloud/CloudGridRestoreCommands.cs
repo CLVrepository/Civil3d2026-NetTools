@@ -18,6 +18,8 @@ namespace CLV_CivilTools.PointCloud
             try
             {
                 if (!d.Database.TileMode) throw new InvalidOperationException("Use the Model tab.");
+                if (CloudGridCommands.HasPendingSourceCropReview(d))
+                    throw new InvalidOperationException("Run CGEND to restore the journaled review display before CGFULLCLOUD.");
                 Editor ed = d.Editor;
                 using Transaction tr = d.Database.TransactionManager.StartTransaction();
                 var table = (BlockTable)tr.GetObject(d.Database.BlockTableId, OpenMode.ForRead);

@@ -1,3 +1,24 @@
+# R6 native acceptance before production use
+
+Use a disposable drawing copy. This candidate temporarily changes the selected cloud entity's display crops, not its point-cloud files. It preserves a complete original-state journal. Do not claim source protection until visual restoration is tested.
+
+1. Before review record CGCLOUDDIAG, the full-cloud view, handle/definition/placement, scan/region masks, existing crop boundaries/flags and representative corrected/excluded/COGO coordinates.
+2. Start CGREVIEW Columns at 0.25. The R6 snapshot line must identify the original crop count/flags/handle, then R6 must report one closed ECS polygon. Confirm visible cloud width and both finite endpoints. Pan beyond the job's long endpoints: outside cloud must remain removed.
+3. Alternate disjoint early/late populated columns repeatedly; use CGPLAN and Next/Back, then CGSECTION. Repeat in Rows and a rotated grid at survey coordinates. Ensure plan/section mode and slice index remain correct and supplemental points/edits are retained.
+4. CGEND must report restored journaled display(s). Compare actual source display and original crop boundaries/flags/definition/placement/masks, not just counts. Repeat three review/end cycles. If flags restore but the display remains restricted, reject this strategy; do not process the production cloud.
+5. On copies, test pre-existing polygon/circular/inverted crop snapshots and ShowCropped=false. After CGEND the exact original presentation must return. Test setup cancellation, deleted job/cloud, invalid crop, and forced error cleanup. Manual crop/placement changes during review must trigger a retained-journal warning rather than being overwritten.
+6. Save/reopen a disposable copy during review and use CGEND to recover. Test Undo; no original reference may be detached/replaced, no definition erased, and no scan/region mask reset. Do not save production drawings during a review.
+
+Native acceptance is pending. The 75-check test suite is compiled only; do not retry or bypass the Windows Application Control execution denial.
+
+## 2026-10-28 - R6 finite cloud-crop repair candidate (native acceptance pending)
+- R5 synchronized live/stored viewport state without changing the visible cloud. R6 no longer relies on viewport clipping for cloud restriction: it assigns one closed, finite PointCloudCrop polygon using documented Create(IntPtr.Zero)/addCroppingBoundary APIs. Camera setup and the prior UI improvements are preserved.
+- Uses the existing source entity's temporary drawing-display crop state, with no shallow clone, attachment/definition replacement, RCS/RCP writes, or scan/region-visibility edits. This intentionally changes the selected entity's display crops during review; source-file data are not edited. It does not claim independent renderer/cache isolation.
+- Before any crop, serializes every original boundary (type/inside/inversion/plane basis/vertices), display flags, definition handle and placement into a per-cloud Xrecord. Each replacement validates the previous expected state and updates its recovery journal in the same transaction. CGEND restores original crop objects/flags, validates readback, and removes only its journal. Missing/changed/corrupt state stops recovery without committing further crop changes and retains evidence.
+- Converts finite WCS strips to native cloud coordinates using inverse translation/rotation/scale; validates the source transform against native/geometric bounds before modifying display. Handles the reported 3.280833 scale without changing drawing units. Generated polygons include the required repeated first vertex.
+- Journal recovery participates in CGEND, error cleanup and document-close cleanup; saved/reopened journals are recoverable by CGEND. CGFULLCLOUD is guarded while review/journals remain, without adding a Yes/No confirmation. Grid points, COGO data, corrections and exclusions are retained.
+- Native acceptance must prove visible slicing AND original display restoration over repeated disjoint slices, Rows/Columns, plan/section, cancellation and save/reopen. Compilation/readback alone is not acceptance. Viewport clips remain for ordinary geometry; finite endpoints now come from the cloud polygon. See the leading R6 acceptance notes.
+
 ## 2026-10-28 - Controlled viewport synchronization experiment R5 (native acceptance pending)
 - New native report shows live front/back clips enabled at +/-0.125, atEye=false, orthographic, VIEWMODE=22 and full source/definition bounds. This does not reproduce the earlier restricted native entity, and it does not establish an incorrect camera angle.
 - Adds optional CGVIEWSYNCTEST only; leaves CGREVIEW/CGSECTION camera, clipping arithmetic and the three independent UI changes unchanged. Logs live and stored camera/clip state plus Editor.ActiveViewportId and Database.CurrentViewportTableRecordId.

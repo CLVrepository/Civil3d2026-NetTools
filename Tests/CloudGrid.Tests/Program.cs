@@ -84,6 +84,33 @@ public static class CloudGridTests
         }
         Reject("no populated slices rejected", () => new CloudGridReviewPosition().Move(1, 0));
         Check("large navigation delta cannot overflow", new CloudGridReviewPosition(3, true).Move(int.MaxValue, 4).Index == 3);
-        return count + "/" + count + " cloud grid geometry/navigation checks passed.";
+        var zero = new CropXYZ(0, 0, 0);
+        Check("identity cloud placement", CloudGridCropMath.ToNative(new(2, 3, 4), zero, 0, 1) == new CropXYZ(2, 3, 4));
+        double feet = 3.280833333333;
+        var nativeFeet = CloudGridCropMath.ToNative(new(10 * feet, 20 * feet, 30 * feet), zero, 0, feet);
+        Check("cloud units inverted", Math.Abs(nativeFeet.X - 10) < 1e-10 && Math.Abs(nativeFeet.Y - 20) < 1e-10 && Math.Abs(nativeFeet.Z - 30) < 1e-10);
+        Check("translated scaled cloud", CloudGridCropMath.ToNative(new(102, 204, 306), new(100, 200, 300), 0, 2) == new CropXYZ(1, 2, 3));
+        var quarter = CloudGridCropMath.ToWorld(new(2, 3, 4), zero, Math.PI / 2, 1);
+        Check("quarter-turn cloud rotation", Math.Abs(quarter.X + 3) < 1e-10 && Math.Abs(quarter.Y - 2) < 1e-10 && quarter.Z == 4);
+        var surveyNative = new CropXYZ(269377.958, 391142.821, 841.987);
+        var surveyWorld = CloudGridCropMath.ToWorld(surveyNative, new(1000, -2000, 50), 0.63, feet);
+        var surveyBack = CloudGridCropMath.ToNative(surveyWorld, new(1000, -2000, 50), 0.63, feet);
+        Check("rotated survey-coordinate cloud roundtrip", Math.Abs(surveyBack.X - surveyNative.X) < 1e-7 && Math.Abs(surveyBack.Y - surveyNative.Y) < 1e-7 && Math.Abs(surveyBack.Z - surveyNative.Z) < 1e-7);
+        var widthA = CloudGridCropMath.ToNative(new(100, 200 - 0.125, 0), zero, 0, feet);
+        var widthB = CloudGridCropMath.ToNative(new(100, 200 + 0.125, 0), zero, 0, feet);
+        Check("quarter-foot strip converted to native width", Math.Abs(widthB.Y - widthA.Y - 0.25 / feet) < 1e-10);
+        var endpoint = CloudGridCropMath.ToWorld(CloudGridCropMath.ToNative(new(103, 204, 0), new(100, 200, 0), Math.PI / 4, feet), new(100, 200, 0), Math.PI / 4, feet);
+        Check("finite endpoint survives cloud transform", Math.Abs(endpoint.X - 103) < 1e-10 && Math.Abs(endpoint.Y - 204) < 1e-10);
+        var clockwise = CloudGridCropMath.ToWorld(new(2, 3, 4), zero, -Math.PI / 2, 1);
+        Check("negative cloud rotation", Math.Abs(clockwise.X - 3) < 1e-10 && Math.Abs(clockwise.Y + 2) < 1e-10);
+        var loggedWorld = CloudGridCropMath.ToWorld(surveyNative, zero, 0, feet);
+        Check("native diagnostic source bounds convert to logged WCS", Math.Abs(loggedWorld.X - 883784.1838715769) < 1e-6 && Math.Abs(loggedWorld.Y - 1283274.405230703) < 1e-6);
+        var loggedBack = CloudGridCropMath.ToNative(new(883784.1838715769, 1283274.405230703, 2762.4190158330525), zero, 0, feet);
+        Check("logged WCS bounds convert back to RCS units", Math.Abs(loggedBack.X - surveyNative.X) < 1e-6 && Math.Abs(loggedBack.Z - surveyNative.Z) < 1e-6);
+        Reject("zero cloud scale", () => CloudGridCropMath.ToNative(zero, zero, 0, 0));
+        Reject("negative cloud scale", () => CloudGridCropMath.ToNative(zero, zero, 0, -1));
+        Reject("nonfinite cloud rotation", () => CloudGridCropMath.ToNative(zero, zero, double.NaN, 1));
+        Reject("nonfinite cloud coordinate", () => CloudGridCropMath.ToNative(new(double.PositiveInfinity, 0, 0), zero, 0, 1));
+        return count + "/" + count + " cloud grid geometry/navigation/crop-transform checks passed.";
     }
 }

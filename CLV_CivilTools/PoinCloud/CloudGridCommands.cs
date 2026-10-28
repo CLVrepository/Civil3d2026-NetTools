@@ -50,6 +50,7 @@ namespace CLV_CivilTools.PointCloud
                     try
                     {
                         using Transaction tr = args.Document.Database.TransactionManager.StartTransaction();
+                        RestoreSourceCropReviews(args.Document.Database, tr);
                         RestoreReviewSurfaces(args.Document.Database, tr); tr.Commit();
                     }
                     catch (System.Exception)
@@ -66,7 +67,8 @@ namespace CLV_CivilTools.PointCloud
         [CommandMethod("CGRID", CommandFlags.Modal)]
         public static void CreateGrid() => Run(document =>
         {
-            if (HasReviewClones(document)) throw new InvalidOperationException("Run CGEND before creating another grid.");
+            if (HasReviewClones(document) || HasPendingSourceCropReview(document))
+                throw new InvalidOperationException("Run CGEND before creating another grid.");
             Editor ed = document.Editor; Database db = document.Database;
             ObjectId surfaceId = Pick(ed, "\nSelect temporary TIN surface: ", typeof(TinSurface));
             if (surfaceId.IsNull) return;
@@ -188,8 +190,9 @@ namespace CLV_CivilTools.PointCloud
                 if (!otherLayer.IsOff && !otherLayer.IsFrozen)
                     throw new InvalidOperationException("Hide other point clouds before the starter review; review one attached cloud at a time.");
             }
-            // Do not clone/crop a shared point-cloud reference. Section thickness is
-            // editor view clipping only; the source's display engine is never modified.
+            // Journal the full drawing-display state before applying any crop.
+            // No cloned reference, attachment, definition or scan-mask changes.
+            CropDisplay originalDisplay = BeginSourceCropReview(source, tr);
             HideReviewSurfaces(document.Database, tr);
             var state = new Review
             {
@@ -203,7 +206,10 @@ namespace CLV_CivilTools.PointCloud
                 Array.IndexOf(state.Rows, columns ? tag.Column : tag.Row)), false);
             tr.Commit(); review = state;
             StartReviewMarkers(state);
-            ed.WriteMessage("\nReview uses temporary view clipping only; source cloud is unchanged. Surfaces are temporarily hidden. CGEND restores styles/view and recovers older saved review copies.");
+            ed.WriteMessage("\nR6 review uses finite cloud-specific crops with a persistent original-display journal. No source file/placement/scan changes. CGEND restores the saved crops, styles and view.");
+            ed.WriteMessage("\nR6 snapshot: original crops=" + originalDisplay.Crops.Length +
+                ", ShowCropped=" + originalDisplay.Show + ", inverted=" + originalDisplay.Inverted +
+                ", source=" + cloudId.Handle + ", definition=" + originalDisplay.Definition + ".");
             try { ShowRow(state); }
             catch { EndReview(document); throw; }
         });
@@ -302,6 +308,7 @@ namespace CLV_CivilTools.PointCloud
             using (Transaction tr = d.Database.TransactionManager.StartOpenCloseTransaction())
                 if (!state.Cloud.IsValid || state.Cloud.IsErased || tr.GetObject(state.Cloud, OpenMode.ForRead) is not PointCloudEx)
                     throw new InvalidOperationException("Review cloud is no longer available. Run CGEND, then CGREVIEW.");
+            ApplySourceSlice(state);
             double index = state.Rows[state.Index] * job.Frame.Spacing;
             GridXY mid = state.Columns ? job.Frame.World(index, (job.MinV + job.MaxV) / 2) :
                 job.Frame.World((job.MinU + job.MaxU) / 2, index);
@@ -344,7 +351,7 @@ namespace CLV_CivilTools.PointCloud
         {
             state.Document.Editor.WriteMessage("\nCLOUD GRID TEST: " + (state.Columns ? "column " : "row ") + state.Rows[state.Index] +
                 " (" + (state.Index + 1) + "/" + state.Rows.Length + "), total thickness " + state.Thickness.ToString("F3", CultureInfo.InvariantCulture) +
-                (state.PlanView ? ". PLAN: full cloud, highlighted slice; NEXT/BACK stays in plan." : ". SECTION: temporary view clipping; NEXT/BACK stays in section.") + " SET Z holds XY fixed. CGEND restores styles/view.");
+                (state.PlanView ? ". PLAN: finite cropped strip; NEXT/BACK stays in plan." : ". SECTION: finite cloud crop; NEXT/BACK stays in section.") + " SET Z holds XY fixed. CGEND restores original crops/styles/view.");
         }
 
         private static void EndReview(Document d)
@@ -365,6 +372,7 @@ namespace CLV_CivilTools.PointCloud
                 source.UpgradeOpen(); source.Visible = visible != 0;
                 clone.UpgradeOpen(); clone.Erase(); restored++;
             }
+            int cropRestored = RestoreSourceCropReviews(d.Database, tr);
             RestoreReviewSurfaces(d.Database, tr);
             tr.Commit();
             if (review != null && ReferenceEquals(review.Document, d))
@@ -374,7 +382,8 @@ namespace CLV_CivilTools.PointCloud
                 d.Editor.SetCurrentView(review.View); review.View.Dispose(); review = null;
             }
             d.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); d.Editor.Regen();
-            d.Editor.WriteMessage("\nGrid review ended. Restored " + restored + " source cloud(s); removed only tagged review copies and restored saved surface styles. Grid points and corrections retained.");
+            d.Editor.WriteMessage("\nGrid review ended. Recovered " + restored + " legacy review source(s); restored " +
+                cropRestored + " journaled cloud display(s) and saved surface styles. Grid points and corrections retained.");
         }
 
         private static bool HasReviewClones(Document d)
