@@ -28,8 +28,10 @@ namespace CLV_CivilTools.PointCloud
             internal Job Job = null!;
             internal ObjectId Cloud;
             internal int[] Rows = Array.Empty<int>();
-            internal int Index;
-            internal bool Columns, PlanView;
+            internal CloudGridReviewPosition Position;
+            internal int Index => Position.Index;
+            internal bool PlanView => Position.PlanView;
+            internal bool Columns;
             internal double MarkerPercent = 1;
             internal readonly List<Entity> Markers = new();
             internal EventHandler? MarkerViewChanged, MarkerIdle;
@@ -45,6 +47,15 @@ namespace CLV_CivilTools.PointCloud
             {
                 if (review != null && ReferenceEquals(review.Document, args.Document))
                 {
+                    try
+                    {
+                        using Transaction tr = args.Document.Database.TransactionManager.StartTransaction();
+                        RestoreReviewSurfaces(args.Document.Database, tr); tr.Commit();
+                    }
+                    catch (System.Exception)
+                    {
+                        // Persistent per-surface journals allow CGEND after reopening.
+                    }
                     StopReviewMarkers(review);
                     review.View.Dispose(); review = null;
                 }
@@ -177,26 +188,24 @@ namespace CLV_CivilTools.PointCloud
                 if (!otherLayer.IsOff && !otherLayer.IsFrozen)
                     throw new InvalidOperationException("Hide other point clouds before the starter review; review one attached cloud at a time.");
             }
-            Register(document.Database, tr);
-            EnsureLayer(document.Database, tr, Layer(job, "REVIEW"), 7, false);
-            var clone = (PointCloudEx)source.Clone();
-            clone.Layer = Layer(job, "REVIEW"); clone.Visible = true;
-            clone.XData = new ResultBuffer(new TypedValue(1001, App), new TypedValue(1000, "REVIEW"),
-                new TypedValue(1005, cloudId.Handle.ToString()), new TypedValue(1070, (short)1));
-            Model(document.Database, tr, OpenMode.ForWrite).AppendEntity(clone); tr.AddNewlyCreatedDBObject(clone, true);
-            source.UpgradeOpen(); source.Visible = false;
+            // Do not clone/crop a shared point-cloud reference. Section thickness is
+            // editor view clipping only; the source's display engine is never modified.
+            HideReviewSurfaces(document.Database, tr);
             var state = new Review
             {
-                Document = document, Job = job, Cloud = clone.ObjectId, Columns = columns,
+                Document = document, Job = job, Cloud = cloudId, Columns = columns,
                 Thickness = thickness.Value, Rows = points.Select(p => columns ? p.Tag.Column : p.Tag.Row).Where(i => i != CloudGridMath.OffGrid).Distinct().OrderBy(i => i).ToArray(),
                 MinZ = points.Min(p => p.Position.Z), MaxZ = points.Max(p => p.Position.Z),
                 Ucs = ed.CurrentUserCoordinateSystem, View = ed.GetCurrentView()
             };
             if (state.Rows.Length == 0) { state.View.Dispose(); throw new InvalidOperationException("No points belong to grid lines in that direction."); }
+            state.Position = new CloudGridReviewPosition(Math.Max(0,
+                Array.IndexOf(state.Rows, columns ? tag.Column : tag.Row)), false);
             tr.Commit(); review = state;
             StartReviewMarkers(state);
-            ed.WriteMessage("\nReview uses a tagged temporary cloud copy; source is temporarily hidden. Run CGEND before saving/closing. CGEND also recovers saved review copies.");
-            ShowRow(state);
+            ed.WriteMessage("\nReview uses temporary view clipping only; source cloud is unchanged. Surfaces are temporarily hidden. CGEND restores styles/view and recovers older saved review copies.");
+            try { ShowRow(state); }
+            catch { EndReview(document); throw; }
         });
 
         [CommandMethod("CGNEXT", CommandFlags.Modal)]
@@ -204,15 +213,12 @@ namespace CLV_CivilTools.PointCloud
         [CommandMethod("CGBACK", CommandFlags.Modal)]
         public static void Back() => Run(d => Navigate(d, -1));
         [CommandMethod("CGSECTION", CommandFlags.Modal)]
-        public static void Section() => Run(d => ShowRow(NeedReview(d)));
+        public static void Section() => Run(d => ShowRow(NeedReview(d), false));
         [CommandMethod("CGPLAN", CommandFlags.Modal)]
         public static void Plan() => Run(d =>
         {
             Review state = NeedReview(d);
-            d.Editor.CurrentUserCoordinateSystem = state.Ucs;
-            d.Editor.SetCurrentView(state.View);
-            state.PlanView = true;
-            d.Editor.Regen();
+            ShowRow(state, true);
         });
         [CommandMethod("CGEND", CommandFlags.Modal)]
         public static void End() => Run(EndReview);
@@ -273,8 +279,11 @@ namespace CLV_CivilTools.PointCloud
         private static void Navigate(Document d, int delta)
         {
             Review state = NeedReview(d);
-            state.Index = Math.Clamp(state.Index + delta, 0, state.Rows.Length - 1);
-            ShowRow(state);
+            state.Position = state.Position.Move(delta, state.Rows.Length);
+            using ViewTableRecord current = d.Editor.GetCurrentView();
+            bool plan = !current.PerspectiveEnabled &&
+                Math.Abs(current.ViewDirection.GetNormal().DotProduct(Vector3d.ZAxis)) > 1 - 1e-8;
+            ShowRow(state, plan);
         }
         private static Review NeedReview(Document d) => review != null && ReferenceEquals(review.Document, d)
             ? review : throw new InvalidOperationException("Run CGREVIEW in this drawing first.");
@@ -286,38 +295,38 @@ namespace CLV_CivilTools.PointCloud
             return tag;
         }
 
-        private static void ShowRow(Review state)
+        private static void ShowRow(Review state, bool plan = false)
         {
             Document d = state.Document; Editor ed = d.Editor; Job job = state.Job;
             if (!ReferenceEquals(AcadApp.DocumentManager.MdiActiveDocument, d)) throw new InvalidOperationException("Activate the review drawing.");
             using (Transaction tr = d.Database.TransactionManager.StartOpenCloseTransaction())
                 if (!state.Cloud.IsValid || state.Cloud.IsErased || tr.GetObject(state.Cloud, OpenMode.ForRead) is not PointCloudEx)
                     throw new InvalidOperationException("Review cloud is no longer available. Run CGEND, then CGREVIEW.");
-            GridXY[] strip = CloudGridMath.Strip(job.Frame, state.Columns, state.Rows[state.Index],
-                job.MinU, job.MaxU, job.MinV, job.MaxV, state.Thickness);
-            ed.CurrentUserCoordinateSystem = Matrix3d.Identity;
-            ed.Command("_.PLAN", "_W");
-            using (ViewTableRecord top = ed.GetCurrentView())
-            {
-                top.FrontClipEnabled = false; top.BackClipEnabled = false; top.PerspectiveEnabled = false;
-                ed.SetCurrentView(top);
-            }
-            object oldSnap = AcadApp.GetSystemVariable("OSMODE"), old3dSnap = AcadApp.GetSystemVariable("3DOSMODE");
-            try
-            {
-                AcadApp.SetSystemVariable("OSMODE", 0); AcadApp.SetSystemVariable("3DOSMODE", 0);
-                PointCloudUtils.UncropPointCloudById(ed, state.Cloud);
-                PointCloudUtils.CropPointCloudPolygonById(ed, state.Cloud, strip.Select(p => new Point3d(p.X, p.Y, 0)).ToList());
-            }
-            finally
-            {
-                AcadApp.SetSystemVariable("OSMODE", oldSnap); AcadApp.SetSystemVariable("3DOSMODE", old3dSnap);
-            }
             double index = state.Rows[state.Index] * job.Frame.Spacing;
             GridXY mid = state.Columns ? job.Frame.World(index, (job.MinV + job.MaxV) / 2) :
                 job.Frame.World((job.MinU + job.MaxU) / 2, index);
             Vector3d axis = state.Columns ? new Vector3d(-job.Frame.AxisY, job.Frame.AxisX, 0) : new Vector3d(job.Frame.AxisX, job.Frame.AxisY, 0);
             Point3d center = new(mid.X, mid.Y, (state.MinZ + state.MaxZ) / 2);
+            if (plan)
+            {
+                // Preserve the current plan zoom/orientation when stepping. On entry,
+                // use the saved overview but center it on the active slice.
+                using ViewTableRecord currentPlan = ed.GetCurrentView();
+                bool alreadyPlan = !currentPlan.PerspectiveEnabled &&
+                    Math.Abs(currentPlan.ViewDirection.GetNormal().DotProduct(Vector3d.ZAxis)) > 1 - 1e-8;
+                using ViewTableRecord overview = (ViewTableRecord)(alreadyPlan ? currentPlan : state.View).Clone();
+                ed.CurrentUserCoordinateSystem = state.Ucs;
+                overview.ViewDirection = Vector3d.ZAxis;
+                overview.PerspectiveEnabled = false;
+                overview.FrontClipEnabled = false; overview.BackClipEnabled = false;
+                overview.Target = new Point3d(mid.X, mid.Y, 0);
+                overview.CenterPoint = Point2d.Origin;
+                ed.SetCurrentView(overview);
+                state.Position = state.Position.WithPlan(true);
+                ed.Regen();
+                ReportSlice(state);
+                return;
+            }
             ViewState.SetCrossSectionUcs(center, axis); ViewState.PlanCurrentUcs(ed);
             using ViewTableRecord view = ed.GetCurrentView();
             double aspect = view.Width / Math.Max(view.Height, 1e-8);
@@ -327,10 +336,15 @@ namespace CLV_CivilTools.PointCloud
             view.Width = view.Height * aspect;
             view.FrontClipAtEye = false; view.FrontClipDistance = state.Thickness / 2; view.BackClipDistance = -state.Thickness / 2;
             view.FrontClipEnabled = true; view.BackClipEnabled = true;
-            ed.SetCurrentView(view); state.PlanView = false; ed.Regen();
-            ed.WriteMessage("\nCLOUD GRID TEST: " + (state.Columns ? "column " : "row ") + state.Rows[state.Index] +
+            ed.SetCurrentView(view); state.Position = state.Position.WithPlan(false); ed.Regen();
+            ReportSlice(state);
+        }
+
+        private static void ReportSlice(Review state)
+        {
+            state.Document.Editor.WriteMessage("\nCLOUD GRID TEST: " + (state.Columns ? "column " : "row ") + state.Rows[state.Index] +
                 " (" + (state.Index + 1) + "/" + state.Rows.Length + "), total thickness " + state.Thickness.ToString("F3", CultureInfo.InvariantCulture) +
-                ". NEXT/BACK changes view only; SET Z holds XY fixed. CGEND restores the source cloud.");
+                (state.PlanView ? ". PLAN: full cloud, highlighted slice; NEXT/BACK stays in plan." : ". SECTION: temporary view clipping; NEXT/BACK stays in section.") + " SET Z holds XY fixed. CGEND restores styles/view.");
         }
 
         private static void EndReview(Document d)
@@ -351,6 +365,7 @@ namespace CLV_CivilTools.PointCloud
                 source.UpgradeOpen(); source.Visible = visible != 0;
                 clone.UpgradeOpen(); clone.Erase(); restored++;
             }
+            RestoreReviewSurfaces(d.Database, tr);
             tr.Commit();
             if (review != null && ReferenceEquals(review.Document, d))
             {
@@ -359,7 +374,7 @@ namespace CLV_CivilTools.PointCloud
                 d.Editor.SetCurrentView(review.View); review.View.Dispose(); review = null;
             }
             d.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); d.Editor.Regen();
-            d.Editor.WriteMessage("\nGrid review ended. Restored " + restored + " source cloud(s); removed only tagged review copies. Grid points and corrections retained.");
+            d.Editor.WriteMessage("\nGrid review ended. Restored " + restored + " source cloud(s); removed only tagged review copies and restored saved surface styles. Grid points and corrections retained.");
         }
 
         private static bool HasReviewClones(Document d)
@@ -477,6 +492,11 @@ namespace CLV_CivilTools.PointCloud
             }
             catch (System.Exception error)
             {
+                if (review != null && ReferenceEquals(review.Document, d))
+                {
+                    try { EndReview(d); }
+                    catch (System.Exception recovery) { d.Editor.WriteMessage("\nRecovery pending: " + recovery.Message); }
+                }
                 d.Editor.WriteMessage("\nCLOUD GRID TEST: " + error.Message + "\nIf a review was active, use CGEND to restore the original cloud/view.");
             }
             finally

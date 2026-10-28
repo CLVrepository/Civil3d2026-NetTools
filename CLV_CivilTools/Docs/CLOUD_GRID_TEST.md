@@ -1,3 +1,24 @@
+# Review revision acceptance - 2026-10-28
+
+**Read this section before the historical starter instructions below.** It supersedes their clone/crop, plan and confirmation behavior.
+
+The source baseline is `CLVrepository/Civil3d2026-NetTools`, `work` at `55f10898f92b19a1b5d82ecdea07ab62c0376d8c`. This is a candidate patch; it is not deployed.
+
+New reviews use view clipping for section thickness and never clone, hide or crop the source cloud. In plan, the cloud keeps its existing display, and a temporary cyan strip outlines the active slice. It is deliberately not a polygon-cropped cloud in plan. That eliminates native cloud crop commands from the repeated review path. It does not repair a source already restricted by earlier native state.
+
+Editable surfaces are temporarily assigned a private no-display style; original style IDs are journaled on each surface. Shared styles and geometry are untouched. CGEND restores them (including after saving/reopening), while preserving an explicit user style change during review. Data-reference surfaces are skipped; locked surface layers stop setup without committing changes. Esc before setup does nothing; canceling a point-edit picker leaves the review active until CGEND. An exception during active review attempts CGEND cleanup. Recovery journals remain if restoration cannot complete.
+
+## Civil 3D acceptance on a drawing copy
+1. Record source handle, placement/rotation/scale, crop count/flags, native bounds, scan/region visibility, surface style IDs and representative corrected/excluded/COGO coordinates. Run CGCLOUDDIAG.
+2. Start CGREVIEW in Columns, total thickness 0.25, from a point on a known nonzero column. Confirm it starts there. All editable surfaces must disappear without geometry/style-definition changes.
+3. Step columns 0-3 (or four populated columns) in section. Run CGPLAN; confirm cyan strip matches the active column. CGNEXT/CGBACK must stay in plan, move the strip/center and clamp at both ends. Native PLAN World followed by CGNEXT must stay in plan too. CGSECTION must return to that same column and thickness.
+4. Adjust a point Z, exclude one, add ground and COGO points. Cancel the edit pickers. CGEND must retain these edits and restore original styles/UCS/view; no new cloud reference may exist and cloud crop/visibility/placement state must match step 1.
+5. Repeat review/end three times in both Rows and Columns. No progressive cloud restriction is acceptable. Call CGFULLCLOUD twice; no Yes/No prompt may appear. Multiple clouds retain only the numbered target selector, and an older tagged review clone must still require CGEND.
+6. Cancel each setup prompt; styles/cloud state must remain original. Test a locked surface layer, deleted review cloud, save/reopen with hidden styles, CGEND recovery, and deliberate style change during review. Corrupt/missing original style must retain the journal and report recovery pending. Verify Undo behavior and drawing close/reopen.
+7. For the already affected source: CGEND, CGFULLCLOUD, CGCLOUDDIAG. If still restricted with crops=0/ShowCropped=False, stop: this patch has not demonstrated recovery. Preserve the source; do not detach/reinsert, reset scans/regions, or change placement. Send visual results and full diagnostic log for further native investigation.
+
+Automated checks cover geometry and cursor/mode transitions; the host compile checks API compatibility. They do not exercise the Civil 3D native display engine or database style transactions.
+
 # Ground grid / cloud slice starter
 
 This is a first native Civil 3D trial, not a production extraction workflow. Start on a disposable drawing copy with a roughly 20 x 20 test area. The initial test uses one attached RCP/RCS point cloud and an existing temporary TIN derived from that cloud. It does not build the temporary TIN, classify raw returns, or build the final deliverable surface.

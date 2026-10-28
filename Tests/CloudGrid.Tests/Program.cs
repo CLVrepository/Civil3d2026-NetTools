@@ -64,6 +64,26 @@ public static class CloudGridTests
         Check("rotated added station retained", Math.Abs(rotatedLocal.X - 7.4) < 1e-7 && rotatedAdd.Column == CloudGridMath.OffGrid);
         Reject("invalid supplemental pick", () => CloudGridMath.ProjectToSlice(frame, false, 2, new GridXY(double.NaN, 0)));
         Reject("reserved non-grid slice", () => CloudGridMath.ProjectToSlice(frame, false, CloudGridMath.OffGrid, new GridXY(1, 0)));
-        return count + "/" + count + " cloud grid geometry checks passed.";
+        for (int cycle = 0; cycle < 3; cycle++)
+        {
+            var cursor = new CloudGridReviewPosition(0, false);
+            Check("new review starts in section", !cursor.PlanView && cursor.Index == 0);
+            cursor = cursor.Move(-1, 4);
+            Check("back stops at first section", cursor.Index == 0 && !cursor.PlanView);
+            cursor = cursor.Move(1, 4).WithPlan(true);
+            Check("switch to plan retains slice", cursor.Index == 1 && cursor.PlanView);
+            cursor = cursor.Move(1, 4).Move(1, 4).Move(1, 4);
+            Check("plan next stops at last slice", cursor.Index == 3 && cursor.PlanView);
+            cursor = cursor.Move(-1, 4);
+            Check("back retains plan mode", cursor.Index == 2 && cursor.PlanView);
+            cursor = cursor.WithPlan(false);
+            Check("section returns to chosen slice", cursor.Index == 2 && !cursor.PlanView);
+            cursor = cursor.Move(-1, 4);
+            Check("section back retains mode", cursor.Index == 1 && !cursor.PlanView);
+            Check("single populated row clamps", cursor.Move(100, 1).Index == 0);
+        }
+        Reject("no populated slices rejected", () => new CloudGridReviewPosition().Move(1, 0));
+        Check("large navigation delta cannot overflow", new CloudGridReviewPosition(3, true).Move(int.MaxValue, 4).Index == 3);
+        return count + "/" + count + " cloud grid geometry/navigation checks passed.";
     }
 }

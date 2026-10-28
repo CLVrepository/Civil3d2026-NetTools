@@ -49,12 +49,7 @@ namespace CLV_CivilTools.PointCloud
                 }
                 var target = (PointCloudEx)tr.GetObject(clouds[selected], OpenMode.ForRead);
                 ed.WriteMessage("\nRestore cloud handle " + target.Handle + " on layer " + target.Layer +
-                    ". Restore R2 removes ALL crop boundaries, explicitly turns cropped display OFF, and disables view front/back clipping.");
-                var options = new PromptKeywordOptions("\nRestore full cloud display [Yes/No] <No>: ");
-                options.Keywords.Add("Yes"); options.Keywords.Add("No");
-                options.Keywords.Default = "No"; options.AllowNone = true;
-                var answer = ed.GetKeywords(options);
-                if (answer.Status != PromptStatus.OK || answer.StringResult != "Yes") return;
+                    ". Restore R3 removes ALL crop boundaries, explicitly turns cropped display OFF, and disables view front/back clipping.");
                 // Direct managed API: no native cloud-selection prompt or implied selection.
                 target = (PointCloudEx)tr.GetObject(clouds[selected], OpenMode.ForWrite, false, true);
                 int previousCrops = target.getCroppingCount();
@@ -76,7 +71,7 @@ namespace CLV_CivilTools.PointCloud
                 ed.SetCurrentView(view);
                 ed.SetImpliedSelection(Array.Empty<ObjectId>());
                 ed.Regen();
-                ed.WriteMessage("\nRestore R2: crops=" + remainingCrops + ", ShowCropped=" + croppedDisplay +
+                ed.WriteMessage("\nRestore R3: crops=" + remainingCrops + ", ShowCropped=" + croppedDisplay +
                     "; front/back view clipping disabled. Grid points, exclusions and elevations retained. Check the display; if still restricted, run CGCLOUDDIAG. Hidden scans/regions and source-file contents are unchanged.");
             }
             catch (System.Exception error)
