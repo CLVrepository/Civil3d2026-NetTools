@@ -6,6 +6,7 @@ using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.Civil.ApplicationServices;
+using CLV_CivilTools.Shared;
 using CogoPoint = Autodesk.Civil.DatabaseServices.CogoPoint;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
@@ -98,13 +99,12 @@ namespace CLV_CivilTools.PointCloud
                     { evidence = "no native object-snap flag; history=" + history; return; }
                     if ((history & reject) != 0)
                     { evidence = "native input flags rejected: " + (history & reject); return; }
-                    if ((context.ObjectSnapMask & ObjectSnapMasks.Node) == 0)
-                    { evidence = "native snap was not NODE; mask=" + context.ObjectSnapMask; return; }
                     var paths = context.GetKeyPointEntities();
                     // Evidence must identify the active review cloud, not merely
                     // an entity under the cursor or a nearby point/line.
                     if (paths.Length != 1 || !paths[0].GetObjectIds().Contains(state.Cloud))
-                    { evidence = "native snap did not identify the active review cloud"; return; }
+                    { evidence = "native snap did not identify the active review cloud; paths=" + paths.Length +
+                        ", mask=" + context.ObjectSnapMask; return; }
                     Point3d snapped = context.ObjectSnappedPoint;
                     if (!double.IsFinite(snapped.X) || !double.IsFinite(snapped.Y) || !double.IsFinite(snapped.Z) ||
                         context.ComputedPoint.DistanceTo(snapped) > 1e-7)
@@ -116,11 +116,21 @@ namespace CLV_CivilTools.PointCloud
             };
             try
             {
-                // AutoCAD NODE is OSMODE=8. 3DOSMODE=1 disables face snaps;
-                // 128 is not a documented AutoCAD NODE mode.
-                AcadApp.SetSystemVariable("OSMODE", 8); AcadApp.SetSystemVariable("3DOSMODE", 1);
+                // Match the native-tested Add Point Cloud acquisition path.
+                // Its 3D cloud snap is not the regular OSMODE NODE mask.
+                int index = state.Rows[state.Index];
+                Job job = state.Job;
+                Vector3d axis = state.Columns ? new Vector3d(-job.Frame.AxisY, job.Frame.AxisX, 0) :
+                    new Vector3d(job.Frame.AxisX, job.Frame.AxisY, 0);
+                GridXY center = state.Columns ? job.Frame.World(index * job.Frame.Spacing, (job.MinV + job.MaxV) / 2) :
+                    job.Frame.World((job.MinU + job.MaxU) / 2, index * job.Frame.Spacing);
+                ViewState.SetCrossSectionUcs(new Point3d(center.X, center.Y, (state.MinZ + state.MaxZ) / 2), axis);
+                AcadApp.SetSystemVariable("OSMODE", 0); AcadApp.SetSystemVariable("3DOSMODE", 128);
                 AcadApp.SetSystemVariable("OSNAPZ", 0); AcadApp.SetSystemVariable("ORTHOMODE", 0);
                 AcadApp.SetSystemVariable("SNAPMODE", 0);
+                ed.WriteMessage("\nMOVE POINT R12 cloud input: OSMODE=" + AcadApp.GetSystemVariable("OSMODE") +
+                    ", 3DOSMODE=" + AcadApp.GetSystemVariable("3DOSMODE") + ", OSNAPZ=" + AcadApp.GetSystemVariable("OSNAPZ") +
+                    ", OSNAPCOORD=" + AcadApp.GetSystemVariable("OSNAPCOORD") + ". Section UCS matches Add Point; native snap proof is required.");
                 monitoring = true;
                 ed.PointMonitor += monitor;
                 while (true)
@@ -129,7 +139,7 @@ namespace CLV_CivilTools.PointCloud
                     evidence = "no matching point-monitor callback";
                     var result = ed.GetPoint(new PromptPointOptions("\nSnap to review-cloud NODE for elevation (Enter/Esc cancels): ") { AllowNone = true });
                     if (result.Status != PromptStatus.OK) return null;
-                    Point3d picked = result.Value.TransformBy(ucs);
+                    Point3d picked = result.Value.TransformBy(ed.CurrentUserCoordinateSystem);
                     if (lastSnap is Point3d snapped && picked.DistanceTo(snapped) <= 1e-7)
                         return snapped.Z;
                     ed.WriteMessage("\nPoint unchanged: " + evidence + ". Wait for NODE snap and retry, or Esc to cancel.");
@@ -141,6 +151,8 @@ namespace CLV_CivilTools.PointCloud
                 System.Exception? restoreError = null;
                 try { ed.PointMonitor -= monitor; }
                 catch (System.Exception error) { restoreError = error; }
+                try { ed.CurrentUserCoordinateSystem = ucs; }
+                catch (System.Exception error) { restoreError ??= error; }
                 for (int i = 0; i < names.Length; i++)
                 {
                     try { AcadApp.SetSystemVariable(names[i], saved[i]); }
