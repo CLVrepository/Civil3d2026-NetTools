@@ -43,6 +43,14 @@ namespace CLV_CivilTools.PointCloud
         {
             AcadApp.DocumentManager.DocumentToBeDestroyed += (_, args) =>
             {
+                // Surface-only best effort; never run cloud commands during close.
+                // Saved journals also permit restoration after reopening a review.
+                try { RestoreReviewSurfaces(args.Document.Database); }
+                catch (System.Exception error)
+                {
+                    System.Diagnostics.Trace.WriteLine("Review surface styles were not restored: " + error.Message +
+                        " Saved recovery records are retained; reopen and run CGEND.");
+                }
                 if (review != null && ReferenceEquals(review.Document, args.Document))
                 {
                     StopReviewMarkers(review);
@@ -185,6 +193,7 @@ namespace CLV_CivilTools.PointCloud
                 new TypedValue(1005, cloudId.Handle.ToString()), new TypedValue(1070, (short)1));
             Model(document.Database, tr, OpenMode.ForWrite).AppendEntity(clone); tr.AddNewlyCreatedDBObject(clone, true);
             source.UpgradeOpen(); source.Visible = false;
+            HideReviewSurfaces(document.Database, tr);
             var state = new Review
             {
                 Document = document, Job = job, Cloud = clone.ObjectId, Columns = columns,
@@ -194,9 +203,20 @@ namespace CLV_CivilTools.PointCloud
             };
             if (state.Rows.Length == 0) { state.View.Dispose(); throw new InvalidOperationException("No points belong to grid lines in that direction."); }
             tr.Commit(); review = state;
-            StartReviewMarkers(state);
-            ed.WriteMessage("\nReview uses a tagged temporary cloud copy; source is temporarily hidden. Run CGEND before saving/closing. CGEND also recovers saved review copies.");
-            ShowRow(state);
+            try
+            {
+                StartReviewMarkers(state);
+                ed.WriteMessage("\nReview uses a tagged temporary cloud copy; source is temporarily hidden. Run CGEND before saving/closing. CGEND also recovers saved review copies.");
+                ShowRow(state);
+            }
+            catch
+            {
+                // Preserve the existing cloud recovery path, but undo surface
+                // presentation if initial review display setup fails.
+                try { RestoreReviewSurfaces(document.Database); }
+                catch (System.Exception error) { ed.WriteMessage("\nSurface recovery pending: " + error.Message); }
+                throw;
+            }
         });
 
         [CommandMethod("CGNEXT", CommandFlags.Modal)]
@@ -407,6 +427,8 @@ namespace CLV_CivilTools.PointCloud
                 d.Editor.SetCurrentView(review.View); review.View.Dispose(); review = null;
             }
             d.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); d.Editor.Regen();
+            RestoreReviewSurfaces(d.Database);
+            d.Editor.Regen();
             d.Editor.WriteMessage("\nGrid review ended. Restored " + restored + " source cloud(s); removed only tagged review copies. Grid points and corrections retained.");
         }
 
