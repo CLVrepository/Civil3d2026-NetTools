@@ -335,6 +335,54 @@ namespace CLV_CivilTools.PointCloud
 
         private static void EndReview(Document d)
         {
+            // Retire the cropped display while the tagged reference still exists.
+            // Erasing a cropped clone immediately leaves no live object on which
+            // to flush its display state. Do not clear the original source's crops.
+            var retiring = new List<ObjectId>();
+            using (Transaction prepare = d.Database.TransactionManager.StartTransaction())
+            {
+                foreach (ObjectId id in Model(d.Database, prepare, OpenMode.ForRead).Cast<ObjectId>().ToArray())
+                {
+                    if (prepare.GetObject(id, OpenMode.ForRead) is not PointCloudEx clone) continue;
+                    using ResultBuffer? data = clone.GetXDataForApplication(App);
+                    TypedValue[] values = data?.AsArray() ?? Array.Empty<TypedValue>();
+                    if (values.Length != 4 || (string?)values[1].Value != "REVIEW") continue;
+                    if (values[2].TypeCode != 1005 || values[2].Value is not string sourceHandle ||
+                        !long.TryParse(sourceHandle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long handle) ||
+                        values[3].Value is not short visible || visible is not (0 or 1))
+                        throw new InvalidOperationException("Invalid review recovery tag; tagged copy retained.");
+                    ObjectId sourceId = d.Database.GetObjectId(false, new Handle(handle), 0);
+                    if (sourceId.IsNull || sourceId == id || sourceId.IsErased ||
+                        prepare.GetObject(sourceId, OpenMode.ForRead) is not PointCloudEx source ||
+                        source.PointCloudDefExId != clone.PointCloudDefExId)
+                        throw new InvalidOperationException("Review source could not be verified; tagged copy retained.");
+                    d.Editor.WriteMessage("\nR8 retire: copy=" + clone.Handle + ", source=" + source.Handle +
+                        ", definition=" + clone.PointCloudDefExId.Handle + ", copy crops=" + clone.getCroppingCount() +
+                        ", source crops=" + source.getCroppingCount() + ", source ShowCropped=" + source.ShowCropped);
+                    retiring.Add(id);
+                }
+                // Validate every pair before modifying any copy.
+                foreach (ObjectId id in retiring)
+                {
+                    var clone = (PointCloudEx)prepare.GetObject(id, OpenMode.ForWrite);
+                    int before = clone.getCroppingCount();
+                    bool cleared = clone.clearCropping();
+                    if (before > 0 && !cleared)
+                        throw new InvalidOperationException("Could not clear review-copy crops; copy retained for CGEND retry.");
+                    clone.ShowCropped = false; clone.CroppingInverted = false;
+                    if (clone.getCroppingCount() != 0 || clone.ShowCropped || clone.CroppingInverted)
+                        throw new InvalidOperationException("Review-copy display did not reset; copy retained for CGEND retry.");
+                    clone.RecordGraphicsModified(true);
+                }
+                prepare.Commit();
+            }
+            if (retiring.Count != 0)
+            {
+                d.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
+                d.Editor.Regen();
+                // If this redraw fails, the source/copy tag and visibility remain
+                // recoverable; do not erase the only recovery identity.
+            }
             using Transaction tr = d.Database.TransactionManager.StartTransaction();
             int restored = 0;
             foreach (ObjectId id in Model(d.Database, tr, OpenMode.ForRead).Cast<ObjectId>().ToArray())
@@ -348,7 +396,7 @@ namespace CLV_CivilTools.PointCloud
                 if (sourceId.IsNull || sourceId == id || sourceId.IsErased || visible is not (0 or 1) || tr.GetObject(sourceId, OpenMode.ForRead) is not PointCloudEx source ||
                     source.PointCloudDefExId != clone.PointCloudDefExId)
                     throw new InvalidOperationException("Review source could not be verified. No recovery changes applied.");
-                source.UpgradeOpen(); source.Visible = visible != 0;
+                source.UpgradeOpen(); source.Visible = visible != 0; source.RecordGraphicsModified(true);
                 clone.UpgradeOpen(); clone.Erase(); restored++;
             }
             tr.Commit();
