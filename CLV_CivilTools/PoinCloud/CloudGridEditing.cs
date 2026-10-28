@@ -25,35 +25,7 @@ namespace CLV_CivilTools.PointCloud
         }
 
         [CommandMethod("CGMOVEZ", CommandFlags.Modal)]
-        public static void MoveElevation() => Run(d =>
-        {
-            Review? state = CurrentReview(d);
-            ObjectId[] ids = PickGridPoints(d, state, true);
-            if (ids.Length == 0) return;
-            try
-            {
-                var options = new PromptDoubleOptions("\nRelative WORLD Z change in drawing units (negative lowers, e.g. -0.04)")
-                { AllowNegative = true, AllowZero = false };
-                var result = d.Editor.GetDouble(options);
-                if (result.Status != PromptStatus.OK) return;
-                if (!double.IsFinite(result.Value)) throw new ArgumentException("Z change must be finite.");
-                using Transaction tr = d.Database.TransactionManager.StartTransaction();
-                foreach (ObjectId id in ids)
-                {
-                    var point = (Entity)tr.GetObject(id, OpenMode.ForWrite);
-                    Tag tag = state == null ? ReadTag(point) ?? throw new InvalidOperationException("Grid point metadata missing.") : RequireCurrent(state, point);
-                    Point3d p = PointPosition(point);
-                    double z = p.Z + result.Value;
-                    if (!double.IsFinite(z)) throw new ArgumentException("Resulting elevation must be finite.");
-                    SetPointElevation(point, z);
-                    WriteTag(point, tag with { Status = tag.Status == "Excluded" ? "Excluded" : "Adjusted" });
-                }
-                tr.Commit(); d.Editor.Regen();
-                d.Editor.WriteMessage("\nMoved " + ids.Length + " grid POINT(s) by world Z " +
-                    result.Value.ToString("G", CultureInfo.InvariantCulture) + ". XY and original sampled Z retained. Navigation will not resample.");
-            }
-            finally { d.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
-        });
+        public static void MoveElevation() => Run(PickCloudElevation);
 
         [CommandMethod("CGSELECT", CommandFlags.Modal)]
         public static void SelectGridPoints() => Run(d =>
@@ -63,9 +35,9 @@ namespace CLV_CivilTools.PointCloud
             d.Editor.WriteMessage("\nSelected " + ids.Length + " review point(s). Use Properties or another command; ordinary commands retain their own UCS behavior.");
         });
 
-        private static ObjectId PickGridPoint(Document d, Review? state)
+        private static ObjectId PickGridPoint(Document d, Review? state, bool strict = false)
         {
-            ObjectId[] ids = PickGridPoints(d, state, false);
+            ObjectId[] ids = PickGridPoints(d, state, false, strict);
             d.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
             return ids.Length == 0 ? ObjectId.Null : ids[0];
         }
@@ -125,7 +97,7 @@ namespace CLV_CivilTools.PointCloud
             return candidates;
         }
 
-        private static ObjectId[] PickGridPoints(Document d, Review? state, bool multiple)
+        private static ObjectId[] PickGridPoints(Document d, Review? state, bool multiple, bool strict = false)
         {
             Editor ed = d.Editor;
             var chosen = new HashSet<ObjectId>();
@@ -188,6 +160,7 @@ namespace CLV_CivilTools.PointCloud
                     {
                         Point2d cursor = ProjectToScreen(ed, pick.Value.TransformBy(ed.CurrentUserCoordinateSystem));
                         double radius = Math.Max(6, Convert.ToDouble(AcadApp.GetSystemVariable("PICKBOX"), CultureInfo.InvariantCulture) + 3);
+                        if (strict) radius = Math.Min(radius, 12);
                         var near = candidates.Select(p => (Point: p, Distance: Math.Sqrt(Math.Pow(p.X - cursor.X, 2) + Math.Pow(p.Y - cursor.Y, 2))))
                             .Where(p => p.Distance <= radius).OrderBy(p => p.Distance).Take(2).ToArray();
                         if (near.Length > 1 && near[1].Distance - near[0].Distance < 1)
@@ -215,3 +188,4 @@ namespace CLV_CivilTools.PointCloud
         }
     }
 }
+
