@@ -1,3 +1,9 @@
+## 2026-10-28 - Controlled viewport synchronization experiment R5 (native acceptance pending)
+- New native report shows live front/back clips enabled at +/-0.125, atEye=false, orthographic, VIEWMODE=22 and full source/definition bounds. This does not reproduce the earlier restricted native entity, and it does not establish an incorrect camera angle.
+- Adds optional CGVIEWSYNCTEST only; leaves CGREVIEW/CGSECTION camera, clipping arithmetic and the three independent UI changes unchanged. Logs live and stored camera/clip state plus Editor.ActiveViewportId and Database.CurrentViewportTableRecordId.
+- Exports live tiled views with UpdateTiledViewportsInDatabase, verifies the active stored record matches, then reloads using UpdateTiledViewportsFromDatabase and regenerates. Stops without importing if export does not match; restores/re-synchronizes the original live view if reload changes it. No cloud or surface operation.
+- This is a native experiment, not a confirmed repair or proof that the cloud renderer requires database synchronization. After testing, CGEND then CGVIEWSYNCTEST synchronizes the restored overview; do not save the clipped review view. Compare ordinary out-of-slab geometry with the cloud.
+
 # Review revision acceptance - 2026-10-28
 
 **Read this section before the historical starter instructions below.** It supersedes their clone/crop, plan and confirmation behavior.
