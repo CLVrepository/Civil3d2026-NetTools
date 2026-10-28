@@ -70,20 +70,7 @@ namespace CLV_CivilTools.PointCloud
         {
             ClearReviewMarkers(state);
             state.MarkerPending = false;
-            if (!ReferenceEquals(AcadApp.DocumentManager.MdiActiveDocument, state.Document)) return;
-            if (state.PlanView)
-            {
-                GridXY[] strip = CloudGridMath.Strip(state.Job.Frame, state.Columns, state.Rows[state.Index],
-                    state.Job.MinU, state.Job.MaxU, state.Job.MinV, state.Job.MaxV, state.Thickness);
-                var viewport = new IntegerCollection(new[] { Convert.ToInt32(AcadApp.GetSystemVariable("CVPORT")) });
-                for (int i = 0; i < strip.Length; i++)
-                {
-                    GridXY a = strip[i], b = strip[(i + 1) % strip.Length];
-                    AddReviewMarker(state, new Line(new Point3d(a.X, a.Y, state.MaxZ),
-                        new Point3d(b.X, b.Y, state.MaxZ)), viewport, new Tag(state.Job.Key, 0, 0, 0, "Adjusted"));
-                }
-                return;
-            }
+            if (state.PlanView || !ReferenceEquals(AcadApp.DocumentManager.MdiActiveDocument, state.Document)) return;
             var ed = state.Document.Editor;
             using ViewTableRecord view = ed.GetCurrentView();
             if (view.PerspectiveEnabled) return;

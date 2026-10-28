@@ -1,3 +1,11 @@
+## 2026-10-28 - Point-cloud rollback R7 (native acceptance pending)
+- Selectively restores the ground-grid review behavior from 55f10898f92b19a1b5d82ecdea07ab62c0376d8c, the historical revision immediately before surface hiding and plan-mode Next/Back changes. Does not reset repository history or revert unrelated tools. Restores CloudGridCommands/Markers/RestoreCommands and baseline geometry tests; removes the five later review/crop/sync helper files.
+- Removes R6 PointCloudCrop creation/readback/reconstruction from the review/recovery call paths after the reported native application crash following width entry. Exact faulting call is not established by the screenshot/log; no native crash fix is claimed from compilation.
+- Adds CGRECOVERYCHECK (read-only journal audit) and guards grid/review/end/full-restore commands when saved R6 crop or temporary-surface journals remain. Prefer a pre-R6 drawing copy. Never invoke crashing R6 CGREVIEW to recover a drawing.
+- Optional CGRECOVERDISPLAY supports only a saved originally-empty crop list: validates definition/placement/current count/flags, uses the baseline clearCropping/flag setters, restores verified surface styles, and archives journals rather than deleting them. It never creates/reads PointCloudCrop objects. Nonempty original crop snapshots, corrupt journals or changed state stop without a committed recovery; use a pre-R6 backup. Native visual recovery remains unverified.
+- Returning limitations: surfaces must be hidden manually; Next/Back switches to section; CGFULLCLOUD has its original Yes/No default-No confirmation; clone-based review/native crop commands and the earlier repeated-cycle restore restriction/selection problems return. Existing COGO/editing features at the chosen baseline are retained.
+- Targeted compilation and patch checks do not constitute native acceptance. Use a disposable pre-R6 drawing copy for the first slice/end test; do not run blocked test executables or change Windows security controls.
+
 # R6 native acceptance before production use
 
 Use a disposable drawing copy. This candidate temporarily changes the selected cloud entity's display crops, not its point-cloud files. It preserves a complete original-state journal. Do not claim source protection until visual restoration is tested.
