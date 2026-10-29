@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace CLV_CivilTools.PointCloud
 {
-    /// <summary>Matches selected measured points in WCS XY; never interpolates Z.</summary>
+    /// <summary>Matches measured points in WCS XY; never interpolates Z.</summary>
     internal static class VertexElevationMatcher
     {
         internal readonly record struct XY(double X, double Y);
@@ -52,8 +52,15 @@ namespace CLV_CivilTools.PointCloud
                         best = distanceSquared; closest = sample;
                     }
                 }
+                // A shot moved exactly to this vertex outranks nearby points on adjacent traces.
+                var exact = candidates.Where(p => p.X == v.X && p.Y == v.Y).ToList();
+                if (exact.Count != 0)
+                {
+                    candidates = exact;
+                    closest = exact.OrderBy(p => p.Key).First();
+                }
                 if (candidates.Count == 0)
-                    result[i] = new Match(i, null, "No selected point within XY tolerance.");
+                    result[i] = new Match(i, null, "No eligible point at this vertex or within fallback XY tolerance.");
                 else if (candidates.Max(p => p.Z) - candidates.Min(p => p.Z) > ElevationAgreement)
                     result[i] = new Match(i, null, "Conflicting elevations: "
                         + string.Join(", ", candidates.Take(6).Select(p => p.Label))
@@ -72,3 +79,4 @@ namespace CLV_CivilTools.PointCloud
         }
     }
 }
+

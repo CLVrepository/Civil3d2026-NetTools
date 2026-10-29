@@ -1,3 +1,9 @@
+## 2026-10-29 - Automatically find vertex points for 3D traces
+- Removes manual elevation-point selection from **3D POLYLINE FROM POINTS**. Select one or several 2D traces and the routine finds eligible model-space AutoCAD POINTs/COGO points automatically.
+- Exact vertex XY shots outrank nearby shots on adjacent lines. If no exact shot exists, uses the adjustable small XY tolerance. Missing or conflicting elevations report source handles/vertices and leave the entire batch unchanged.
+- Keeps original trace XY and measured point Z, with Keep/Replace and final confirmation. Points, surfaces, cloud views and existing editing tools remain unchanged. Native 3D output only; direct feature-line output is not included.
+- Targeted Autodesk/Civil-reference compile passed. Matching regression cases were added; executable tests remain blocked by this workspace's NuGet restore restriction. Full solution/native/Undo acceptance is still required.
+
 ## 2026-10-29 - Create 3D breakline traces directly from vertex points
 - Adds **3D POLYLINE FROM POINTS** to Q3 > ROADWAY > MOVE POINTS (PCT3DFROMPOINTS / PL3DFROMPOINTS). Use the top/toe/flow-line trace and elevation points already placed at its vertices; no temporary surface is needed.
 - Keeps exact trace XY/order/closure and takes Z from the selected AutoCAD POINTs or COGO points. All vertices must match within a chosen small XY tolerance; missing points, conflicting heights and reuse of one shot for multiple vertices stop conversion without partial changes. The original 2D line is kept by default, with explicit Replace and final Yes options.

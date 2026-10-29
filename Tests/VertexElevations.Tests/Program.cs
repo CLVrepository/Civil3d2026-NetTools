@@ -30,9 +30,21 @@ Check(M(new[] { new XY(0, 0) }, new[] { P(0, 0.001, 0, 100) })[0].Point != null,
 Check(M(new[] { new XY(0, 0) }, new[] { P(0, 0.0008, 0.0008, 100) })[0].Point == null, "circular radius excludes square corner");
 Check(M(new[] { new XY(0, 0) }, new[] { P(0, -0.0006, 0.0006, 100) })[0].Point != null, "negative XY inside circular radius");
 
-var conflict = M(new[] { new XY(0, 0) }, new[] { P(0, 0, 0, 100), P(1, 0.0005, 0, 110) })[0];
-Check(conflict.Point == null && conflict.Issue!.Contains("Conflicting"), "different nearby heights refuse even with an exact XY hit");
+var conflict = M(new[] { new XY(0, 0) }, new[] { P(0, 0, 0, 100), P(1, 0, 0, 110) })[0];
+Check(conflict.Point == null && conflict.Issue!.Contains("Conflicting"), "different coincident heights refuse");
 Check(conflict.Issue!.Contains("Point 0") && conflict.Issue.Contains("Point 1"), "conflict identifies source points");
+
+Check(M(new[] { new XY(0, 0) }, new[] { P(0, 0, 0, 100), P(1, 0.0005, 0, 110) })[0].Point!.Key == 0,
+    "exact vertex shot outranks adjacent higher point");
+Check(M(new[] { new XY(0, 0) }, new[] { P(0, 0.0002, 0, 100), P(1, 0.0005, 0, 110) })[0].Point == null,
+    "fallback without an exact shot still refuses conflicting heights");
+var closeLines = M(new[] { new XY(0, 0), new XY(0.0005, 0) },
+    new[] { P(0, 0, 0, 100), P(1, 0.0005, 0, 110) });
+Check(closeLines[0].Point!.Z == 100 && closeLines[1].Point!.Z == 110,
+    "close neighboring vertices retain their own exact shots");
+Check(M(new[] { new XY(0, 0) }, new[] { P(0, 1e-200, 0, 500), P(1, 0, 0, 100) })[0].Point!.Key == 1,
+    "exact priority survives distance-squared underflow");
+
 var duplicate = M(new[] { new XY(0, 0) }, new[] { P(3, 0, 0, 100), P(1, 0, 0, 100) })[0];
 Check(duplicate.Point!.Key == 1, "same-height duplicate tie is deterministic");
 Check(M(new[] { new XY(0, 0) }, new[] { P(2, 0.0005, 0, 100), P(1, 0, 0, 100) })[0].Point!.Key == 1, "same-height closest point");
@@ -58,3 +70,4 @@ var large = M(vertices, points);
 Check(large.All(m => m.Point != null), "10000-vertex trace matches");
 Check(large[9999].Point!.Z == 2899.99, "large trace retains final elevation");
 Console.WriteLine($"Passed {checks} vertex-elevation checks.");
+
