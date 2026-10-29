@@ -1,3 +1,10 @@
+## 2026-10-29 - Route 3D breaklines and kept 2D traces to separate layers
+- Renames **GROUND GRID - TEST** to **GROUND GRID**, with no grid behavior change.
+- Moves **3D POLYLINE FROM POINTS** under Q3 > ROADWAY > **POLYLINE TOOLS**.
+- New 3D-from-points output defaults to **V-DTM~GBRK** instead of inheriting Layer 0/source layers. The chosen existing destination controls parent appearance through ByLayer properties; 3D vertices receive the same destination layer.
+- Keep prompts for a separate original-2D destination, default **V-PNTC-TRACE-2D**. You can change both names, and successful choices are remembered per drawing. A missing retained-trace layer is created gray/nonplot after final Yes; existing layer properties remain unchanged. Missing DTM layers must be created/imported with drawing standards.
+- Cancel/No/errors leave geometry, layers and saved choices unchanged. Source elevation points and matching logic are unchanged. Targeted Autodesk/Civil-reference compilation passed; native layer routing, saved defaults and Undo/Redo still require workstation checks.
+
 ## 2026-10-29 - Automatically find vertex points for 3D traces
 - Removes manual elevation-point selection from **3D POLYLINE FROM POINTS**. Select one or several 2D traces and the routine finds eligible model-space AutoCAD POINTs/COGO points automatically.
 - Exact vertex XY shots outrank nearby shots on adjacent lines. If no exact shot exists, uses the adjustable small XY tolerance. Missing or conflicting elevations report source handles/vertices and leave the entire batch unchanged.

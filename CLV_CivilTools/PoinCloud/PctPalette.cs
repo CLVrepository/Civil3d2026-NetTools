@@ -106,7 +106,7 @@ namespace CLV_CivilTools
             layout.Controls.Add(CreateCommandButton("END VIEWS / RESTORE", "CGVIEWEND"));
 
             // CLOUD GRID STARTER
-            layout.Controls.Add(CreateSectionLabel("GROUND GRID - TEST"));
+            layout.Controls.Add(CreateSectionLabel("GROUND GRID"));
             layout.Controls.Add(CreateCommandButtonRow("CREATE GRID", "CGRID", "REVIEW GRID", "CGREVIEW"));
             layout.Controls.Add(CreateCommandButtonRow("PREVIOUS SLICE", "CGBACK", "NEXT SLICE", "CGNEXT"));
             layout.Controls.Add(CreateCommandButtonRow("PLAN", "CGPLAN", "SECTION", "CGSECTION"));
@@ -146,7 +146,6 @@ namespace CLV_CivilTools
             layout.Controls.Add(CreateSectionLabel("MOVE POINTS"));
             layout.Controls.Add(CreateCommandButton("TO SAMPLE LINE", "PCT5"));
             layout.Controls.Add(CreateCommandButton("MOVE POINTS TO VERTEX", "PCT9"));
-            layout.Controls.Add(CreateCommandButton("3D POLYLINE FROM POINTS", "PCT3DFROMPOINTS"));
 
             // MOVE POINTS + ADD VERTICES
             layout.Controls.Add(CreateSectionLabel("MOVE POINTS + ADD VERTICES"));
@@ -154,6 +153,7 @@ namespace CLV_CivilTools
 
             // POLYLINE TOOLS
             layout.Controls.Add(CreateSectionLabel("POLYLINE TOOLS"));
+            layout.Controls.Add(CreateCommandButton("3D POLYLINE FROM POINTS", "PCT3DFROMPOINTS"));
             layout.Controls.Add(CreateCommandButton("COPY VERTEX FROM PL TO PL", "PCT17V"));
             layout.Controls.Add(CreateCommandButton("ADD VERTEX @ CROSSING", "PCT20"));
             layout.Controls.Add(CreateCommandButton("IDENTIFY VERTICES", "PCT10"));

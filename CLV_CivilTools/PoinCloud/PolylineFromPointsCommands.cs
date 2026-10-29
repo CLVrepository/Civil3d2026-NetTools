@@ -12,7 +12,7 @@ using CogoPoint = Autodesk.Civil.DatabaseServices.CogoPoint;
 
 namespace CLV_CivilTools.PointCloud
 {
-    public static class PolylineFromPointsCommands
+    public static partial class PolylineFromPointsCommands
     {
         private sealed record Conversion(Polyline Source, Point3d[] Vertices,
             VertexElevationMatcher.Match[] Matches, bool HasWidths);
@@ -54,8 +54,23 @@ namespace CLV_CivilTools.PointCloud
                 if (keepResult.Status != PromptStatus.OK && keepResult.Status != PromptStatus.None) return;
                 bool replace = string.Equals(keepResult.StringResult, "Replace", StringComparison.OrdinalIgnoreCase);
 
+                LayerChoices previousLayers = ReadLayerChoices(db);
+                string? outputLayerName = PromptLayerName(ed, "3D DTM breakline layer", previousLayers.Output);
+                if (outputLayerName == null) return;
+                string retainedLayerName = previousLayers.Retained;
+                if (!replace)
+                {
+                    string? pickedLayer = PromptLayerName(ed, "Layer for kept 2D traces", previousLayers.Retained);
+                    if (pickedLayer == null) return;
+                    retainedLayerName = pickedLayer;
+                    if (string.Equals(outputLayerName, retainedLayerName, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Choose different layers for 3D breaklines and kept 2D traces.");
+                }
+
                 using Transaction tr = db.TransactionManager.StartTransaction();
                 ObjectId modelId = SymbolUtilityServices.GetBlockModelSpaceId(db);
+                ObjectId outputLayerId = RequireExistingDestination(db, tr, outputLayerName);
+                bool createRetainedLayer = ValidateRetainedDestination(db, tr, retainedLayerName, replace);
                 var sources = new List<(Polyline Source, Point3d[] Vertices, bool HasWidths)>();
                 foreach (ObjectId id in selected.Value.GetObjectIds())
                 {
@@ -111,12 +126,18 @@ namespace CLV_CivilTools.PointCloud
                     "\nReady: {0} polylines, {1} exact and {2} tolerance matches. Z range {3:F3} to {4:F3}. {5} originals.",
                     conversions.Count, exactCount, fallbackCount, minZ, maxZ, replace ? "Replace" : "Keep"));
                 if (conversions.Any(c => c.HasWidths)) ed.WriteMessage("\n3D results are centerlines without 2D width/thickness.");
+                ed.WriteMessage("\n3D destination: " + outputLayerName
+                    + (replace ? "; original 2D traces will be erased." : "; kept 2D destination: " + retainedLayerName + "."));
+                if (createRetainedLayer) ed.WriteMessage("\nThe new kept-2D layer will be gray and nonplotting.");
                 var confirm = new PromptKeywordOptions("\nCreate all 3D polylines [Yes/No] <No>: ");
                 confirm.Keywords.Add("Yes"); confirm.Keywords.Add("No");
                 confirm.Keywords.Default = "No"; confirm.AllowNone = true;
                 PromptResult confirmation = ed.GetKeywords(confirm);
                 if (confirmation.Status != PromptStatus.OK || !string.Equals(confirmation.StringResult, "Yes", StringComparison.OrdinalIgnoreCase)) return;
 
+                ObjectId retainedLayerId = replace ? ObjectId.Null : GetRetainedDestination(db, tr, retainedLayerName);
+                if (!replace && retainedLayerId == outputLayerId)
+                    throw new InvalidOperationException("3D breaklines and kept 2D traces must use different layers.");
                 var model = (BlockTableRecord)tr.GetObject(modelId, OpenMode.ForWrite);
                 var outputs = new List<ObjectId>();
                 foreach (Conversion conversion in conversions)
@@ -127,25 +148,38 @@ namespace CLV_CivilTools.PointCloud
                     using var output = new Polyline3d(Poly3dType.SimplePoly, positions, conversion.Source.Closed);
                     output.SetDatabaseDefaults(db); output.SetPropertiesFrom(conversion.Source);
                     model.AppendEntity(output); tr.AddNewlyCreatedDBObject(output, true);
+                    ApplyBreaklineLayer(output, outputLayerId);
                     int readback = 0;
                     foreach (ObjectId id in output)
                     {
-                        Point3d actual = ((PolylineVertex3d)tr.GetObject(id, OpenMode.ForRead)).Position;
+                        var vertex = (PolylineVertex3d)tr.GetObject(id, OpenMode.ForWrite);
+                        vertex.LayerId = outputLayerId;
+                        Point3d actual = vertex.Position;
                         if (readback >= positions.Count || actual.X != positions[readback].X || actual.Y != positions[readback].Y
-                            || actual.Z != positions[readback].Z)
+                            || actual.Z != positions[readback].Z || vertex.LayerId != outputLayerId)
                             throw new InvalidOperationException("3D vertex verification failed; the whole conversion was rolled back.");
                         readback++;
                     }
-                    if (readback != positions.Count || output.Closed != conversion.Source.Closed)
+                    if (readback != positions.Count || output.Closed != conversion.Source.Closed || output.LayerId != outputLayerId)
                         throw new InvalidOperationException("3D count/closure verification failed; the whole conversion was rolled back.");
                     outputs.Add(output.ObjectId);
                 }
                 if (replace)
                     foreach (Conversion conversion in conversions) { conversion.Source.UpgradeOpen(); conversion.Source.Erase(); }
+                else
+                    foreach (Conversion conversion in conversions)
+                    {
+                        conversion.Source.UpgradeOpen();
+                        conversion.Source.LayerId = retainedLayerId;
+                        if (conversion.Source.LayerId != retainedLayerId)
+                            throw new InvalidOperationException("Retained 2D layer verification failed; the whole conversion was rolled back.");
+                    }
+                SaveLayerChoices(db, tr, new LayerChoices(outputLayerName, retainedLayerName));
                 tr.Commit();
                 ed.SetImpliedSelection(outputs.ToArray()); ed.Regen();
                 ed.WriteMessage($"\nCreated {outputs.Count} 3D polylines from detected vertex points."
-                    + (replace ? " Original 2D lines replaced." : " Original 2D lines retained.")
+                    + " 3D layer: " + outputLayerName + "."
+                    + (replace ? " Original 2D lines replaced." : " Original 2D lines retained on " + retainedLayerName + ".")
                     + " Source points were not changed. Add the 3D lines to the final surface as breaklines when ready.");
             }
             catch (Autodesk.AutoCAD.Runtime.Exception e) when (e.ErrorStatus == ErrorStatus.UserBreak) { }
@@ -224,3 +258,4 @@ namespace CLV_CivilTools.PointCloud
         }
     }
 }
+

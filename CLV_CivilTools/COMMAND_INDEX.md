@@ -1,3 +1,8 @@
+## 2026-10-29 - 3D-from-points destination layers
+- ROADWAY section label **GROUND GRID** replaces **GROUND GRID - TEST**; grid command names and behavior are unchanged.
+- Palette location: **Q3 > ROADWAY > POLYLINE TOOLS > 3D POLYLINE FROM POINTS** (moved from MOVE POINTS).
+- **PCT3DFROMPOINTS / PL3DFROMPOINTS** now defaults new 3D breaklines to **V-DTM~GBRK**, with an editable existing-layer name prompt. Keep defaults selected original 2D traces to separate **V-PNTC-TRACE-2D**, also editable. Destination choices are saved per drawing after successful creation. Replace skips the 2D destination. Existing DTM-layer properties are preserved; see Docs/POLYLINE_FROM_POINTS.md.
+
 ## 2026-10-29 - Automatic 3D polyline elevations
 - **PCT3DFROMPOINTS / PL3DFROMPOINTS** — Q3 > ROADWAY > MOVE POINTS > **3D POLYLINE FROM POINTS**. Select one or more 2D traces; POINT/COGO elevations are found automatically in eligible model-space objects. Exact vertex XY shots take priority; the 0.001 drawing-unit fallback radius is adjustable. No manual point selection or surface required. Ambiguity or missing data aborts the entire selection; Keep is default, final Yes required. Creates native 3D polylines. See Docs/POLYLINE_FROM_POINTS.md.
 
