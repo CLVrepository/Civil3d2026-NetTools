@@ -1,3 +1,9 @@
+## 2026-10-29 - Create 3D breakline traces directly from vertex points
+- Adds **3D POLYLINE FROM POINTS** to Q3 > ROADWAY > MOVE POINTS (PCT3DFROMPOINTS / PL3DFROMPOINTS). Use the top/toe/flow-line trace and elevation points already placed at its vertices; no temporary surface is needed.
+- Keeps exact trace XY/order/closure and takes Z from the selected AutoCAD POINTs or COGO points. All vertices must match within a chosen small XY tolerance; missing points, conflicting heights and reuse of one shot for multiple vertices stop conversion without partial changes. The original 2D line is kept by default, with explicit Replace and final Yes options.
+- Source points, point-cloud state, views and existing surfaces are not edited. Straight-segment lightweight 2D traces only; arcs are refused rather than flattened. A new 3D object copies standard display properties, not custom source metadata/associations. Existing Move Points to Vertex is unchanged.
+- Command/matching helper/palette/actual palette-placement helper compile passed with zero warnings/errors against Autodesk/Civil 2026 references. Added matching tests; execution was blocked during restricted NuGet restore, so no executable-test pass is claimed. Native conversion, cancellation, property/coordinate checks and Undo/Redo remain pending; see Docs/POLYLINE_FROM_POINTS.md.
+
 ## 2026-10-29 - Plan and oblique cloud views starter
 - Adds PLAN + OBLIQUE, SET FOCUS, ORBIT FOCUS, RECENTER and END VIEWS / RESTORE under Q3 > ROADWAY > CLOUD VIEWS - TEST.
 - A smaller north-up plan and larger oblique view share a chosen focus. Pan/zoom independently; explicitly choose a new focus to align them again. Orbit Focus starts native 3DORBITCTR in the right pane. Each pane retains its zoom when recentered.

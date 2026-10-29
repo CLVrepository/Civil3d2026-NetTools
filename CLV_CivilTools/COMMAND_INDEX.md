@@ -1,3 +1,6 @@
+## 2026-10-29 - 3D polyline from measured vertex points
+- **PCT3DFROMPOINTS / PL3DFROMPOINTS** — Q3 > ROADWAY > MOVE POINTS > **3D POLYLINE FROM POINTS**. Select a straight-segment lightweight 2D trace and its AutoCAD POINT/COGO elevation objects; create a native 3D polyline using exact trace XY and measured Z at every vertex. Tolerance defaults to 0.001 drawing unit; missing/conflicting/reused point matches stop all conversion. Keep/Replace defaults Keep, final creation defaults No. No surface required; source points are never edited. Arc segments are refused. Existing PCT9 remains COGO-only and unchanged. See Docs/POLYLINE_FROM_POINTS.md; native acceptance pending.
+
 ## 2026-10-29 - Cloud views starter
 Q3 > ROADWAY > CLOUD VIEWS - TEST:
 

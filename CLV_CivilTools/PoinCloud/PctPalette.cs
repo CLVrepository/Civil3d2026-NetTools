@@ -146,6 +146,7 @@ namespace CLV_CivilTools
             layout.Controls.Add(CreateSectionLabel("MOVE POINTS"));
             layout.Controls.Add(CreateCommandButton("TO SAMPLE LINE", "PCT5"));
             layout.Controls.Add(CreateCommandButton("MOVE POINTS TO VERTEX", "PCT9"));
+            layout.Controls.Add(CreateCommandButton("3D POLYLINE FROM POINTS", "PCT3DFROMPOINTS"));
 
             // MOVE POINTS + ADD VERTICES
             layout.Controls.Add(CreateSectionLabel("MOVE POINTS + ADD VERTICES"));
