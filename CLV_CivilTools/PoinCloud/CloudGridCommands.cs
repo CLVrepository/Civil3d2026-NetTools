@@ -539,6 +539,8 @@ namespace CLV_CivilTools.PointCloud
             try
             {
                 if (!d.Database.TileMode) throw new InvalidOperationException("Use the Model tab.");
+                if (CloudReviewViews.IsActive(d))
+                    throw new InvalidOperationException("Run CGVIEWEND to restore the cloud views before using ground-grid commands.");
                 if (CloudGridRecovery.HasPending(d))
                     throw new InvalidOperationException("Saved R6/surface journals found. Run CGRECOVERYCHECK; use a pre-R6 copy or the guarded CGRECOVERDISPLAY before reviewing.");
                 action(d);

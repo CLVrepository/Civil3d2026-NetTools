@@ -1,3 +1,16 @@
+## 2026-10-29 - Cloud views starter
+Q3 > ROADWAY > CLOUD VIEWS - TEST:
+
+| Button | Command | Behavior |
+|---|---|---|
+| PLAN + OBLIQUE | CGVIEWS | Save the current arrangement, choose focus XYZ, create left plan/right oblique panes. |
+| SET FOCUS | CGFOCUS | Pick a new shared center from either active pane; confirm Z. Retains each pane's zoom and oblique direction. |
+| ORBIT FOCUS | CGORBIT | Recenter, activate right pane and start native 3DORBITCTR about the shared focus. Esc ends orbit. |
+| RECENTER | CGVIEWCENTER | Recenter both panes on the last focus without a new pick. |
+| END VIEWS / RESTORE | CGVIEWEND | Restore the saved viewport arrangement; also recover a retained backup after reopening. |
+
+Use Model tab; finish CGEND before entering, and CGVIEWEND before returning to grid tools. Ordinary navigation does not sync views. Focus Z is for viewing, not a surveyed extraction. See Docs/CLOUD_REVIEW_VIEWS.md. Native acceptance pending.
+
 ## 2026-10-28 - Match native-working Add Point cloud acquisition R12 candidate (unpublished)
 - Based on R11 9fd85d162b0742d75be19765882c860a1e6dc9a4. User confirms Add Point in Slice snaps correctly in the same session while Move Point does not. Source comparison finds Move Point explicitly sets 3DOSMODE=1 immediately before its target prompt; Add Point Cloud uses OSMODE=0/3DOSMODE=128. The prior documentation-only NODE correction did not match this native-working cloud input path. R12 restores the working path rather than treating generic regular-NODE documentation as native acceptance.
 - Point-center picker is not leaking its snap suppression: PickGridPoints finally restores OSMODE/3DOSMODE/ORTHOMODE before PickGridPoint returns, and Move Point then applies its own target-input settings. Neither command changes OSNAPCOORD. Both use OSNAPZ=0, ORTHOMODE=0 and SNAPMODE=0 at cloud pick; R12 additionally matches Add Point's explicit per-slice UCS reconstruction (axis/center/min-max elevation), converts returned target through that UCS, and restores the entry UCS/settings on success/error/cancel. No PLAN or view/crop operation is added.

@@ -99,6 +99,12 @@ namespace CLV_CivilTools
             layout.Controls.Add(CreateTransparencyControlRow()); // under Attach/Intensity
             layout.Controls.Add(CreateCommandButtonRow("ON", "PCT7", "OFF", "PCT8"));
 
+            // CLOUD VIEWS STARTER
+            layout.Controls.Add(CreateSectionLabel("CLOUD VIEWS - TEST"));
+            layout.Controls.Add(CreateCommandButtonRow("PLAN + OBLIQUE", "CGVIEWS", "SET FOCUS", "CGFOCUS"));
+            layout.Controls.Add(CreateCommandButtonRow("ORBIT FOCUS", "CGORBIT", "RECENTER", "CGVIEWCENTER"));
+            layout.Controls.Add(CreateCommandButton("END VIEWS / RESTORE", "CGVIEWEND"));
+
             // CLOUD GRID STARTER
             layout.Controls.Add(CreateSectionLabel("GROUND GRID - TEST"));
             layout.Controls.Add(CreateCommandButtonRow("CREATE GRID", "CGRID", "REVIEW GRID", "CGREVIEW"));
