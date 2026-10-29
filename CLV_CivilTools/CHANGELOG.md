@@ -1,3 +1,8 @@
+## 2026-10-29 - Correct GBRK layer name and simplify conversion
+- Corrects the fixed 3D destination to **V-DTM~-GBRK**, including the missing dash after the tilde. Removes both layer-name prompts and saved layer-choice behavior.
+- Keep puts selected original 2D traces on **Layer 0**; no separate trace layer is created. Previous custom choices are ignored without deleting old records or unselected objects.
+- Keeps the POLYLINE TOOLS button location and GROUND GRID heading. Targeted Autodesk/Civil-reference compile passed; native fixed-layer routing and Undo still need workstation acceptance.
+
 ## 2026-10-29 - Route 3D breaklines and kept 2D traces to separate layers
 - Renames **GROUND GRID - TEST** to **GROUND GRID**, with no grid behavior change.
 - Moves **3D POLYLINE FROM POINTS** under Q3 > ROADWAY > **POLYLINE TOOLS**.

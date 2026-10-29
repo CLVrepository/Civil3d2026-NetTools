@@ -1,3 +1,6 @@
+## 2026-10-29 - Fixed 3D/2D conversion layers
+- **PCT3DFROMPOINTS / PL3DFROMPOINTS** — Q3 > ROADWAY > POLYLINE TOOLS > **3D POLYLINE FROM POINTS**. No layer-name prompts: 3D output always uses **V-DTM~-GBRK** and kept original 2D traces use **Layer 0**. Earlier saved destination choices are ignored. Other conversion prompts and automatic matching remain unchanged.
+
 ## 2026-10-29 - 3D-from-points destination layers
 - ROADWAY section label **GROUND GRID** replaces **GROUND GRID - TEST**; grid command names and behavior are unchanged.
 - Palette location: **Q3 > ROADWAY > POLYLINE TOOLS > 3D POLYLINE FROM POINTS** (moved from MOVE POINTS).

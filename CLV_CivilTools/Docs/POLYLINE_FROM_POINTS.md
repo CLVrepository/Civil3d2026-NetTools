@@ -13,44 +13,36 @@ surface, point-cloud resampling or manual point-by-point picking is required.
 1. Select one or several straight-segment lightweight 2D polylines, then Enter.
 2. Set a fallback XY tolerance in drawing units (default 0.001).
 3. Choose Keep (default) or Replace for the original 2D traces.
-4. Choose the 3D destination layer (default `V-DTM~GBRK`). It must already exist
-   with your drawing's layer standards.
-5. When keeping originals, choose their separate layer (default `V-PNTC-TRACE-2D`).
-6. The command scans direct model-space POINTs/COGO points automatically. At each
+4. The command scans direct model-space POINTs/COGO points automatically. At each
    vertex, exact WCS XY matches take priority over every nearby non-exact shot.
    Only when there is no exact match does the circular tolerance search apply.
-7. Review the matched line count, exact/fallback counts and Z range. Answer Yes
+5. Review the matched line count, exact/fallback counts and Z range. Answer Yes
    to create all 3D lines. Enter/No/Esc cancels without changes.
-8. Inspect the selected results. Add them to your final surface as breaklines
+6. Inspect the selected results. Add them to your final surface as breaklines
    when ready. The command never moves, erases or changes the elevation points.
 
 The output keeps exact source vertex X/Y in WCS, source order and closure, and
-reads Z from the matched measured point. The new 3D parent and its vertices are assigned to the chosen destination layer.
+reads Z from the matched measured point. The new 3D parent and its vertices are assigned to V-DTM~-GBRK.
 Color, linetype, lineweight, transparency and plot style on the 3D parent use
 ByLayer rather than source overrides. Each result has a new handle; custom
 metadata, extension dictionaries and external associations are not transferred.
-Keep moves the selected originals to the separate retained-trace layer without
-changing their geometry or other properties. Replace erases only those traces
+Keep puts the selected originals on Layer 0 without changing their geometry
+or other properties. Replace erases only those traces
 after every output passes XYZ/count/closure/layer readback. All writes commit together.
 
 ## Layer destinations
 
-- The default 3D layer is **V-DTM~GBRK**, confirmed by Mark. You can enter another
-  existing local layer. The routine does not create or restyle a DTM layer;
-  import/create a missing destination using your drawing's standards before retrying.
-- With Keep, the original 2D traces move to **V-PNTC-TRACE-2D** by default. Enter
-  another name to use a different retained-trace layer. It must differ from the
-  3D destination. A missing retained-trace layer is created only after final Yes,
-  using gray ACI 8 and nonplotting settings. Existing layer properties are preserved.
-- Destination layers must be local, on, thawed and unlocked. The routine does not
-  turn on/thaw/unlock layers. Source-point layers and current layer are unchanged.
-- The last successful destinations are saved per drawing in the
-  CLV_PCT3DFROMPOINTS_LAYERS_V1 named-object Xrecord. They return as editable defaults
-  on the next conversion and after save/reopen. Cancel, No, missing matches or
-  failures do not save new choices. Replace skips the retained-layer prompt and
-  does not create a retained-trace layer.
-- Creation, retained-source relocation/erasure, optional trace-layer creation and
-  saved preferences share one transaction. Native Undo/Redo still needs live testing.
+- New 3D breaklines always use **V-DTM~-GBRK**, including the dash after the tilde.
+  There are no layer-name prompts. The layer must already exist with the drawing's
+  standard properties; the routine does not create or restyle the DTM layer.
+- Keep puts the selected original 2D traces on **Layer 0**. Replace erases the
+  selected originals after the new outputs have passed readback.
+- Applicable destination layers must be local, on, thawed and unlocked. Layer
+  settings, source-point layers and the current layer are unchanged.
+- Previous CLV_PCT3DFROMPOINTS_LAYERS_V1 saved choices are ignored and left intact.
+  No choices are read/saved and no separate retained-trace layer is created.
+- Output creation and original relocation/erasure share one transaction.
+  Missing/conflicting point matches, No, Esc or failures leave the batch unchanged.
 
 ## Nearby lines and ambiguous shots
 
@@ -132,19 +124,15 @@ Native acceptance on a drawing copy:
 7. Undo/Redo Keep and Replace; verify all intended outputs/originals and no point
    edits. Test adding resulting 3D lines to a disposable surface as breaklines.
 
-Additional layer acceptance checks:
+Additional fixed-layer acceptance checks:
 
-1. Convert a Layer 0 trace with source color/linetype overrides. Confirm the
-   3D parent and all vertex subentities use V-DTM~GBRK; parent display properties
-   must be ByLayer. Inspect a kept 2D trace on the separate retained layer.
-2. Test Keep with a new trace layer and with an existing custom trace layer.
-   Existing layer properties must remain unchanged. Test custom 3D/2D names.
-3. Cancel at each layer prompt or answer No. No layers, source changes, output
-   geometry or saved-preference updates should result. Test missing/conflicting
-   point matches with newly typed trace-layer names.
-4. Test missing DTM, locked/off/frozen/dependent destinations and choosing the
-   same destination for 3D/2D. All must refuse safely, without layer flag changes.
-5. Replace must erase only selected originals and skip 2D-layer creation.
-   Verify saved defaults independently in two drawings and after save/reopen.
-6. Undo/Redo successful Keep and Replace, including original layers, created
-   outputs/trace layer and saved layer choices. Point objects must remain untouched.
+1. Convert a Layer 0 trace with overrides. Verify the new 3D parent and every
+   vertex use V-DTM~-GBRK, with parent display properties ByLayer.
+2. Keep must put selected originals on Layer 0, without altering geometry or
+   source elevation points. Replace must erase only selected original traces.
+3. Confirm there are no layer-name prompts and no new retained-trace layers.
+   A drawing with earlier custom saved choices must still use the fixed layers.
+4. Test missing V-DTM~-GBRK and locked/off/frozen applicable destinations. The
+   whole operation must refuse without changing existing layer settings.
+5. Test No/Esc and missing/conflicting point matches, plus Undo/Redo of Keep and
+   Replace. Existing old preference records and unselected objects stay intact.

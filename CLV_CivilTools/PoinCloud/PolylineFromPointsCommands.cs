@@ -54,23 +54,13 @@ namespace CLV_CivilTools.PointCloud
                 if (keepResult.Status != PromptStatus.OK && keepResult.Status != PromptStatus.None) return;
                 bool replace = string.Equals(keepResult.StringResult, "Replace", StringComparison.OrdinalIgnoreCase);
 
-                LayerChoices previousLayers = ReadLayerChoices(db);
-                string? outputLayerName = PromptLayerName(ed, "3D DTM breakline layer", previousLayers.Output);
-                if (outputLayerName == null) return;
-                string retainedLayerName = previousLayers.Retained;
-                if (!replace)
-                {
-                    string? pickedLayer = PromptLayerName(ed, "Layer for kept 2D traces", previousLayers.Retained);
-                    if (pickedLayer == null) return;
-                    retainedLayerName = pickedLayer;
-                    if (string.Equals(outputLayerName, retainedLayerName, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException("Choose different layers for 3D breaklines and kept 2D traces.");
-                }
+                string outputLayerName = BreaklineLayerName;
+                string retainedLayerName = RetainedLayerName;
 
                 using Transaction tr = db.TransactionManager.StartTransaction();
                 ObjectId modelId = SymbolUtilityServices.GetBlockModelSpaceId(db);
                 ObjectId outputLayerId = RequireExistingDestination(db, tr, outputLayerName);
-                bool createRetainedLayer = ValidateRetainedDestination(db, tr, retainedLayerName, replace);
+                ObjectId retainedLayerId = replace ? ObjectId.Null : RequireExistingDestination(db, tr, retainedLayerName);
                 var sources = new List<(Polyline Source, Point3d[] Vertices, bool HasWidths)>();
                 foreach (ObjectId id in selected.Value.GetObjectIds())
                 {
@@ -128,16 +118,12 @@ namespace CLV_CivilTools.PointCloud
                 if (conversions.Any(c => c.HasWidths)) ed.WriteMessage("\n3D results are centerlines without 2D width/thickness.");
                 ed.WriteMessage("\n3D destination: " + outputLayerName
                     + (replace ? "; original 2D traces will be erased." : "; kept 2D destination: " + retainedLayerName + "."));
-                if (createRetainedLayer) ed.WriteMessage("\nThe new kept-2D layer will be gray and nonplotting.");
                 var confirm = new PromptKeywordOptions("\nCreate all 3D polylines [Yes/No] <No>: ");
                 confirm.Keywords.Add("Yes"); confirm.Keywords.Add("No");
                 confirm.Keywords.Default = "No"; confirm.AllowNone = true;
                 PromptResult confirmation = ed.GetKeywords(confirm);
                 if (confirmation.Status != PromptStatus.OK || !string.Equals(confirmation.StringResult, "Yes", StringComparison.OrdinalIgnoreCase)) return;
 
-                ObjectId retainedLayerId = replace ? ObjectId.Null : GetRetainedDestination(db, tr, retainedLayerName);
-                if (!replace && retainedLayerId == outputLayerId)
-                    throw new InvalidOperationException("3D breaklines and kept 2D traces must use different layers.");
                 var model = (BlockTableRecord)tr.GetObject(modelId, OpenMode.ForWrite);
                 var outputs = new List<ObjectId>();
                 foreach (Conversion conversion in conversions)
@@ -174,7 +160,6 @@ namespace CLV_CivilTools.PointCloud
                         if (conversion.Source.LayerId != retainedLayerId)
                             throw new InvalidOperationException("Retained 2D layer verification failed; the whole conversion was rolled back.");
                     }
-                SaveLayerChoices(db, tr, new LayerChoices(outputLayerName, retainedLayerName));
                 tr.Commit();
                 ed.SetImpliedSelection(outputs.ToArray()); ed.Regen();
                 ed.WriteMessage($"\nCreated {outputs.Count} 3D polylines from detected vertex points."
@@ -258,4 +243,3 @@ namespace CLV_CivilTools.PointCloud
         }
     }
 }
-

@@ -1,3 +1,8 @@
+## 2026-10-29 - Fixed GBRK layer spelling and no layer-name prompts
+- PCT3DFROMPOINTS / PL3DFROMPOINTS now always uses V-DTM~-GBRK (dash after tilde) for 3D parents/vertices and Layer 0 for kept originals. Removes destination-name prompts, trace-layer creation, and all preference read/write code; legacy preference records are left intact and ignored.
+- Retains destination validation, ByLayer 3D properties and transactional XYZ/count/closure/layer readback. Keep/Replace, matching tolerance, final confirmation, automatic point detection and batch rollback are unchanged. POLYLINE TOOLS location and GROUND GRID heading remain.
+- Targeted actual command/helper/matcher/palette compilation against Autodesk/Civil 2026 references passed with zero warnings/errors. Full solution and live fixed-layer/Undo checks remain required; Docs/POLYLINE_FROM_POINTS.md supersedes the earlier configurable-layer workflow below.
+
 ## 2026-10-29 - Separate 3D breakline and retained 2D trace layers
 - Renames the ROADWAY section GROUND GRID - TEST to GROUND GRID at Mark's request; command behavior is unchanged.
 - Moves 3D POLYLINE FROM POINTS from Q3 ROADWAY > MOVE POINTS to POLYLINE TOOLS; command names are unchanged.
