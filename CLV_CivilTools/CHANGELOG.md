@@ -1,3 +1,9 @@
+## 2026-11-05 - Apply manhole data to curved sewer pipes
+- Adds curved circular gravity pipe support after structure 1 worked but structures 2/3 hit the straight-only restriction.
+- Uses a curve's local endpoint tangent for automatic compass matching. Retains START=OUT/END=IN roles and final review.
+- Updates curved elevations on the existing native pipe, retaining plan arc/bulge, XY and opposite-end elevation, with expanded geometry/readback rollback checks. Existing straight-pipe workflow and CLV-Non Anno behavior remain.
+- Tangent, automatic-matching and catalog tests passed; targeted Autodesk/Civil-reference compile passed without warnings/errors. Live curve/elevation/label/Undo checks remain required on the workstation.
+
 ## 2026-11-05 - Automatically match sewer pipes and fix straight-pipe Apply error
 - Fixes the reported SubEntityType is not PipeSubEntityType.Curved exception by removing the curved-only Curve2d getter from straight-pipe validation.
 - Removes manual pipe assignment from normal Apply. Pick the info block and native structure, then review automatically filled changes using START=OUT, END=IN and available WCS compass directions.

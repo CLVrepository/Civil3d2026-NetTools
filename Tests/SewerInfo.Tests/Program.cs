@@ -121,6 +121,26 @@ Assert(wrapNorth.Plan.Assignments.Length == 1, "north bearing wraps around 360")
 var boundary = SewerInfoModel.MatchAutomatically(autoMh1Connections, new[] { new SewerInfoModel.NativeConnection(true, Math.Sin(Math.PI/8), Math.Cos(Math.PI/8)) });
 Assert(boundary.Plan.Assignments.Length == 0, "compass sector boundary not guessed");
 Console.WriteLine("PASS: automatic START/END roles, WCS compass matching, missing branches, aliases, ambiguity and pending unknowns.");
+var ccwStart = SewerInfoModel.CurveOutwardTangent(1, 0, false, true);
+var ccwEnd = SewerInfoModel.CurveOutwardTangent(0, 1, false, false);
+var cwStart = SewerInfoModel.CurveOutwardTangent(0, 1, true, true);
+var cwEnd = SewerInfoModel.CurveOutwardTangent(1, 0, true, false);
+Assert(ccwStart.Dx == 0 && ccwStart.Dy == 1, "CCW start tangent points into arc north");
+Assert(ccwEnd.Dx == 1 && ccwEnd.Dy == 0, "CCW end outward tangent reverses forward derivative east");
+Assert(cwStart.Dx == 1 && cwStart.Dy == 0, "CW start tangent east");
+Assert(cwEnd.Dx == 0 && cwEnd.Dy == 1, "CW end outward tangent north");
+var tangentOptions = new[]
+{
+    new SewerConnection { Flow = "out", Direction = "N", InvertElevation = 100 },
+    new SewerConnection { Flow = "out", Direction = "NW", InvertElevation = 101 }
+};
+Assert(SewerInfoModel.MatchAutomatically(tangentOptions, new[] { new SewerInfoModel.NativeConnection(true, ccwStart.Dx, ccwStart.Dy) }).Plan.Assignments.Single().ConnectionIndex == 0, "curved-pipe tangent selects N instead of NW chord");
+Assert(SewerInfoModel.MatchAutomatically(tangentOptions, new[] { new SewerInfoModel.NativeConnection(true, -1, 1) }).Plan.Assignments.Single().ConnectionIndex == 1, "control chord would select different plan connection");
+var scaledTangent = SewerInfoModel.CurveOutwardTangent(1000, 0, false, true);
+Assert(SewerInfoModel.MatchAutomatically(tangentOptions, new[] { new SewerInfoModel.NativeConnection(true, scaledTangent.Dx, scaledTangent.Dy) }).Plan.Assignments.Single().ConnectionIndex == 0, "tangent direction independent of radius");
+Reject(() => SewerInfoModel.CurveOutwardTangent(0, 0, false, true), "zero radius vector");
+Reject(() => SewerInfoModel.CurveOutwardTangent(double.NaN, 1, false, true), "invalid radius vector");
+Console.WriteLine("PASS: clockwise/counterclockwise endpoint tangents and curved-pipe automatic direction matching.");
 Console.WriteLine("PASS: sewer catalog naming, schema, provenance, dimensions/materials, unknowns, validation, merge and block labels.");
 foreach (string path in args)
 {
@@ -129,5 +149,6 @@ foreach (string path in args)
     Assert(reread.Manholes.Count == input.Manholes.Count, "supplied catalog round trip");
     Console.WriteLine($"PASS supplied catalog: {input.Manholes.Count} records, {input.Manholes.Sum(m => m.Connections.Count)} connections.");
 }
+
 
 

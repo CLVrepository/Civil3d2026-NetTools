@@ -15,6 +15,8 @@ using CivilApp = Autodesk.Civil.ApplicationServices.CivilApplication;
 using Pipe = Autodesk.Civil.DatabaseServices.Pipe;
 using Structure = Autodesk.Civil.DatabaseServices.Structure;
 using Network = Autodesk.Civil.DatabaseServices.Network;
+using PipeSubType = Autodesk.Civil.DatabaseServices.PipeSubEntityType;
+using PipeCurveGeometry = Autodesk.Civil.DatabaseServices.PipeCurveGeometry;
 
 namespace CLV_CivilTools.Ufls.SewerInfo
 {
@@ -140,10 +142,48 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             SewerInfoDrawing.Refresh((BlockReference)tr.GetObject(id, OpenMode.ForRead), d.Database, tr, c, m); tr.Commit(); d.Editor.Regen();
         }
 
-        private sealed record PipeState(ObjectId Id, Point3d Start, Point3d End, ObjectId StartStructure, ObjectId EndStructure, double InnerHeight, ObjectId Family, ObjectId Size);
+        private sealed record ArcState(double Bulge, Point2d Center, double Radius, Point2d Start, Point2d End, bool Clockwise, double Sweep);
+        private sealed record PipeState(ObjectId Id, Point3d Start, Point3d End, ObjectId StartStructure, ObjectId EndStructure, double InnerHeight, ObjectId Family, ObjectId Size, PipeSubType SubType, ArcState? Arc);
         private sealed record StructureState(ObjectId Id, Point3d Position, string Name, double Rim, bool AutoRim, double Sump, ObjectId Family, ObjectId Size);
         private sealed record Mapping(SewerConnection Connection, ObjectId PipeId, bool AtStart);
-        private static PipeState State(Pipe p) => new(p.ObjectId, p.StartPoint, p.EndPoint, p.StartStructureId, p.EndStructureId, p.InnerHeight, p.PartFamilyId, p.GetPartSizeId());
+        private static PipeState State(Pipe p)
+        {
+            ArcState? arc = null;
+            if (p.SubEntityType == PipeSubType.Curved)
+            {
+                using PipeCurveGeometry geometry = p.CurveGeometry;
+                using CircularArc2d plan = geometry.GetArc2d();
+                arc = new ArcState(geometry.Bulge, plan.Center, plan.Radius, plan.StartPoint, plan.EndPoint, plan.IsClockWise, plan.EndAngle - plan.StartAngle);
+                if (!double.IsFinite(arc.Bulge) || !double.IsFinite(arc.Radius) || arc.Radius <= 0)
+                    throw new InvalidOperationException("Pipe " + p.Handle + " has invalid plan arc geometry.");
+            }
+            return new PipeState(p.ObjectId, p.StartPoint, p.EndPoint, p.StartStructureId, p.EndStructureId, p.InnerHeight, p.PartFamilyId, p.GetPartSizeId(), p.SubEntityType, arc);
+        }
+        private static SewerInfoModel.NativeConnection DirectionAtStructure(PipeState p, ObjectId structureId)
+        {
+            bool start = p.StartStructure == structureId;
+            if (p.Arc == null) return new SewerInfoModel.NativeConnection(start,
+                start ? p.End.X - p.Start.X : p.Start.X - p.End.X, start ? p.End.Y - p.Start.Y : p.Start.Y - p.End.Y);
+            Point3d selected = start ? p.Start : p.End;
+            var point = new Point2d(selected.X, selected.Y);
+            bool atArcStart = PlanDistance(point, p.Arc.Start) <= 1e-6, atArcEnd = PlanDistance(point, p.Arc.End) <= 1e-6;
+            if (atArcStart == atArcEnd) throw new InvalidOperationException("Pipe " + p.Id.Handle + ": cannot identify the selected end on its plan arc; no data changed.");
+            var tangent = SewerInfoModel.CurveOutwardTangent(point.X - p.Arc.Center.X, point.Y - p.Arc.Center.Y, p.Arc.Clockwise, atArcStart);
+            return new SewerInfoModel.NativeConnection(start, tangent.Dx, tangent.Dy);
+        }
+        private static void CheckPlanGeometry(PipeState old, PipeState actual)
+        {
+            if (old.SubType != actual.SubType || (old.Arc == null) != (actual.Arc == null))
+                throw new InvalidOperationException("Pipe " + old.Id.Handle + " changed geometry type; the transfer was rolled back.");
+            if (old.Arc == null || actual.Arc == null) return;
+            const double planTolerance = 1e-6;
+            if (PlanDistance(old.Arc.Center, actual.Arc.Center) > planTolerance || Math.Abs(old.Arc.Radius - actual.Arc.Radius) > planTolerance
+                || PlanDistance(old.Arc.Start, actual.Arc.Start) > planTolerance || PlanDistance(old.Arc.End, actual.Arc.End) > planTolerance
+                || old.Arc.Clockwise != actual.Arc.Clockwise || Math.Abs(old.Arc.Bulge - actual.Arc.Bulge) > 1e-10 || Math.Abs(old.Arc.Sweep - actual.Arc.Sweep) > 1e-10)
+                throw new InvalidOperationException("Pipe " + old.Id.Handle + " plan arc changed; the transfer was rolled back.");
+        }
+        private static double PlanDistance(Point2d a, Point2d b)
+        { double dx = a.X - b.X, dy = a.Y - b.Y; return Math.Sqrt(dx * dx + dy * dy); }
         private static StructureState State(Structure s) => new(s.ObjectId, s.Position, s.Name, s.RimElevation, s.AutomaticRimSurfaceAdjustment, s.SumpElevation, s.PartFamilyId, s.GetPartSizeId());
         private static void Editable(Autodesk.Civil.DatabaseServices.Part p, Transaction tr)
         {
@@ -185,12 +225,8 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             PipeState[] connected = pipeBefore.Where(p => p.StartStructure == structureId || p.EndStructure == structureId).ToArray();
             d.Editor.WriteMessage("\nPlan connections: " + mh.Connections.Count + "; existing connected pipes: " + connected.Length
                 + ". Automatically matching START=OUT / END=IN and available WCS compass directions.");
-            SewerInfoModel.AutomaticPlan automatic = SewerInfoModel.MatchAutomatically(mh.Connections, connected.Select(p =>
-            {
-                bool start = p.StartStructure == structureId;
-                return new SewerInfoModel.NativeConnection(start, start ? p.End.X - p.Start.X : p.Start.X - p.End.X,
-                    start ? p.End.Y - p.Start.Y : p.Start.Y - p.End.Y);
-            }).ToArray());
+            SewerInfoModel.AutomaticPlan automatic = SewerInfoModel.MatchAutomatically(mh.Connections, connected.Select(p => DirectionAtStructure(p, structureId)).ToArray());
+            for (int i = 0; i < connected.Length; i++) if (connected[i].Arc != null) automatic.Evidence[i] += " Bearing uses the curved pipe's endpoint tangent.";
             SewerInfoModel.AssignmentPlan assignmentPlan = automatic.Plan;
             var mappings = new List<Mapping>();
             foreach (SewerInfoModel.ConnectionAssignment assignment in assignmentPlan.Assignments)
@@ -201,9 +237,8 @@ namespace CLV_CivilTools.Ufls.SewerInfo
                 var pipe = (Pipe)tr.GetObject(pipeId, OpenMode.ForRead); Editable(pipe, tr);
                 if (pipe.CrossSectionalShape.ToString() != "Circular" || !double.IsFinite(pipe.InnerHeight) || pipe.InnerHeight <= 0)
                     throw new InvalidOperationException("This starter transfers inverts to circular gravity pipes only.");
-                // Curve2d is arc-only and throws on straight pipes. Query the subtype directly.
-                if (pipe.SubEntityType != Autodesk.Civil.DatabaseServices.PipeSubEntityType.Straight)
-                    throw new InvalidOperationException("Only straight circular pipes are supported for invert transfer in this version.");
+                if (pipe.SubEntityType is not (PipeSubType.Straight or PipeSubType.Curved))
+                    throw new InvalidOperationException("Pipe " + pipe.Handle + " has unsupported subtype " + pipe.SubEntityType + ". Straight and curved circular gravity pipes are supported.");
                 mappings.Add(new Mapping(connection, pipeId, before.StartStructure == structureId));
             }
             var preview = new StringBuilder();
@@ -225,6 +260,8 @@ namespace CLV_CivilTools.Ufls.SewerInfo
                 preview.AppendLine("CAD: " + p.Name + " [" + p.Handle + "] " + (map.AtStart ? "START" : "END") + " | INV " + SewerInfoModel.Elevation(old) + " -> " + SewerInfoModel.Elevation(map.Connection.InvertElevation));
                 preview.AppendLine("Existing part: " + p.PartFamilyName + " / " + p.PartSizeName + " | modeled ID " + SewerInfoModel.Number(p.InnerHeight * 12) + " in");
                 preview.AppendLine("AUTO MATCH: " + automatic.Evidence[Array.FindIndex(connected, x => x.Id == map.PipeId)]);
+                ArcState? arc = connected.Single(x => x.Id == map.PipeId).Arc;
+                if (arc != null) preview.AppendLine("CURVED PIPE: plan radius " + SewerInfoModel.Number(arc.Radius) + " ft; preserve XY arc, bulge and rotation direction while updating endpoint elevation.");
             }
             preview.AppendLine("\r\nPENDING PLAN CONNECTIONS: " + assignmentPlan.PendingConnections.Length);
             foreach (int i in assignmentPlan.PendingConnections) preview.AppendLine("PENDING - " + SewerInfoModel.PipeLabel(mh.Connections[i]));
@@ -238,7 +275,14 @@ namespace CLV_CivilTools.Ufls.SewerInfo
                 var p = (Pipe)tr.GetObject(map.PipeId, OpenMode.ForWrite);
                 Point3d old = map.AtStart ? p.StartPoint : p.EndPoint;
                 var target = new Point3d(old.X, old.Y, map.Connection.InvertElevation!.Value + p.InnerHeight / 2);
-                if (map.AtStart) p.StartPoint = target; else p.EndPoint = target;
+                PipeState before = connected.Single(x => x.Id == map.PipeId);
+                if (before.Arc != null)
+                {
+                    // Preserve the native XY arc definition explicitly; only endpoint Z changes.
+                    using var curve = new PipeCurveGeometry(map.AtStart ? target : before.Start, map.AtStart ? before.End : target, before.Arc.Bulge);
+                    p.CurveGeometry = curve;
+                }
+                else if (map.AtStart) p.StartPoint = target; else p.EndPoint = target;
             }
             structure.UpgradeOpen(); structure.AutomaticRimSurfaceAdjustment = false; structure.RimElevation = mh.RimElevation.Value; structure.Name = mh.Name;
             // Refuse native rule/resize side effects instead of committing partial or collateral edits.
@@ -250,6 +294,7 @@ namespace CLV_CivilTools.Ufls.SewerInfo
                 Check(p.StartPoint.Z, changedStart ? map!.Connection.InvertElevation!.Value + old.InnerHeight / 2 : old.Start.Z);
                 Check(p.EndPoint.Z, changedEnd ? map!.Connection.InvertElevation!.Value + old.InnerHeight / 2 : old.End.Z);
                 Check(p.InnerHeight, old.InnerHeight);
+                CheckPlanGeometry(old, State(p));
                 if (p.StartStructureId != old.StartStructure || p.EndStructureId != old.EndStructure || p.PartFamilyId != old.Family || p.GetPartSizeId() != old.Size)
                     throw new InvalidOperationException("Pipe connectivity/part changed unexpectedly; transfer rolled back.");
             }
@@ -291,5 +336,6 @@ namespace CLV_CivilTools.Ufls.SewerInfo
         private static void CheckXY(Point3d actual, Point3d expected) { Check(actual.X, expected.X); Check(actual.Y, expected.Y); }
     }
 }
+
 
 

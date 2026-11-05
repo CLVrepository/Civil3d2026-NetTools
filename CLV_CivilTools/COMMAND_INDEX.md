@@ -1,3 +1,8 @@
+## 2026-11-05 - Curved sewer Apply support
+- **SSMHAPPLY** now supports straight and curved circular gravity pipes. Curved direction matching uses the local WCS endpoint tangent, with the same START=OUT/END=IN convention.
+- Applies a curved endpoint elevation through native PipeCurveGeometry while retaining its endpoint XY, opposite-end Z and plan bulge. Before commit, checks arc subtype/center/radius/endpoints/clockwise/sweep/bulge plus native geometry/part/connectivity guards.
+- Fixes the reported straight-only refusal at structures 2/3. No assignment table, extra transfer-scope prompt, curve flattening or part swap. Prior straight-only documentation is superseded; see Docs/SEWER_MANHOLE_INFO.md for native curved-pipe tests.
+
 ## 2026-11-05 - Automatic sewer Apply
 - **SSMHAPPLY** now goes from source-block/destination-structure picks directly to a completed automatic-match preview. No assignment table or transfer-scope prompt.
 - Uses the requested downstream drawing convention **START=OUT / END=IN**, plus available plan compass direction matched against WCS outward pipe bearing. Unique role can match when direction is unavailable. Ambiguous/conflicting/unknown matches stay unchanged and are listed; missing plan pipes stay pending. Final reviewed confirmation remains.

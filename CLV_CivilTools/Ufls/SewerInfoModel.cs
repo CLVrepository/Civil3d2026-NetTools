@@ -59,6 +59,13 @@ namespace CLV_CivilTools.Ufls.SewerInfo
         internal sealed record ConnectionAssignment(int PipeIndex, int ConnectionIndex);
         internal sealed record AssignmentPlan(ConnectionAssignment[] Assignments, int[] PendingConnections, int[] UnchangedPipes);
         internal sealed record NativeConnection(bool AtStart, double OutwardDx, double OutwardDy);
+        internal static (double Dx, double Dy) CurveOutwardTangent(double radiusX, double radiusY, bool clockwise, bool atArcStart)
+        {
+            if (!double.IsFinite(radiusX) || !double.IsFinite(radiusY) || (Math.Abs(radiusX) < 1e-9 && Math.Abs(radiusY) < 1e-9))
+                throw new ArgumentException("Cannot determine a tangent from an invalid arc radius vector.");
+            double sign = (clockwise ? -1 : 1) * (atArcStart ? 1 : -1);
+            return (-radiusY * sign, radiusX * sign);
+        }
         internal sealed record AutomaticPlan(AssignmentPlan Plan, string[] Evidence);
         internal static AutomaticPlan MatchAutomatically(IReadOnlyList<SewerConnection> connections, IReadOnlyList<NativeConnection> native)
         {
@@ -238,5 +245,6 @@ namespace CLV_CivilTools.Ufls.SewerInfo
         }
     }
 }
+
 
 
