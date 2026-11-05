@@ -67,6 +67,23 @@ Assert(attrs.Count == 7 && attrs["STRUCT_SIZE"].Contains("48 in") && attrs["CONN
 Assert(SewerInfoModel.Attributes(c, c.Manholes[1])["RIM"].Contains("UNKNOWN"), "unknown block label");
 Assert(attrs["STRUCT_SIZE"].Contains("BASE") && !attrs["STRUCT_SIZE"].Contains("base_as_labeled"), "human readable size basis");
 Assert(SewerInfoModel.PipeLabel(new SewerConnection { Material = "PVC", PipeSpecification = "SDR35" }).Contains("PVC / SDR35"), "physical material and specification both displayed");
+var connections = Sample().Manholes[0].Connections;
+var partial = SewerInfoModel.PlanAssignments(connections, new int?[] { 2 });
+Assert(partial.Assignments.Length == 1 && partial.Assignments[0].ConnectionIndex == 2 && partial.PendingConnections.SequenceEqual(new[] { 0, 1 }), "one existing outgoing pipe applies despite missing incoming branches");
+var missingStub = SewerInfoModel.PlanAssignments(new[] { connections[0], connections[2] }, new int?[] { 1 });
+Assert(missingStub.Assignments.Length == 1 && missingStub.PendingConnections.SequenceEqual(new[] { 0 }), "reported two-plan/one-native case applies outgoing and leaves incoming stub pending");
+var emptyNetwork = SewerInfoModel.PlanAssignments(connections, Array.Empty<int?>());
+Assert(emptyNetwork.Assignments.Length == 0 && emptyNetwork.PendingConnections.Length == 3, "structure without pipes can retain all plan connections pending");
+var leaveExtra = SewerInfoModel.PlanAssignments(connections, new int?[] { 0, 1, 2, -1 });
+Assert(leaveExtra.Assignments.Length == 3 && leaveExtra.PendingConnections.Length == 0 && leaveExtra.UnchangedPipes.SequenceEqual(new[] { 3 }), "explicitly unchanged extra native pipe");
+Reject(() => SewerInfoModel.PlanAssignments(connections, new int?[] { null }), "mapping must be explicit");
+Reject(() => SewerInfoModel.PlanAssignments(connections, new int?[] { 2, 2 }), "duplicate plan connection mapping");
+Reject(() => SewerInfoModel.PlanAssignments(connections, new int?[] { 3 }), "out of range mapping");
+Reject(() => SewerInfoModel.PlanAssignments(connections, new int?[] { -2 }), "invalid negative mapping");
+var missingInvert = new[] { new SewerConnection { ConnectionId = "unknown", InvertElevation = null } };
+Reject(() => SewerInfoModel.PlanAssignments(missingInvert, new int?[] { 0 }), "unknown invert cannot be assigned");
+Assert(SewerInfoModel.PlanAssignments(missingInvert, new int?[] { -1 }).PendingConnections.Length == 1, "unknown invert may remain pending without blocking name/rim");
+Assert(SewerInfoModel.PlanAssignments(Array.Empty<SewerConnection>(), new int?[] { -1 }).UnchangedPipes.Length == 1, "no plan connections still permits explicit unchanged native pipe");
 Console.WriteLine("PASS: sewer catalog naming, schema, provenance, dimensions/materials, unknowns, validation, merge and block labels.");
 foreach (string path in args)
 {
@@ -75,3 +92,4 @@ foreach (string path in args)
     Assert(reread.Manholes.Count == input.Manholes.Count, "supplied catalog round trip");
     Console.WriteLine($"PASS supplied catalog: {input.Manholes.Count} records, {input.Manholes.Sum(m => m.Connections.Count)} connections.");
 }
+

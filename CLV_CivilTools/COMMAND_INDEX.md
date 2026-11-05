@@ -1,3 +1,9 @@
+## 2026-11-05 - Sewer Apply correction and CLV text style
+- **SSMHAPPLY** no longer asks All/Rimonly or requires equal plan/native connection counts. Pick source block and destination structure, map each existing connected pipe to a plan connection (or explicitly leave it unchanged), review and confirm. Name/rim always apply; missing native pipes retain pending plan inverts. Zero-pipe structures are supported. Assigned unknown inverts, duplicate plan assignments and unselected mapping rows are refused.
+- Preview and completion identify applied endpoints, pending plan connections and explicitly unchanged existing pipes; native name/rim values are reported.
+- **SSMHINSERT / SSMHREFRESH** use existing **CLV-Non Anno** for new/refreshed info-block text. Refresh an older placed block to update its attribute references. Missing style requires loading the CLV template style; no fallback.
+- Q1 ADJUST > SEWER PLAN DATA > MANHOLE INFO route and catalog/manual-entry commands are unchanged. This entry supersedes the initial All/Rimonly workflow below. See Docs/SEWER_MANHOLE_INFO.md for corrected native testing.
+
 ## 2026-11-05 - Sewer manhole plan information
 Q1 > ADJUST > SEWER PLAN DATA > **MANHOLE INFO** opens **SSMHINFO**. One action per manager invocation.
 

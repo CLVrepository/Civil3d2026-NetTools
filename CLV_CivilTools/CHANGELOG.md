@@ -1,3 +1,10 @@
+## 2026-11-05 - Apply sewer info with missing pipe branches
+- Fixes the reported two-plan/one-pipe refusal: name/rim and mapped existing pipe inverts can now apply while unmodeled plan connections stay pending.
+- Removes the transfer-scope prompt. A mapping table explicitly associates existing native pipe endpoints with plan connections, or leaves selected existing pipes unchanged. Pending and unchanged data is shown before confirmation and in the completion report.
+- Uses **CLV-Non Anno** for placed/refreshed manhole info attributes, including refreshed older blocks. Missing style stops the operation rather than falling back to Standard.
+- Reports verified native name/rim and mapped/pending counts, marks changed parts' graphics modified, and regenerates. Existing transaction/readback safeguards remain; no missing pipe or automatic part swap is created.
+- Catalog/mapping regressions and actual extraction parser/round-trip passed; targeted Autodesk/Civil-reference compilation passed without warnings/errors. Live corrected network label/style/Undo checks remain required.
+
 ## 2026-11-05 - Sewer manhole information catalog and transfer starter
 - Adds Q1 ADJUST > SEWER PLAN DATA > MANHOLE INFO (SSMHINFO): import plan-extracted JSON, add/edit records manually, export, and place/refresh attributed information blocks.
 - Retains canonical project-SSMH-01 names, rims, structure base diameters, multiple pipe inverts/directions, pipe sizes/materials/specifications and source references. Unknown values remain blank. Catalog and placed snapshots travel with the DWG.

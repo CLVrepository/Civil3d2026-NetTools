@@ -56,6 +56,22 @@ namespace CLV_CivilTools.Ufls.SewerInfo
     }
     internal static class SewerInfoModel
     {
+        internal sealed record ConnectionAssignment(int PipeIndex, int ConnectionIndex);
+        internal sealed record AssignmentPlan(ConnectionAssignment[] Assignments, int[] PendingConnections, int[] UnchangedPipes);
+        internal static AssignmentPlan PlanAssignments(IReadOnlyList<SewerConnection> connections, IReadOnlyList<int?> choices)
+        {
+            var assignments = new List<ConnectionAssignment>(); var used = new HashSet<int>(); var unchanged = new List<int>();
+            for (int i = 0; i < choices.Count; i++)
+            {
+                int choice = choices[i] ?? throw new ArgumentException("Choose a plan connection or explicitly leave pipe row " + (i + 1) + " unchanged.");
+                if (choice == -1) { unchanged.Add(i); continue; }
+                if (choice < 0 || choice >= connections.Count) throw new ArgumentException("Invalid plan connection choice.");
+                if (!used.Add(choice)) throw new ArgumentException("The same plan connection cannot be assigned to multiple existing pipes.");
+                if (!connections[choice].InvertElevation.HasValue) throw new ArgumentException("Selected plan connection has an unknown invert. Complete it or explicitly leave that pipe unchanged.");
+                assignments.Add(new ConnectionAssignment(i, choice));
+            }
+            return new AssignmentPlan(assignments.ToArray(), Enumerable.Range(0, connections.Count).Where(i => !used.Contains(i)).ToArray(), unchanged.ToArray());
+        }
         internal const int MaxJsonLength = 8 * 1024 * 1024;
         internal static readonly JsonSerializerOptions Json = new()
         {
@@ -173,3 +189,4 @@ namespace CLV_CivilTools.Ufls.SewerInfo
         }
     }
 }
+

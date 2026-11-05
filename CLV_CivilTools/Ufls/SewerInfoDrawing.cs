@@ -12,6 +12,7 @@ namespace CLV_CivilTools.Ufls.SewerInfo
         private const string SnapshotKey = "CLV_SEWER_INFO_BLOCK_V1";
         private const string DefinitionKey = "CLV_SEWER_INFO_DEFINITION_V1";
         internal const string InfoLayer = "CLV-SSMH-INFO";
+        internal const string InfoTextStyle = "CLV-Non Anno";
         internal static SewerCatalog? Catalog(Database db, Transaction tr)
         {
             string? data = Read((DBDictionary)tr.GetObject(db.NamedObjectsDictionaryId, OpenMode.ForRead), CatalogKey, tr);
@@ -65,14 +66,16 @@ namespace CLV_CivilTools.Ufls.SewerInfo
         }
         private static void Fill(BlockReference b, Database db, Transaction tr, SewerCatalog catalog, SewerManhole mh)
         {
+            ObjectId style = RequiredTextStyle(db, tr);
             Dictionary<string, string> values = SewerInfoModel.Attributes(catalog, mh);
             var definition = (BlockTableRecord)tr.GetObject(b.BlockTableRecord, OpenMode.ForRead);
             foreach (ObjectId id in definition)
             {
                 if (tr.GetObject(id, OpenMode.ForRead) is not AttributeDefinition ad) continue;
                 var ar = new AttributeReference(); ar.SetAttributeFromBlock(ad, b.BlockTransform);
-                ar.TextString = values[ad.Tag]; ar.LayerId = b.LayerId;
+                ar.TextString = values[ad.Tag]; ar.LayerId = b.LayerId; ar.TextStyleId = style;
                 b.AttributeCollection.AppendAttribute(ar); tr.AddNewlyCreatedDBObject(ar, true);
+                if (ar.TextStyleId != style) throw new InvalidOperationException("Info-block text-style verification failed.");
             }
             SewerCatalog snapshot = SewerInfoModel.Copy(catalog);
             snapshot.Manholes = new List<SewerManhole> { SewerInfoModel.Copy(mh) };
@@ -82,6 +85,7 @@ namespace CLV_CivilTools.Ufls.SewerInfo
         }
         private static ObjectId Definition(Database db, Transaction tr, int count)
         {
+            ObjectId style = RequiredTextStyle(db, tr);
             string name = "CLV_SSMH_INFO_V1_C" + count.ToString("D2");
             var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
             if (bt.Has(name))
@@ -90,6 +94,9 @@ namespace CLV_CivilTools.Ufls.SewerInfo
                 string? signature = existing.ExtensionDictionary.IsNull ? null : Read((DBDictionary)tr.GetObject(existing.ExtensionDictionary, OpenMode.ForRead), DefinitionKey, tr);
                 if (signature != "1:" + count || existing.IsFromExternalReference)
                     throw new InvalidOperationException("Block definition name is already used by a different definition: " + name);
+                foreach (ObjectId id in existing)
+                    if (tr.GetObject(id, OpenMode.ForRead) is AttributeDefinition ad && ad.TextStyleId != style)
+                    { ad.UpgradeOpen(); ad.TextStyleId = style; ad.RecordGraphicsModified(true); }
                 return existing.ObjectId;
             }
             bt.UpgradeOpen(); var def = new BlockTableRecord { Name = name, Origin = Point3d.Origin };
@@ -102,21 +109,25 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             def.AppendEntity(y); tr.AddNewlyCreatedDBObject(y, true);
             string[] tags = new[] { "MH_NAME", "RIM", "STRUCT_SIZE", "SOURCE" }
                 .Concat(Enumerable.Range(1, count).Select(i => "CONN_" + i.ToString("D2"))).ToArray();
-            var styles = (TextStyleTable)tr.GetObject(db.TextStyleTableId, OpenMode.ForRead);
-            if (!styles.Has("Standard")) throw new InvalidOperationException("The Standard text style is required for the info block.");
             for (int i = 0; i < tags.Length; i++)
             {
                 using var ad = new AttributeDefinition
                 {
                     Tag = tags[i], Prompt = tags[i], TextString = "?", Height = 1,
                     Position = new Point3d(2, -i * 1.5, 0), Layer = "0", ColorIndex = 256,
-                    TextStyleId = styles["Standard"]
+                    TextStyleId = style
                 };
                 def.AppendEntity(ad); tr.AddNewlyCreatedDBObject(ad, true);
             }
             def.CreateExtensionDictionary();
             Write((DBDictionary)tr.GetObject(def.ExtensionDictionary, OpenMode.ForRead), DefinitionKey, "1:" + count, tr);
             return def.ObjectId;
+        }
+        private static ObjectId RequiredTextStyle(Database db, Transaction tr)
+        {
+            var styles = (TextStyleTable)tr.GetObject(db.TextStyleTableId, OpenMode.ForRead);
+            if (!styles.Has(InfoTextStyle)) throw new InvalidOperationException("Text style '" + InfoTextStyle + "' is missing. Load it from the CLV drawing template, then retry. No fallback style was used.");
+            return styles[InfoTextStyle];
         }
         private static ObjectId Layer(Database db, Transaction tr)
         {
@@ -168,3 +179,4 @@ namespace CLV_CivilTools.Ufls.SewerInfo
         }
     }
 }
+

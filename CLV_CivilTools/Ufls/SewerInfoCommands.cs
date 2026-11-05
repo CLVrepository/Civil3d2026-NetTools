@@ -173,9 +173,6 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             if (CivilApp.ActiveDocument.Settings.DrawingSettings.UnitZoneSettings.DrawingUnits.ToString() != "Feet")
                 throw new InvalidOperationException("This starter requires Civil drawing units set to Feet. No conversion or datum transformation is performed.");
             ObjectId structureId = Pick(d.Editor, "\nSelect destination Civil 3D sewer structure: ", typeof(Structure)); if (structureId.IsNull) return;
-            var mode = new PromptKeywordOptions("\nTransfer scope"); mode.Keywords.Add("All"); mode.Keywords.Add("Rimonly"); mode.Keywords.Default = "All"; mode.AllowNone = true;
-            PromptResult scope = d.Editor.GetKeywords(mode); if (scope.Status != PromptStatus.OK && scope.Status != PromptStatus.None) return;
-            bool withPipes = scope.StringResult != "Rimonly";
             using Transaction tr = d.Database.TransactionManager.StartTransaction();
             var structure = (Structure)tr.GetObject(structureId, OpenMode.ForRead); Editable(structure, tr);
             var network = (Network)tr.GetObject(structure.NetworkId, OpenMode.ForRead);
@@ -186,15 +183,29 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             var pipeBefore = pipeIds.Select(id => State((Pipe)tr.GetObject(id, OpenMode.ForRead))).ToArray();
             var structureBefore = structureIds.Select(id => State((Structure)tr.GetObject(id, OpenMode.ForRead))).ToArray();
             PipeState[] connected = pipeBefore.Where(p => p.StartStructure == structureId || p.EndStructure == structureId).ToArray();
-            if (withPipes && (mh.Connections.Count == 0 || mh.Connections.Count != connected.Length))
-                throw new InvalidOperationException("Plan has " + mh.Connections.Count + " connections; structure has " + connected.Length + ". Complete the network/record, or use Rimonly.");
-            var mappings = new List<Mapping>();
-            if (withPipes) foreach (SewerConnection connection in mh.Connections)
+            d.Editor.WriteMessage("\nPlan connections: " + mh.Connections.Count + "; existing connected pipes: " + connected.Length
+                + ". Name/rim are included; map the existing pipes below. Missing plan connections remain pending.");
+            SewerInfoModel.AssignmentPlan assignmentPlan;
+            if (connected.Length == 0) assignmentPlan = SewerInfoModel.PlanAssignments(mh.Connections, Array.Empty<int?>());
+            else
             {
-                if (!connection.InvertElevation.HasValue) throw new InvalidOperationException("An invert is unknown. Complete the record first.");
-                ObjectId pipeId = Pick(d.Editor, "\n" + SewerInfoModel.PipeLabel(connection) + " - pick its connected Civil pipe: ", typeof(Pipe)); if (pipeId.IsNull) return;
-                if (mappings.Any(m => m.PipeId == pipeId)) throw new InvalidOperationException("One pipe cannot receive two connection records at this structure.");
-                PipeState before = connected.SingleOrDefault(p => p.Id == pipeId) ?? throw new InvalidOperationException("Selected pipe is not connected to the destination structure.");
+                string[] labels = connected.Select(old =>
+                {
+                    var p = (Pipe)tr.GetObject(old.Id, OpenMode.ForRead);
+                    bool start = old.StartStructure == structureId;
+                    return p.Name + " [" + p.Handle + "] " + (start ? "START" : "END")
+                        + " | INV " + SewerInfoModel.Elevation((start ? old.Start.Z : old.End.Z) - old.InnerHeight / 2)
+                        + " ft | " + p.PartFamilyName + " / " + p.PartSizeName;
+                }).ToArray();
+                using var mapForm = new SewerMapForm(mh, labels);
+                if (AcadApp.ShowModalDialog(mapForm) != DialogResult.OK || mapForm.MappingPlan == null) return;
+                assignmentPlan = mapForm.MappingPlan;
+            }
+            var mappings = new List<Mapping>();
+            foreach (SewerInfoModel.ConnectionAssignment assignment in assignmentPlan.Assignments)
+            {
+                SewerConnection connection = mh.Connections[assignment.ConnectionIndex];
+                PipeState before = connected[assignment.PipeIndex]; ObjectId pipeId = before.Id;
                 if (before.StartStructure == before.EndStructure) throw new InvalidOperationException("A pipe connects both ends to this structure; mapping is ambiguous.");
                 var pipe = (Pipe)tr.GetObject(pipeId, OpenMode.ForRead); Editable(pipe, tr);
                 if (pipe.CrossSectionalShape.ToString() != "Circular" || !double.IsFinite(pipe.InnerHeight) || pipe.InnerHeight <= 0)
@@ -222,7 +233,11 @@ namespace CLV_CivilTools.Ufls.SewerInfo
                 preview.AppendLine("CAD: " + p.Name + " [" + p.Handle + "] " + (map.AtStart ? "START" : "END") + " | INV " + SewerInfoModel.Elevation(old) + " -> " + SewerInfoModel.Elevation(map.Connection.InvertElevation));
                 preview.AppendLine("Existing part: " + p.PartFamilyName + " / " + p.PartSizeName + " | modeled ID " + SewerInfoModel.Number(p.InnerHeight * 12) + " in");
             }
-            if (!withPipes) preview.AppendLine("\r\nRIMONLY: no pipe inverts will be assigned. All network endpoint elevations must remain unchanged.");
+            preview.AppendLine("\r\nPENDING PLAN CONNECTIONS: " + assignmentPlan.PendingConnections.Length);
+            foreach (int i in assignmentPlan.PendingConnections) preview.AppendLine("PENDING - " + SewerInfoModel.PipeLabel(mh.Connections[i]));
+            preview.AppendLine("EXISTING PIPES EXPLICITLY LEFT UNCHANGED: " + assignmentPlan.UnchangedPipes.Length);
+            foreach (int i in assignmentPlan.UnchangedPipes) preview.AppendLine("UNCHANGED - " + ((Pipe)tr.GetObject(connected[i].Id, OpenMode.ForRead)).Name + " [" + connected[i].Id.Handle + "]");
+            preview.AppendLine("Name/rim and every mapped pipe end will be applied. Pending connections remain stored plan data until their pipes are modeled/mapped.");
             preview.AppendLine("\r\nRECORD, PROJECT DATUM AND SOURCE METADATA\r\n" + SewerInfoModel.Serialize(snapshot));
             if (!Confirm("APPLY MANHOLE INFO - REVIEW ALL CHANGES", preview.ToString(), "I reviewed the source values, units/datum, pipe mapping and endpoint convention. Apply these changes.")) return;
             foreach (Mapping map in mappings)
@@ -250,24 +265,34 @@ namespace CLV_CivilTools.Ufls.SewerInfo
                 Structure s = (Structure)tr.GetObject(old.Id, OpenMode.ForRead); CheckXY(s.Position, old.Position);
                 if (s.PartFamilyId != old.Family || s.GetPartSizeId() != old.Size) throw new InvalidOperationException("Structure part changed unexpectedly.");
                 if (old.Id == structureId)
-                { Check(s.RimElevation, mh.RimElevation.Value); if (!withPipes) Check(s.SumpElevation, old.Sump); if (s.Name != mh.Name || s.AutomaticRimSurfaceAdjustment) throw new InvalidOperationException("Structure name/rim verification failed."); }
+                { Check(s.RimElevation, mh.RimElevation.Value); if (!double.IsFinite(s.SumpElevation) || s.Name != mh.Name || s.AutomaticRimSurfaceAdjustment) throw new InvalidOperationException("Structure name/rim verification failed."); }
                 else
                 { Check(s.RimElevation, old.Rim); Check(s.SumpElevation, old.Sump); if (s.Name != old.Name || s.AutomaticRimSurfaceAdjustment != old.AutoRim) throw new InvalidOperationException("Adjacent structure changed unexpectedly."); }
             }
             SewerInfoDrawing.Attach(structure, "CLV_SEWER_APPLIED_INFO_V1", SewerInfoModel.Serialize(new
             {
                 version = 1, projectNumber = snapshot.ProjectNumber, sourceBlockHandle = blockId.Handle.ToString(),
-                reviewedAtUtc = DateTime.UtcNow, scope = withPipes ? "all" : "rim_only", record = mh,
+                reviewedAtUtc = DateTime.UtcNow, scope = "available_connections", record = mh,
+                pendingConnectionIds = assignmentPlan.PendingConnections.Select(i => mh.Connections[i].ConnectionId).ToArray(),
+                unchangedPipeHandles = assignmentPlan.UnchangedPipes.Select(i => connected[i].Id.Handle.ToString()).ToArray(),
                 endpointConvention = "current_pipe_endpoint_no_wall_offset_correction",
                 pipeMappings = mappings.Select(m => new { connectionId = m.Connection.ConnectionId, pipeHandle = m.PipeId.Handle.ToString(), endpoint = m.AtStart ? "start" : "end" }).ToArray()
             }), tr);
             foreach (Mapping map in mappings)
                 SewerInfoDrawing.Attach(tr.GetObject(map.PipeId, OpenMode.ForWrite), map.AtStart ? "CLV_SEWER_PLAN_START_V1" : "CLV_SEWER_PLAN_END_V1",
                     SewerInfoModel.Serialize(new { projectNumber = snapshot.ProjectNumber, structureName = mh.Name, sourceBlockHandle = blockId.Handle.ToString(), connection = map.Connection }), tr);
-            tr.Commit(); d.Editor.Regen(); d.Editor.WriteMessage("\nApplied " + mh.Name + ": name/rim" + (withPipes ? " and " + mappings.Count + " pipe-end inverts." : " only.") + " Part sizes/materials retained for review. Use UNDO to undo this command.");
+            structure.RecordGraphicsModified(true);
+            foreach (Mapping map in mappings) ((Pipe)tr.GetObject(map.PipeId, OpenMode.ForWrite)).RecordGraphicsModified(true);
+            string actualName = structure.Name; double actualRim = structure.RimElevation;
+            tr.Commit(); d.Editor.Regen();
+            d.Editor.WriteMessage("\nUpdated native structure: " + actualName + "; RIM=" + SewerInfoModel.Elevation(actualRim)
+                + " ft; applied " + mappings.Count + " pipe-end inverts. Pending plan connections: " + assignmentPlan.PendingConnections.Length
+                + "; existing pipes left unchanged: " + assignmentPlan.UnchangedPipes.Length + ". Use UNDO to undo this command.");
+            foreach (int i in assignmentPlan.PendingConnections) d.Editor.WriteMessage("\nPENDING (not applied to a native pipe): " + SewerInfoModel.PipeLabel(mh.Connections[i]));
         }
         private static void Check(double actual, double expected)
         { if (!double.IsFinite(actual) || Math.Abs(actual - expected) > 1e-7) throw new InvalidOperationException("Native readback differed from the requested values; the transfer was rolled back."); }
         private static void CheckXY(Point3d actual, Point3d expected) { Check(actual.X, expected.X); Check(actual.Y, expected.Y); }
     }
 }
+
