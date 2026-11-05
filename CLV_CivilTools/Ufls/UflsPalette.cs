@@ -189,6 +189,9 @@ namespace CLV_CivilTools
         {
             var layout = CreateMainFlowPanel();
 
+            layout.Controls.Add(CreateSectionLabel("SEWER PLAN DATA"));
+            layout.Controls.Add(CreateCommandButton("MANHOLE INFO", "SSMHINFO"));
+
             layout.Controls.Add(CreateSectionLabel("SEWER MAIN - MOVE"));
             layout.Controls.Add(CreateCommandButtonRow("MH - SINGLE", "UFLS-ADJ-MH-SINGLE", "MH - ALL", "UFLS-ADJ-MH-ALL"));
             layout.Controls.Add(CreateCommandButtonRow("PIPE - SINGLE", "UFLS-ADJ-PIPE-SINGLE", "PIPE - ALL", "UFLS-ADJ-PIPE-ALL"));

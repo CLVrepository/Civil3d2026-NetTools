@@ -1,3 +1,17 @@
+## 2026-11-05 - Sewer manhole plan information
+Q1 > ADJUST > SEWER PLAN DATA > **MANHOLE INFO** opens **SSMHINFO**. One action per manager invocation.
+
+| Command | Action |
+|---|---|
+| SSMHIMPORT | Preview and merge extracted JSON into the DWG catalog. |
+| SSMHADD / SSMHEDIT | Add manual records or edit an existing manhole number. |
+| SSMHINSERT | Choose a number, pick marker XY and text height; place an attributed snapshot block. |
+| SSMHREFRESH | Preview old/new and refresh one block from its catalog record. |
+| SSMHAPPLY | Pick a block and native structure; All (A) maps every connected pipe, Rimonly (R) transfers name/rim only. Review acknowledgement required. |
+| SSMHEXPORT | Export the drawing catalog to JSON. |
+
+Sewer only; names follow project-SSMH-01. Stores rim, structure BASE diameter, each pipe invert/direction/diameter/material/specification and provenance. Supports existing extraction JSON; unzip first. Unknown values remain unknown. Feet units, local editable structure and straight circular gravity pipes required for network transfer. Applies inverts at current pipe endpoints using actual native inner height. No assumed wall/center correction or automatic part swap. See Docs/SEWER_MANHOLE_INFO.md for persistence, refresh, cancellation and native tests.
+
 ## 2026-10-29 - Fixed 3D/2D conversion layers
 - **PCT3DFROMPOINTS / PL3DFROMPOINTS** — Q3 > ROADWAY > POLYLINE TOOLS > **3D POLYLINE FROM POINTS**. No layer-name prompts: 3D output always uses **V-DTM~-GBRK** and kept original 2D traces use **Layer 0**. Earlier saved destination choices are ignored. Other conversion prompts and automatic matching remain unchanged.
 

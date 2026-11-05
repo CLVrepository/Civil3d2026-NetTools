@@ -1,3 +1,10 @@
+## 2026-11-05 - Sewer manhole information catalog and transfer starter
+- Adds Q1 ADJUST > SEWER PLAN DATA > MANHOLE INFO (SSMHINFO): import plan-extracted JSON, add/edit records manually, export, and place/refresh attributed information blocks.
+- Retains canonical project-SSMH-01 names, rims, structure base diameters, multiple pipe inverts/directions, pipe sizes/materials/specifications and source references. Unknown values remain blank. Catalog and placed snapshots travel with the DWG.
+- SSMHAPPLY previews name/rim and explicitly mapped connected pipe-end inverts, with an acknowledged confirmation and atomic transaction. Supports All or Rimonly; rejects incomplete/ambiguous mappings, locked/reference parts and incompatible native outcomes. Existing pipe-end XY/opposite elevations are preserved and network side effects checked.
+- Uses actual modeled pipe inner height, rather than nominal plan size, for endpoint invert/centerline conversion. Part sizes/materials remain reference data; this starter does not create/swap/resize parts or assume a structure-wall invert correction.
+- Targeted Autodesk/Civil-reference compile and executable host-independent regressions passed, including the revised extraction JSON (12 records, 26 connections). Full solution and live Civil 3D UI/block/native/Undo tests remain required. Existing GIS/grid workflows and framework/deployment are unchanged.
+
 ## 2026-10-29 - Correct GBRK layer name and simplify conversion
 - Corrects the fixed 3D destination to **V-DTM~-GBRK**, including the missing dash after the tilde. Removes both layer-name prompts and saved layer-choice behavior.
 - Keep puts selected original 2D traces on **Layer 0**; no separate trace layer is created. Previous custom choices are ignored without deleting old records or unselected objects.
