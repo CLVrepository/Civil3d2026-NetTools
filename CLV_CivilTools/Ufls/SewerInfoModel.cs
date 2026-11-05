@@ -58,6 +58,55 @@ namespace CLV_CivilTools.Ufls.SewerInfo
     {
         internal sealed record ConnectionAssignment(int PipeIndex, int ConnectionIndex);
         internal sealed record AssignmentPlan(ConnectionAssignment[] Assignments, int[] PendingConnections, int[] UnchangedPipes);
+        internal sealed record NativeConnection(bool AtStart, double OutwardDx, double OutwardDy);
+        internal sealed record AutomaticPlan(AssignmentPlan Plan, string[] Evidence);
+        internal static AutomaticPlan MatchAutomatically(IReadOnlyList<SewerConnection> connections, IReadOnlyList<NativeConnection> native)
+        {
+            var choices = new int?[native.Count]; var evidence = new string[native.Count];
+            for (int i = 0; i < native.Count; i++)
+            {
+                choices[i] = -1;
+                string role = native[i].AtStart ? "out" : "in";
+                double? azimuth = Bearing(native[i].OutwardDx, native[i].OutwardDy);
+                int[] roleCandidates = Enumerable.Range(0, connections.Count).Where(j => connections[j].Flow == role).ToArray();
+                int[] candidates = roleCandidates.Where(j =>
+                {
+                    double? direction = Compass(connections[j].Direction);
+                    return !azimuth.HasValue || !direction.HasValue || AngularDifference(azimuth.Value, direction.Value) < 22.5 - 1e-8;
+                }).ToArray();
+                string basis = (native[i].AtStart ? "START -> OUT" : "END -> IN")
+                    + (azimuth.HasValue ? "; WCS outward azimuth " + azimuth.Value.ToString("0.###", CultureInfo.InvariantCulture) + " deg" : "; no horizontal bearing");
+                if (candidates.Length == 0) evidence[i] = basis + "; no matching plan role/direction. Native pipe unchanged.";
+                else if (candidates.Length > 1) evidence[i] = basis + "; multiple matching plan connections. Native pipe unchanged.";
+                else if (!connections[candidates[0]].InvertElevation.HasValue) evidence[i] = basis + "; matching plan invert is unknown. Native pipe unchanged.";
+                else
+                {
+                    choices[i] = candidates[0];
+                    evidence[i] = basis + (azimuth.HasValue && Compass(connections[candidates[0]].Direction).HasValue ? "; matched plan compass direction." : "; unique compatible role; direction unavailable.");
+                }
+            }
+            // No pipe wins because of enumeration order when two pipes claim one plan connection.
+            foreach (var conflict in Enumerable.Range(0, choices.Length).Where(i => choices[i] >= 0).GroupBy(i => choices[i]!.Value).Where(g => g.Count() > 1))
+                foreach (int i in conflict) { choices[i] = -1; evidence[i] = "Multiple native pipes match the same plan connection. Native pipe unchanged."; }
+            return new AutomaticPlan(PlanAssignments(connections, choices), evidence);
+        }
+        private static double? Bearing(double dx, double dy)
+        {
+            if (!double.IsFinite(dx) || !double.IsFinite(dy) || (Math.Abs(dx) < 1e-9 && Math.Abs(dy) < 1e-9)) return null;
+            return (Math.Atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+        }
+        private static double AngularDifference(double a, double b)
+        { double delta = Math.Abs(a - b) % 360; return Math.Min(delta, 360 - delta); }
+        private static double? Compass(string? direction)
+        {
+            string key = (direction ?? "").ToUpperInvariant().Replace(" ", "").Replace(".", "").Replace("-", "").Replace("/", "");
+            return key switch
+            {
+                "N" or "NORTH" => 0, "NE" or "NORTHEAST" => 45, "E" or "EAST" => 90,
+                "SE" or "SOUTHEAST" => 135, "S" or "SOUTH" => 180, "SW" or "SOUTHWEST" => 225,
+                "W" or "WEST" => 270, "NW" or "NORTHWEST" => 315, _ => null
+            };
+        }
         internal static AssignmentPlan PlanAssignments(IReadOnlyList<SewerConnection> connections, IReadOnlyList<int?> choices)
         {
             var assignments = new List<ConnectionAssignment>(); var used = new HashSet<int>(); var unchanged = new List<int>();
@@ -189,4 +238,5 @@ namespace CLV_CivilTools.Ufls.SewerInfo
         }
     }
 }
+
 

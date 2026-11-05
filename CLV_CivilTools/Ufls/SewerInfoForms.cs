@@ -20,7 +20,7 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1, Padding = new Padding(10) };
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 60));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 40)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-            layout.Controls.Add(new Label { Dock = DockStyle.Fill, Text = "Select a record to place or edit. All elevations are feet; all diameters are inches.\nImport JSON or add records manually. Transfer uses a placed block and an explicit pipe mapping." }, 0, 0);
+            layout.Controls.Add(new Label { Dock = DockStyle.Fill, Text = "Select a record to place or edit. All elevations are feet; all diameters are inches.\nImport JSON or add records manually. Transfer uses a placed block and automatic pipe matching." }, 0, 0);
             _grid = new DataGridView { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 MultiSelect = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, RowHeadersVisible = false };
@@ -129,47 +129,6 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             catch (System.Exception e) { MessageBox.Show(this, e.Message, "Check manhole data", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         }
     }
-    internal sealed class SewerMapForm : Form
-    {
-        private sealed record Choice(int Index, string Label);
-        private readonly DataGridView _grid = new();
-        private readonly SewerManhole _mh;
-        internal SewerInfoModel.AssignmentPlan? MappingPlan { get; private set; }
-        internal SewerMapForm(SewerManhole mh, string[] pipeLabels)
-        {
-            _mh = mh; Text = "MATCH EXISTING SEWER PIPES - " + mh.Name;
-            StartPosition = FormStartPosition.CenterParent; MinimumSize = new SD.Size(900, 420); Size = new SD.Size(1200, 560); AutoScaleMode = AutoScaleMode.Dpi;
-            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(10) };
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 75)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 45));
-            layout.Controls.Add(new Label { Dock = DockStyle.Fill, Text = "Plan connections: " + mh.Connections.Count + "    Existing connected pipes: " + pipeLabels.Length
-                + "\nChoose the correct plan connection for each existing pipe, or explicitly leave that pipe unchanged.\nPlan connections without a modeled pipe stay pending. Name and rim are included in the final transfer preview." }, 0, 0);
-            _grid.Dock = DockStyle.Fill; _grid.AllowUserToAddRows = false; _grid.AllowUserToDeleteRows = false; _grid.RowHeadersVisible = false;
-            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            _grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
-            _grid.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Native", HeaderText = "Existing Civil pipe / connected endpoint / current invert", ReadOnly = true, FillWeight = 45 });
-            var choices = new List<Choice> { new Choice(-1, "Leave this existing pipe unchanged") };
-            choices.AddRange(mh.Connections.Select((c, i) => new Choice(i, (i + 1) + ": " + SewerInfoModel.PipeLabel(c))));
-            _grid.Columns.Add(new DataGridViewComboBoxColumn { Name = "Plan", HeaderText = "Plan connection to apply", DataSource = choices, DisplayMember = "Label", ValueMember = "Index", FillWeight = 55, DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton });
-            foreach (string label in pipeLabels) _grid.Rows.Add(label);
-            _grid.CurrentCellDirtyStateChanged += (_, _) => { if (_grid.IsCurrentCellDirty) _grid.CommitEdit(DataGridViewDataErrorContexts.Commit); };
-            layout.Controls.Add(_grid, 0, 1);
-            var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill };
-            var next = new Button { Text = "Review transfer", AutoSize = true };
-            next.Click += (_, _) =>
-            {
-                try
-                {
-                    _grid.EndEdit();
-                    MappingPlan = SewerInfoModel.PlanAssignments(_mh.Connections, _grid.Rows.Cast<DataGridViewRow>().Select(r => r.Cells[1].Value is int i ? (int?)i : null).ToArray());
-                    DialogResult = DialogResult.OK; Close();
-                }
-                catch (System.Exception e) { MessageBox.Show(this, e.Message, "Match existing pipes", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-            };
-            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true }; CancelButton = cancel;
-            buttons.Controls.Add(next); buttons.Controls.Add(cancel); layout.Controls.Add(buttons, 0, 2); Controls.Add(layout);
-        }
-    }
     internal sealed class SewerConfirmForm : Form
     {
         internal SewerConfirmForm(string title, string details, string acknowledgement)
@@ -187,4 +146,5 @@ namespace CLV_CivilTools.Ufls.SewerInfo
         }
     }
 }
+
 

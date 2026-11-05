@@ -1,3 +1,9 @@
+## 2026-11-05 - Automatically match sewer pipes and fix straight-pipe Apply error
+- Fixes the reported SubEntityType is not PipeSubEntityType.Curved exception by removing the curved-only Curve2d getter from straight-pipe validation.
+- Removes manual pipe assignment from normal Apply. Pick the info block and native structure, then review automatically filled changes using START=OUT, END=IN and available WCS compass directions.
+- Multiple incoming branches match by direction; unique roles can match with missing direction. Ambiguous/conflicting/duplicate matches and unknown inverts remain unresolved rather than guessed. Pending plan connections remain stored.
+- Automatic matching/catalog tests and actual extraction round-trip passed; targeted Autodesk/Civil-reference compilation passed without warnings/errors. Live corrected automatic transfer, native labels and Undo still need workstation testing.
+
 ## 2026-11-05 - Apply sewer info with missing pipe branches
 - Fixes the reported two-plan/one-pipe refusal: name/rim and mapped existing pipe inverts can now apply while unmodeled plan connections stay pending.
 - Removes the transfer-scope prompt. A mapping table explicitly associates existing native pipe endpoints with plan connections, or leaves selected existing pipes unchanged. Pending and unchanged data is shown before confirmation and in the completion report.

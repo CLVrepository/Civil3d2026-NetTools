@@ -84,6 +84,43 @@ var missingInvert = new[] { new SewerConnection { ConnectionId = "unknown", Inve
 Reject(() => SewerInfoModel.PlanAssignments(missingInvert, new int?[] { 0 }), "unknown invert cannot be assigned");
 Assert(SewerInfoModel.PlanAssignments(missingInvert, new int?[] { -1 }).PendingConnections.Length == 1, "unknown invert may remain pending without blocking name/rim");
 Assert(SewerInfoModel.PlanAssignments(Array.Empty<SewerConnection>(), new int?[] { -1 }).UnchangedPipes.Length == 1, "no plan connections still permits explicit unchanged native pipe");
+var autoMh1Connections = new[]
+{
+    new SewerConnection { ConnectionId = "in", Flow = "in", Direction = "S", InvertElevation = 100.2 },
+    new SewerConnection { ConnectionId = "out", Flow = "out", Direction = "N", InvertElevation = 100 }
+};
+var autoMh1 = SewerInfoModel.MatchAutomatically(autoMh1Connections, new[] { new SewerInfoModel.NativeConnection(true, 0, 20) });
+Assert(autoMh1.Plan.Assignments.Single().ConnectionIndex == 1 && autoMh1.Plan.PendingConnections.SequenceEqual(new[] { 0 }), "automatic MH1 missing incoming stub, existing outgoing START north");
+var autoTwo = SewerInfoModel.MatchAutomatically(autoMh1Connections, new[] { new SewerInfoModel.NativeConnection(false, 0, -20), new SewerInfoModel.NativeConnection(true, 0, 20) });
+Assert(autoTwo.Plan.Assignments.Select(x => x.ConnectionIndex).SequenceEqual(new[] { 0, 1 }), "END incoming and START outgoing without assignment UI");
+var branches = new[]
+{
+    new SewerConnection { ConnectionId = "nw", Flow = "in", Direction = "NW", InvertElevation = 101 },
+    new SewerConnection { ConnectionId = "sw", Flow = "in", Direction = "South-West", InvertElevation = 102 },
+    new SewerConnection { ConnectionId = "out", Flow = "out", Direction = "N.E.", InvertElevation = 100 }
+};
+var autoBranches = SewerInfoModel.MatchAutomatically(branches, new[]
+{ new SewerInfoModel.NativeConnection(false, -10, 10), new SewerInfoModel.NativeConnection(false, -10, -10), new SewerInfoModel.NativeConnection(true, 10, 10) });
+Assert(autoBranches.Plan.Assignments.Select(x => x.ConnectionIndex).SequenceEqual(new[] { 0, 1, 2 }), "multiple incoming branches and direction aliases");
+var uniqueRole = SewerInfoModel.MatchAutomatically(new[] { new SewerConnection { Flow = "out", InvertElevation = 0 } }, new[] { new SewerInfoModel.NativeConnection(true, 9, 2) });
+Assert(uniqueRole.Plan.Assignments.Length == 1, "unique role with missing plan direction and zero invert");
+var conflictDirection = SewerInfoModel.MatchAutomatically(autoMh1Connections, new[] { new SewerInfoModel.NativeConnection(true, 0, -10) });
+Assert(conflictDirection.Plan.Assignments.Length == 0 && conflictDirection.Plan.UnchangedPipes.Length == 1, "known opposing direction does not guess");
+var duplicateNative = SewerInfoModel.MatchAutomatically(autoMh1Connections, new[] { new SewerInfoModel.NativeConnection(true, 0, 10), new SewerInfoModel.NativeConnection(true, 1, 10) });
+Assert(duplicateNative.Plan.Assignments.Length == 0 && duplicateNative.Plan.UnchangedPipes.Length == 2, "two native pipes claiming one plan record remain unresolved");
+var duplicatePlans = SewerInfoModel.MatchAutomatically(new[] { branches[0], SewerInfoModel.Copy(branches[0]) }, new[] { new SewerInfoModel.NativeConnection(false, -10, 10) });
+Assert(duplicatePlans.Plan.Assignments.Length == 0, "two plan records with same role/direction remain unresolved");
+var unknownAutoInvert = SewerInfoModel.MatchAutomatically(new[] { new SewerConnection { Flow = "out", Direction = "N" } }, new[] { new SewerInfoModel.NativeConnection(true, 0, 10) });
+Assert(unknownAutoInvert.Plan.Assignments.Length == 0 && unknownAutoInvert.Plan.PendingConnections.Length == 1, "unknown automatic invert remains pending");
+var emptyAuto = SewerInfoModel.MatchAutomatically(autoMh1Connections, Array.Empty<SewerInfoModel.NativeConnection>());
+Assert(emptyAuto.Plan.PendingConnections.Length == 2, "zero native pipes retains all plan data");
+foreach (var (direction,dx,dy) in new[] { ("N",0d,1d),("NE",1d,1d),("E",1d,0d),("SE",1d,-1d),("S",0d,-1d),("SW",-1d,-1d),("W",-1d,0d),("NW",-1d,1d) })
+    Assert(SewerInfoModel.MatchAutomatically(new[] { new SewerConnection { Flow = "out", Direction = direction, InvertElevation = 1 } }, new[] { new SewerInfoModel.NativeConnection(true,dx,dy) }).Plan.Assignments.Length == 1, "WCS compass " + direction);
+var wrapNorth = SewerInfoModel.MatchAutomatically(autoMh1Connections, new[] { new SewerInfoModel.NativeConnection(true,-0.001,1) });
+Assert(wrapNorth.Plan.Assignments.Length == 1, "north bearing wraps around 360");
+var boundary = SewerInfoModel.MatchAutomatically(autoMh1Connections, new[] { new SewerInfoModel.NativeConnection(true, Math.Sin(Math.PI/8), Math.Cos(Math.PI/8)) });
+Assert(boundary.Plan.Assignments.Length == 0, "compass sector boundary not guessed");
+Console.WriteLine("PASS: automatic START/END roles, WCS compass matching, missing branches, aliases, ambiguity and pending unknowns.");
 Console.WriteLine("PASS: sewer catalog naming, schema, provenance, dimensions/materials, unknowns, validation, merge and block labels.");
 foreach (string path in args)
 {
@@ -92,4 +129,5 @@ foreach (string path in args)
     Assert(reread.Manholes.Count == input.Manholes.Count, "supplied catalog round trip");
     Console.WriteLine($"PASS supplied catalog: {input.Manholes.Count} records, {input.Manholes.Sum(m => m.Connections.Count)} connections.");
 }
+
 
