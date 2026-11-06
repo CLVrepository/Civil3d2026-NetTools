@@ -1,3 +1,9 @@
+## 2026-11-05 - Apply plan pipe materials and structure sizes
+- Adds per-connection pipe family/nominal-size swapping (CLV_PVC, CLV_C900, CLV_RCP), including different materials on successive pipes drawn with one default part.
+- Adds same-family structure barrel resizing with retained frame/opening. Requires exact available definitions; missing/ambiguous catalog variants report diagnostics before network changes.
+- Swaps native parts before assigning inverts with actual new inside height, retaining opposite-end invert, XY, curve shape and connectivity. Opposite-end plan material/size conflicts are detected; transaction/readback guards and versioned audit expanded.
+- Host-independent rules/catalog/curve regressions and supplied extraction round trip passed. Targeted Civil-reference compilation passed; live parts/slope/label/Undo acceptance and full-solution workstation build remain pending.
+
 ## 2026-11-05 - Apply manhole data to curved sewer pipes
 - Adds curved circular gravity pipe support after structure 1 worked but structures 2/3 hit the straight-only restriction.
 - Uses a curve's local endpoint tangent for automatic compass matching. Retains START=OUT/END=IN roles and final review.

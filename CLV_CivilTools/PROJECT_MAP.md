@@ -1,3 +1,9 @@
+## 2026-11-05 - Sewer Apply parts and sizes
+- SSMHAPPLY now uses SewerInfoParts for exact assigned-parts-list pipe family/nominal-size resolution and same-family structure inner/barrel-size matching while retaining frame diameter. Native Part.SwapPartFamilyAndSize is called before setting elevations; no new definitions or parts are created.
+- SewerInfoPartRules holds host-independent PVC/C900/RCP mappings, explicit units/nominal-size parsing, Shared/PipeCatalog exact ID fallback, opposite-end consistency and centerline/invert conversion. No nearest-size or first-variant guessing.
+- Full-network guards allow only resolved target IDs and post-swap inner heights; preserve opposite-end invert, XY/curves/connectivity and adjacent structures. Revised catalog values override old opposite-end snapshots for conflict checks. Version-2 applied audit records target descriptions and actual heights.
+- New rules, existing catalog/matching/curve tests and supplied 12-record/26-connection JSON pass. Targeted source compilation against installed Civil 3D refs passes; full-solution build and live swaps/Undo remain workstation acceptance. Details: Docs/SEWER_MANHOLE_INFO.md.
+
 ## 2026-11-05 - Curved sewer pipes in automatic Apply
 - Native reply confirms structure 1 name/rim/outgoing invert updated. Structures 2/3 were blocked by the explicit straight-only restriction, not by an unsuccessful success message. Adds curved circular gravity pipe support while retaining the working straight path.
 - PipeState now captures subtype and, only for Curved, PipeCurveGeometry bulge plus GetArc2d center/radius/endpoints/clockwise flag/sweep. Straight pipes do not call arc getters.

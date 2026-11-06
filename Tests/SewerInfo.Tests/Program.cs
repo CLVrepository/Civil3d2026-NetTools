@@ -142,6 +142,34 @@ Reject(() => SewerInfoModel.CurveOutwardTangent(0, 0, false, true), "zero radius
 Reject(() => SewerInfoModel.CurveOutwardTangent(double.NaN, 1, false, true), "invalid radius vector");
 Console.WriteLine("PASS: clockwise/counterclockwise endpoint tangents and curved-pipe automatic direction matching.");
 Console.WriteLine("PASS: sewer catalog naming, schema, provenance, dimensions/materials, unknowns, validation, merge and block labels.");
+Assert(SewerInfoPartRules.Family(new SewerConnection { MaterialCode = "C-900", Material = "PVC" }) == "CLV_C900", "physical PVC is compatible with C900 specification");
+foreach (string material in new[] { "PVC", "SDR35", "SDR-35", "ASTM D3034" })
+    Assert(SewerInfoPartRules.Family(new SewerConnection { MaterialCode = material }) == "CLV_PVC", "PVC family alias " + material);
+Assert(SewerInfoPartRules.Family(new SewerConnection { MaterialCode = "RCP" }) == "CLV_RCP", "RCP family");
+Assert(SewerInfoPartRules.Family(new SewerConnection()) == null, "missing material never defaults to PVC");
+Reject(() => SewerInfoPartRules.Family(new SewerConnection { MaterialCode = "C900", PipeSpecification = "SDR35" }), "conflicting PVC specifications");
+Reject(() => SewerInfoPartRules.Family(new SewerConnection { MaterialCode = "RCP", Material = "PVC" }), "conflicting materials");
+Reject(() => SewerInfoPartRules.Family(new SewerConnection { Material = "HDPE" }), "unknown family not guessed");
+Assert(SewerInfoPartRules.LabeledInches("2019 8 INCH PVC") == 8, "year is not pipe size");
+Assert(SewerInfoPartRules.LabeledInches("48\" BARREL 24\" FRAME") == null, "multiple labeled dimensions not guessed");
+Assert(SewerInfoPartRules.LabeledInches("2019 edition 8") == null, "unitless number not nominal diameter");
+Assert(Math.Abs(SewerInfoPartRules.Inches(203.2, "mm")!.Value - 8) < 1e-10, "millimeters convert exactly");
+Assert(SewerInfoPartRules.Inches(4, "feet") == 48 && SewerInfoPartRules.Inches(8, "unknown") == null, "unit metadata required");
+Assert(SewerInfoPartRules.PipeNominal("CLV_PVC", "unlabeled", 7.739) == 8, "PVC actual ID resolves nominal size");
+Assert(SewerInfoPartRules.PipeNominal("CLV_C900", "unlabeled", 8.326) == 8, "C900 actual ID resolves nominal size");
+Assert(SewerInfoPartRules.PipeNominal("CLV_PVC", "unlabeled", 8) == null, "no nearest diameter fallback");
+Assert(SewerInfoPartRules.PipeNominal("unknown", "unlabeled", 7.739) == null, "unknown family ID not guessed");
+SewerInfoPartRules.CheckOtherEnd(new SewerConnection { MaterialCode = "C900", DiameterInches = 8 }, new SewerConnection { MaterialCode = "C-900", DiameterInches = 8 });
+SewerInfoPartRules.CheckOtherEnd(new SewerConnection { MaterialCode = "C900", DiameterInches = 8 }, new SewerConnection());
+Reject(() => SewerInfoPartRules.CheckOtherEnd(new SewerConnection { MaterialCode = "C900" }, new SewerConnection { MaterialCode = "PVC" }), "same pipe conflicting family at opposite end");
+Reject(() => SewerInfoPartRules.CheckOtherEnd(new SewerConnection { DiameterInches = 8 }, new SewerConnection { DiameterInches = 10 }), "same pipe conflicting nominal diameter at opposite end");
+double oldHeight = 7.739 / 12, newHeight = 8.326 / 12, oppositeInvert = 99.2;
+double oldCenterline = SewerInfoPartRules.Centerline(oppositeInvert, oldHeight);
+double swappedCenterline = SewerInfoPartRules.Centerline(oldCenterline - oldHeight / 2, newHeight);
+Assert(Math.Abs(swappedCenterline - newHeight / 2 - oppositeInvert) < 1e-10 && swappedCenterline != oldCenterline, "PVC to C900 retains opposite invert and changes centerline");
+Assert(Math.Abs(SewerInfoPartRules.Centerline(swappedCenterline - newHeight / 2, oldHeight) - oldCenterline) < 1e-10, "C900 to PVC restores centerline for same invert");
+Reject(() => SewerInfoPartRules.Centerline(100, 0), "invalid actual inside height");
+Console.WriteLine("PASS: PVC/C900/RCP family rules, exact nominal versus actual diameters, units, opposite-end conflicts and invert preservation across material swaps.");
 foreach (string path in args)
 {
     SewerCatalog input = SewerInfoModel.Parse(File.ReadAllText(path));
@@ -149,6 +177,7 @@ foreach (string path in args)
     Assert(reread.Manholes.Count == input.Manholes.Count, "supplied catalog round trip");
     Console.WriteLine($"PASS supplied catalog: {input.Manholes.Count} records, {input.Manholes.Sum(m => m.Connections.Count)} connections.");
 }
+
 
 
 

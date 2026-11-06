@@ -1,3 +1,8 @@
+## 2026-11-05 - Automatic sewer parts and sizes
+- **SSMHAPPLY** now resolves each matched pipe's exact nominal diameter and CLV_PVC / CLV_C900 / CLV_RCP family, independently for every run. Supports PVC-to-C900-to-PVC runs initially modeled with a common default part.
+- Structures retain their selected family and frame/opening diameter while swapping to the required inner/barrel size. No layer/style/input workflow changes.
+- Completed preview includes target parts. Swaps precede invert application using new actual ID; opposite-end invert is retained. Missing/ambiguous definitions or conflicting data stop before edits. Earlier reference-only/no-swap entries below are historical and superseded; see Docs/SEWER_MANHOLE_INFO.md.
+
 ## 2026-11-05 - Curved sewer Apply support
 - **SSMHAPPLY** now supports straight and curved circular gravity pipes. Curved direction matching uses the local WCS endpoint tangent, with the same START=OUT/END=IN convention.
 - Applies a curved endpoint elevation through native PipeCurveGeometry while retaining its endpoint XY, opposite-end Z and plan bulge. Before commit, checks arc subtype/center/radius/endpoints/clockwise/sweep/bulge plus native geometry/part/connectivity guards.

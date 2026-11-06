@@ -149,6 +149,10 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             if (e.OwnerId != SymbolUtilityServices.GetBlockModelSpaceId(e.Database) || layer.IsLocked || layer.IsDependent)
                 throw new InvalidOperationException("Use direct editable model-space objects on unlocked local layers.");
         }
+        internal static string? Attached(DBObject target, string key, Transaction tr)
+        {
+            return target.ExtensionDictionary.IsNull ? null : Read((DBDictionary)tr.GetObject(target.ExtensionDictionary, OpenMode.ForRead), key, tr);
+        }
         internal static void Attach(DBObject target, string key, string json, Transaction tr)
         {
             if (!target.IsWriteEnabled) target.UpgradeOpen();
@@ -179,4 +183,5 @@ namespace CLV_CivilTools.Ufls.SewerInfo
         }
     }
 }
+
 
