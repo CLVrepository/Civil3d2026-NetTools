@@ -302,6 +302,7 @@ namespace CLV_CivilTools.Ufls.SewerInfo
                     p.SwapPartFamilyAndSize(map.Part.Family, map.Part.Size);
                 if (p.CrossSectionalShape.ToString() != "Circular" || !double.IsFinite(p.InnerHeight) || p.InnerHeight <= 0)
                     throw new InvalidOperationException("Swapped pipe is not a supported circular part; changes rolled back.");
+                SewerInfoParts.VerifyPipeDimensions(p, map.Part);
                 double height = p.InnerHeight; appliedHeight.Add(p.ObjectId, height);
                 double startInvert = map.AtStart ? map.Connection.InvertElevation!.Value : before.Start.Z - before.InnerHeight / 2;
                 double endInvert = map.AtStart ? before.End.Z - before.InnerHeight / 2 : map.Connection.InvertElevation!.Value;

@@ -1,3 +1,8 @@
+## 2026-11-10 - Fix sewer Apply part matching with custom names
+- Removes display-name parsing from pipe size selection. Uses explicit numeric diameter/unit data, supported nominal/physical-ID mappings and Material consistency.
+- Recognizes supported numeric nominal-bore definitions and rounded physical IDs without nearest-size selection. Keeps exact family/specification distinction and duplicate-variant safeguards.
+- Adds raw parameter diagnostics and native post-swap dimension verification. Does not auto-add duplicate parts. Regression and targeted Civil 3D-reference compilation pass; full solution and live swaps/Undo remain unverified.
+
 ## 2026-11-05 - Apply plan pipe materials and structure sizes
 - Adds per-connection pipe family/nominal-size swapping (CLV_PVC, CLV_C900, CLV_RCP), including different materials on successive pipes drawn with one default part.
 - Adds same-family structure barrel resizing with retained frame/opening. Requires exact available definitions; missing/ambiguous catalog variants report diagnostics before network changes.

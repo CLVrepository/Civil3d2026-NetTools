@@ -150,15 +150,61 @@ Assert(SewerInfoPartRules.Family(new SewerConnection()) == null, "missing materi
 Reject(() => SewerInfoPartRules.Family(new SewerConnection { MaterialCode = "C900", PipeSpecification = "SDR35" }), "conflicting PVC specifications");
 Reject(() => SewerInfoPartRules.Family(new SewerConnection { MaterialCode = "RCP", Material = "PVC" }), "conflicting materials");
 Reject(() => SewerInfoPartRules.Family(new SewerConnection { Material = "HDPE" }), "unknown family not guessed");
-Assert(SewerInfoPartRules.LabeledInches("2019 8 INCH PVC") == 8, "year is not pipe size");
-Assert(SewerInfoPartRules.LabeledInches("48\" BARREL 24\" FRAME") == null, "multiple labeled dimensions not guessed");
-Assert(SewerInfoPartRules.LabeledInches("2019 edition 8") == null, "unitless number not nominal diameter");
 Assert(Math.Abs(SewerInfoPartRules.Inches(203.2, "mm")!.Value - 8) < 1e-10, "millimeters convert exactly");
 Assert(SewerInfoPartRules.Inches(4, "feet") == 48 && SewerInfoPartRules.Inches(8, "unknown") == null, "unit metadata required");
-Assert(SewerInfoPartRules.PipeNominal("CLV_PVC", "unlabeled", 7.739) == 8, "PVC actual ID resolves nominal size");
-Assert(SewerInfoPartRules.PipeNominal("CLV_C900", "unlabeled", 8.326) == 8, "C900 actual ID resolves nominal size");
-Assert(SewerInfoPartRules.PipeNominal("CLV_PVC", "unlabeled", 8) == null, "no nearest diameter fallback");
-Assert(SewerInfoPartRules.PipeNominal("unknown", "unlabeled", 7.739) == null, "unknown family ID not guessed");
+foreach (string unit in new[] { "in", "inch", "inches", "in.", "\"", "″" })
+    Assert(SewerInfoPartRules.Inches(8, unit) == 8, "explicit inch unit " + unit);
+foreach (string unit in new[] { "", "unitless", "inch squared", "''" })
+    Assert(SewerInfoPartRules.Inches(8, unit) == null, "unknown unit not guessed: " + unit);
+Assert(SewerInfoPartRules.Inches(double.NaN, "in") == null &&
+    SewerInfoPartRules.Inches(double.PositiveInfinity, "in") == null &&
+    SewerInfoPartRules.Inches(-8, "in") == null, "invalid numeric data rejected");
+foreach (var (family, sizes) in new[] {
+    ("CLV_PVC", CLV_CivilTools.Shared.PipeCatalog.PvcSizes),
+    ("CLV_C900", CLV_CivilTools.Shared.PipeCatalog.C900Sizes),
+    ("CLV_RCP", CLV_CivilTools.Shared.PipeCatalog.RcpSizes) })
+{
+    foreach (var size in sizes)
+    {
+        Assert(SewerInfoPartRules.PipeNominal(family, size.InnerDiameterInches) == size.NominalInches,
+            family + " physical ID " + size.InnerDiameterInches);
+        Assert(SewerInfoPartRules.PipeNominal(family, size.NominalInches) == size.NominalInches,
+            family + " numeric nominal-bore definition " + size.NominalInches);
+    }
+}
+Assert(SewerInfoPartRules.PipeNominal("CLV_C900", 8) == 8, "reported 8-inch C900 nominal-bore definition");
+Assert(SewerInfoPartRules.PipeNominal("CLV_PVC", 8) == 8, "8-inch PVC nominal-bore definition");
+Assert(SewerInfoPartRules.PipeNominal("CLV_PVC", 7.739) == 8, "PVC physical ID resolves nominal size");
+Assert(SewerInfoPartRules.PipeNominal("CLV_C900", 8.326) == 8, "C900 physical ID resolves nominal size");
+Assert(SewerInfoPartRules.PipeNominal("CLV_C900", 8.33) == 8, "rounded C900 physical ID within bounded tolerance");
+Assert(SewerInfoPartRules.PipeNominal("CLV_C900", 8.35) == null, "no broad nearest-size fallback");
+Assert(SewerInfoPartRules.PipeNominal("CLV_C900", 7.739) == null, "PVC physical ID is not C900");
+Assert(SewerInfoPartRules.PipeNominal("CLV_PVC", 8.326) == null, "C900 physical ID is not PVC");
+Assert(SewerInfoPartRules.PipeNominal("CLV_C900", 900) == null, "specification number is not diameter");
+Assert(SewerInfoPartRules.PipeNominal("CLV_C900", null) == null, "display label cannot rescue absent diameter");
+Assert(SewerInfoPartRules.PipeNominal("unknown", 8) == null, "unknown family not guessed");
+Assert(SewerInfoPartRules.PipeNominal("CLV_C900", double.NaN) == null &&
+    SewerInfoPartRules.PipeNominal("CLV_C900", double.PositiveInfinity) == null, "invalid ID rejected");
+Assert(SewerInfoPartRules.PipeNominal("CLV_C900", SewerInfoPartRules.Inches(8.326 / 12, "ft")) == 8, "feet dimension converted before matching");
+Assert(SewerInfoPartRules.PipeNominal("CLV_C900", SewerInfoPartRules.Inches(8.326 * 25.4, "mm")) == 8, "metric dimension converted before matching");
+foreach (string material in new[] { "PVC", "Polyvinyl Chloride", "C900", "PVC C-900" })
+    Assert(SewerInfoPartRules.MaterialProblem("CLV_C900", material) == null, "C900 compatible Material " + material);
+foreach (string material in new[] { "PVC", "Polyvinyl Chloride", "SDR-35", "ASTM D3034" })
+    Assert(SewerInfoPartRules.MaterialProblem("CLV_PVC", material) == null, "PVC compatible Material " + material);
+foreach (string material in new[] { "RCP", "Concrete", "Reinforced Concrete Pipe" })
+    Assert(SewerInfoPartRules.MaterialProblem("CLV_RCP", material) == null, "RCP compatible Material " + material);
+Assert(SewerInfoPartRules.MaterialProblem("CLV_C900", null) == null, "optional absent material keeps exact family key");
+foreach (string material in new[] { "RCP", "SDR35", "HDPE", "PVC / HDPE", "Ductile Iron" })
+    Assert(SewerInfoPartRules.MaterialProblem("CLV_C900", material) != null, "incompatible C900 Material " + material);
+Assert(SewerInfoPartRules.MaterialProblem("CLV_PVC", "C900") != null, "generic physical PVC cannot override C900 specification");
+Assert(SewerInfoPartRules.MaterialProblem("CLV_RCP", "PVC") != null, "RCP material consistency");
+Assert(SewerInfoPartRules.SelectPartCandidate(new[] { "nominal-8", "physical-8" }, "unrelated") == -1, "duplicate nominal and physical ID definitions refused");
+Assert(SewerInfoPartRules.SelectPartCandidate(new[] { "nominal-8", "physical-8" }, "physical-8") == 1, "current compatible definition retained");
+Assert(SewerInfoPartRules.SelectPartCandidate(new[] { "compatible" }, "incompatible-material-current") == 0, "incompatible current was filtered out and has no preference");
+Assert(SewerInfoPartRules.SelectPartCandidate(Array.Empty<string>(), "current") == -1, "zero compatible candidates refused");
+Assert(SewerInfoPartRules.SelectPartCandidate(new[] { "one" }, "other") == 0, "single compatible new definition selected");
+Assert(SewerInfoPartRules.SelectPartCandidate(new[] { "current", "current" }, "current") == -1, "duplicate current IDs cannot authorize a swap");
+Console.WriteLine("PASS: numeric-only pipe matching, nominal/physical catalog IDs, explicit units, bounded rounding and Material consistency.");
 SewerInfoPartRules.CheckOtherEnd(new SewerConnection { MaterialCode = "C900", DiameterInches = 8 }, new SewerConnection { MaterialCode = "C-900", DiameterInches = 8 });
 SewerInfoPartRules.CheckOtherEnd(new SewerConnection { MaterialCode = "C900", DiameterInches = 8 }, new SewerConnection());
 Reject(() => SewerInfoPartRules.CheckOtherEnd(new SewerConnection { MaterialCode = "C900" }, new SewerConnection { MaterialCode = "PVC" }), "same pipe conflicting family at opposite end");

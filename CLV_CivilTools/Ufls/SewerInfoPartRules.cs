@@ -1,14 +1,17 @@
 using System;
-using System.Globalization;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using CLV_CivilTools.Shared;
 
 namespace CLV_CivilTools.Ufls.SewerInfo
 {
-    // Host-independent rules: nominal plan sizes are not modeled inside diameters.
+    // Host-independent rules. Display names are never a source of pipe dimensions.
     internal static class SewerInfoPartRules
     {
+        // An absolute rounding allowance, not nearest-size selection.
+        internal const double PipeDimensionToleranceInches = 0.01;
+
         internal static string? Family(SewerConnection c)
         {
             string text = string.Join(" ", c.MaterialCode, c.Material, c.PipeSpecification, c.MaterialSourceLabel).ToUpperInvariant();
@@ -28,40 +31,80 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             if (!double.IsFinite(value) || value <= 0) return null;
             double? scale = (units ?? "").Trim().ToLowerInvariant() switch
             {
-                "in" or "inch" or "inches" or "\"" => 1,
-                "ft" or "foot" or "feet" or "'" => 12,
-                "mm" or "millimeter" or "millimeters" => 1 / 25.4,
-                "cm" or "centimeter" or "centimeters" => 1 / 2.54,
-                "m" or "meter" or "meters" => 1 / 0.0254,
+                "in" or "in." or "inch" or "inches" or "\"" or "″" => 1,
+                "ft" or "ft." or "foot" or "feet" or "'" or "′" => 12,
+                "mm" or "millimeter" or "millimeters" or "millimetre" or "millimetres" => 1 / 25.4,
+                "cm" or "centimeter" or "centimeters" or "centimetre" or "centimetres" => 1 / 2.54,
+                "m" or "meter" or "meters" or "metre" or "metres" => 1 / 0.0254,
                 _ => null
             };
             return scale * value;
         }
 
-        // Only explicit unit-bearing dimensions. Never take a year, wall thickness or frame size
-        // as the nominal pipe diameter; multiple distinct dimensions remain unresolved.
-        internal static double? LabeledInches(string label)
+        private static PipeSize[] Catalog(string family) => family.ToUpperInvariant() switch
         {
-            double[] values = Regex.Matches(label, "(?<![\\d.])(\\d+(?:\\.\\d+)?)\\s*(\"|INCHES\\b|INCH\\b|IN\\b|FT\\b|FEET\\b|MM\\b)", RegexOptions.IgnoreCase)
-                .Cast<Match>().Select(m => Inches(double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture), m.Groups[2].Value))
-                .Where(v => v.HasValue).Select(v => v!.Value).Distinct().ToArray();
-            return values.Length == 1 ? values[0] : null;
+            "CLV_PVC" => PipeCatalog.PvcSizes,
+            "CLV_C900" => PipeCatalog.C900Sizes,
+            "CLV_RCP" => PipeCatalog.RcpSizes,
+            _ => Array.Empty<PipeSize>()
+        };
+
+        internal static bool SamePipeDimension(double a, double b) =>
+            double.IsFinite(a) && double.IsFinite(b) && a > 0 && b > 0 &&
+            Math.Abs(a - b) <= PipeDimensionToleranceInches;
+
+        // Civil 3D has no standard nominal-diameter PartContextType. Supported CLV
+        // catalogs may model a nominal bore, or the physical ID in PipeCatalog.
+        // Enumerate BOTH numeric interpretations and require one nominal result.
+        // Neither the part's name nor a nearby arbitrary diameter can authorize a swap.
+        internal static double? PipeNominal(string family, double? innerDiameterInches)
+        {
+            if (!innerDiameterInches.HasValue) return null;
+            int[] exact = Catalog(family)
+                .Where(s => SamePipeDimension(s.InnerDiameterInches, innerDiameterInches.Value) ||
+                            SamePipeDimension(s.NominalInches, innerDiameterInches.Value))
+                .Select(s => s.NominalInches).Distinct().ToArray();
+            return exact.Length == 1 ? exact[0] : null;
         }
 
-        internal static double? PipeNominal(string family, string label, double? actualIdInches)
+        internal static string PipeDimensionBasis(string family, double innerDiameterInches, double nominal)
         {
-            double? labeled = LabeledInches(label);
-            if (labeled.HasValue) return labeled;
-            if (!actualIdInches.HasValue) return null;
-            PipeSize[] sizes = family.ToUpperInvariant() switch
-            {
-                "CLV_PVC" => PipeCatalog.PvcSizes,
-                "CLV_C900" => PipeCatalog.C900Sizes,
-                "CLV_RCP" => PipeCatalog.RcpSizes,
-                _ => Array.Empty<PipeSize>()
-            };
-            PipeSize[] exact = sizes.Where(s => Math.Abs(s.InnerDiameterInches - actualIdInches.Value) < 0.0001).ToArray();
-            return exact.Length == 1 ? exact[0].NominalInches : null;
+            bool modeledNominal = SamePipeDimension(innerDiameterInches, nominal);
+            bool catalogId = Catalog(family).Any(s => s.NominalInches == nominal &&
+                SamePipeDimension(s.InnerDiameterInches, innerDiameterInches));
+            return modeledNominal && catalogId ? "numeric nominal/ID" :
+                modeledNominal ? "numeric nominal-bore definition" : "numeric CLV catalog ID";
+        }
+
+        // Physical PVC alone cannot distinguish C900 from SDR-35. The configured
+        // exact CLV family remains the specification key; Material is a consistency
+        // check, never a reason to choose the first PVC family in a parts list.
+        internal static string? MaterialProblem(string family, string? material)
+        {
+            if (string.IsNullOrWhiteSpace(material)) return null; // optional catalog parameter
+            string value = material.Trim().ToUpperInvariant();
+            value = Regex.Replace(value, @"\bPOLYVINYL\s+CHLORIDE\b", "PVC");
+            value = Regex.Replace(value, @"\bREINFORCED\s+CONCRETE(?:\s+PIPE)?\b", "RCP");
+            if (value == "CONCRETE") value = "RCP";
+            if (Regex.IsMatch(value, @"\bHDPE\b|\bSTEEL\b|\bIRON\b|\bCOPPER\b"))
+                return "Material parameter '" + material + "' is incompatible with " + family;
+            string? actual;
+            try { actual = Family(new SewerConnection { Material = value }); }
+            catch (ArgumentException) { return "unrecognized Material parameter '" + material + "'"; }
+            bool genericPvc = actual == "CLV_PVC" && !Regex.IsMatch(value, @"\bSDR[\s-]*35\b|\bD[\s-]*3034\b");
+            bool compatible = string.Equals(family, actual, StringComparison.OrdinalIgnoreCase) ||
+                (family.Equals("CLV_C900", StringComparison.OrdinalIgnoreCase) && genericPvc);
+            return compatible ? null : "Material parameter '" + material + "' conflicts with " + family;
+        }
+
+        // Candidate IDs have already passed numeric and Material checks.
+        internal static int SelectPartCandidate<T>(IReadOnlyList<T> compatible, T current)
+        {
+            int[] existing = Enumerable.Range(0, compatible.Count)
+                .Where(i => EqualityComparer<T>.Default.Equals(compatible[i], current)).ToArray();
+            if (existing.Length == 1) return existing[0];
+            if (existing.Length > 1) return -1;
+            return compatible.Count == 1 ? 0 : -1;
         }
 
         internal static double Centerline(double invert, double height)

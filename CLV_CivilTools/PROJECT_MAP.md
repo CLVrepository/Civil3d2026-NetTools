@@ -1,3 +1,8 @@
+## 2026-11-10 - Numeric sewer pipe matching
+- SSMHAPPLY resolves PipeInnerDiameter from PartSize.SizeDataRecord with explicit units, never a PartSize display label. Supported CLV numeric nominal-bore definitions and Shared/PipeCatalog physical IDs use a bounded 0.01-inch tolerance, not nearest selection. Current compatible variant may be retained; ambiguous swaps are refused.
+- Optional Material metadata rejects conflicting/unrecognized candidates. Exact CLV family identity still separates C900 and SDR35, both physically PVC. Preview/failure evidence includes raw dimension, units, nominal result and Material. Native post-swap InnerHeight is checked against the resolved definition.
+- Existing transaction, geometry/connectivity/invert guards and structure matching remain. No definition creation, deployment or framework change. Targeted compilation and regression tests pass; full solution and live CAD acceptance remain unverified. See Docs/SEWER_MANHOLE_INFO.md.
+
 ## 2026-11-05 - Sewer Apply parts and sizes
 - SSMHAPPLY now uses SewerInfoParts for exact assigned-parts-list pipe family/nominal-size resolution and same-family structure inner/barrel-size matching while retaining frame diameter. Native Part.SwapPartFamilyAndSize is called before setting elevations; no new definitions or parts are created.
 - SewerInfoPartRules holds host-independent PVC/C900/RCP mappings, explicit units/nominal-size parsing, Shared/PipeCatalog exact ID fallback, opposite-end consistency and centerline/invert conversion. No nearest-size or first-variant guessing.

@@ -1,3 +1,7 @@
+## 2026-11-10 - SSMHAPPLY numeric pipe matching
+- Matches existing pipe sizes by numeric PipeInnerDiameter and optional Material consistency rather than display-name formatting. Exact CLV family key distinguishes C900 from SDR35/PVC.
+- Preview/diagnostic shows numeric parameters, units, resolved nominal size and Material; missing metadata is no longer presented as proof of a missing size. No new command or UI step. Existing native geometry/invert guards remain; live retest required.
+
 ## 2026-11-05 - Automatic sewer parts and sizes
 - **SSMHAPPLY** now resolves each matched pipe's exact nominal diameter and CLV_PVC / CLV_C900 / CLV_RCP family, independently for every run. Supports PVC-to-C900-to-PVC runs initially modeled with a common default part.
 - Structures retain their selected family and frame/opening diameter while swapping to the required inner/barrel size. No layer/style/input workflow changes.
