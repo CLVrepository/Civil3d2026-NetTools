@@ -1,3 +1,7 @@
+## 2026-11-10 - SSMHAPPLY bounded direction fallback
+- A unique native/plan IN or OUT pair can match up to 5 degrees beyond a compass-sector edge. Requires known directions/invert and exactly one same-role row on each side across the entire input. Larger differences or competing same-role rows do not get this fallback.
+- Preview and completion explicitly warn when fallback is used; saved match evidence includes the measured difference. No new command or manual mapping step. Review both target part and invert, then verify native values after Apply.
+
 ## 2026-11-10 - SSMHAPPLY numeric pipe matching
 - Matches existing pipe sizes by numeric PipeInnerDiameter and optional Material consistency rather than display-name formatting. Exact CLV family key distinguishes C900 from SDR35/PVC.
 - Preview/diagnostic shows numeric parameters, units, resolved nominal size and Material; missing metadata is no longer presented as proof of a missing size. No new command or UI step. Existing native geometry/invert guards remain; live retest required.

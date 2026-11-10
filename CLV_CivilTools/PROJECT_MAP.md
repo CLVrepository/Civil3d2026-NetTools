@@ -1,3 +1,8 @@
+## 2026-11-10 - Guarded sewer compass-boundary fallback
+- SSMHAPPLY keeps its strict multi-branch matcher. A small discrepancy may use the new fallback only for exactly one native pipe and one plan connection in the entire same-role set, with known bearing, compass direction and invert. Limit is 27.5 degrees from compass center (5 beyond the normal sector edge); no residual/greedy matching or nearest-direction selection.
+- Covers the reported curved outgoing MH10 tangent at 69.478 degrees versus plan NE. Both part resolution and invert application now receive this matched row. Curved tangent geometry, numeric part selection and native transaction/readback guards are unchanged.
+- AutomaticPlan tracks fallback pipe indices; existing review/audit stores detailed warnings and command completion repeats them. Added all-sector/both-role/limit/ambiguity/permutation/tangent regression coverage and mapped size/invert checks. Full solution and live CAD acceptance remain workstation checks.
+
 ## 2026-11-10 - Numeric sewer pipe matching
 - SSMHAPPLY resolves PipeInnerDiameter from PartSize.SizeDataRecord with explicit units, never a PartSize display label. Supported CLV numeric nominal-bore definitions and Shared/PipeCatalog physical IDs use a bounded 0.01-inch tolerance, not nearest selection. Current compatible variant may be retained; ambiguous swaps are refused.
 - Optional Material metadata rejects conflicting/unrecognized candidates. Exact CLV family identity still separates C900 and SDR35, both physically PVC. Preview/failure evidence includes raw dimension, units, nominal result and Material. Native post-swap InnerHeight is checked against the resolved definition.

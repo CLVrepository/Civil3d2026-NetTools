@@ -119,7 +119,7 @@ foreach (var (direction,dx,dy) in new[] { ("N",0d,1d),("NE",1d,1d),("E",1d,0d),(
 var wrapNorth = SewerInfoModel.MatchAutomatically(autoMh1Connections, new[] { new SewerInfoModel.NativeConnection(true,-0.001,1) });
 Assert(wrapNorth.Plan.Assignments.Length == 1, "north bearing wraps around 360");
 var boundary = SewerInfoModel.MatchAutomatically(autoMh1Connections, new[] { new SewerInfoModel.NativeConnection(true, Math.Sin(Math.PI/8), Math.Cos(Math.PI/8)) });
-Assert(boundary.Plan.Assignments.Length == 0, "compass sector boundary not guessed");
+Assert(boundary.Plan.Assignments.Length == 1 && boundary.DirectionFallbackPipes.Length == 1, "unique role at sector boundary requires bounded fallback warning");
 Console.WriteLine("PASS: automatic START/END roles, WCS compass matching, missing branches, aliases, ambiguity and pending unknowns.");
 var ccwStart = SewerInfoModel.CurveOutwardTangent(1, 0, false, true);
 var ccwEnd = SewerInfoModel.CurveOutwardTangent(0, 1, false, false);
@@ -216,6 +216,7 @@ Assert(Math.Abs(swappedCenterline - newHeight / 2 - oppositeInvert) < 1e-10 && s
 Assert(Math.Abs(SewerInfoPartRules.Centerline(swappedCenterline - newHeight / 2, oldHeight) - oldCenterline) < 1e-10, "C900 to PVC restores centerline for same invert");
 Reject(() => SewerInfoPartRules.Centerline(100, 0), "invalid actual inside height");
 Console.WriteLine("PASS: PVC/C900/RCP family rules, exact nominal versus actual diameters, units, opposite-end conflicts and invert preservation across material swaps.");
+DirectionMatchRegression.Run();
 foreach (string path in args)
 {
     SewerCatalog input = SewerInfoModel.Parse(File.ReadAllText(path));

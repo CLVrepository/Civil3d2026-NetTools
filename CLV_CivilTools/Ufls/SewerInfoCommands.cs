@@ -265,6 +265,7 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             preview.AppendLine("BLOCK: " + blockId.Handle + " | STRUCTURE: " + structureId.Handle + " | NETWORK: " + network.Name);
             preview.AppendLine("NAME: " + structure.Name + " -> " + mh.Name);
             preview.AppendLine("RIM: " + SewerInfoModel.Elevation(structure.RimElevation) + " -> " + SewerInfoModel.Elevation(mh.RimElevation));
+            preview.AppendLine("DIRECTION FALLBACK WARNINGS: " + automatic.DirectionFallbackPipes.Length + "; review AUTO MATCH evidence below.");
             preview.AppendLine("Automatic rim surface adjustment: " + structure.AutomaticRimSurfaceAdjustment + " -> False");
             preview.AppendLine("PLAN STRUCTURE SIZE: " + SewerInfoModel.Number(mh.StructureDiameterInches) + " in " + mh.StructureDiameterBasis);
             preview.AppendLine("Existing structure part: " + structure.PartFamilyName + " / " + structure.PartSizeName);
@@ -362,6 +363,7 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             d.Editor.WriteMessage("\nUpdated native structure: " + actualName + "; RIM=" + SewerInfoModel.Elevation(actualRim)
                 + " ft; applied " + mappings.Count + " pipe-end inverts and checked plan part sizes/materials. Pending plan connections: " + assignmentPlan.PendingConnections.Length
                 + "; existing pipes left unchanged: " + assignmentPlan.UnchangedPipes.Length + ". Use UNDO to undo this command.");
+            foreach (int i in automatic.DirectionFallbackPipes) d.Editor.WriteMessage("\nAPPLIED WITH DIRECTION WARNING pipe [" + connected[i].Id.Handle + "]: " + automatic.Evidence[i]);
             foreach (int i in assignmentPlan.PendingConnections) d.Editor.WriteMessage("\nPENDING (not applied to a native pipe): " + SewerInfoModel.PipeLabel(mh.Connections[i]));
             foreach (int i in assignmentPlan.UnchangedPipes) d.Editor.WriteMessage("\nUNRESOLVED pipe [" + connected[i].Id.Handle + "]: " + automatic.Evidence[i]);
         }

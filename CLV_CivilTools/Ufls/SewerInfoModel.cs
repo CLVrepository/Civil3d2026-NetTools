@@ -66,10 +66,13 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             double sign = (clockwise ? -1 : 1) * (atArcStart ? 1 : -1);
             return (-radiusY * sign, radiusX * sign);
         }
-        internal sealed record AutomaticPlan(AssignmentPlan Plan, string[] Evidence);
+        internal sealed record AutomaticPlan(AssignmentPlan Plan, string[] Evidence, int[] DirectionFallbackPipes);
+        internal const double CompassSectorHalfWidth = 22.5;
+        internal const double UniqueDirectionLimit = CompassSectorHalfWidth + 5;
         internal static AutomaticPlan MatchAutomatically(IReadOnlyList<SewerConnection> connections, IReadOnlyList<NativeConnection> native)
         {
             var choices = new int?[native.Count]; var evidence = new string[native.Count];
+            var directionFallbackPipes = new List<int>();
             for (int i = 0; i < native.Count; i++)
             {
                 choices[i] = -1;
@@ -79,8 +82,22 @@ namespace CLV_CivilTools.Ufls.SewerInfo
                 int[] candidates = roleCandidates.Where(j =>
                 {
                     double? direction = Compass(connections[j].Direction);
-                    return !azimuth.HasValue || !direction.HasValue || AngularDifference(azimuth.Value, direction.Value) < 22.5 - 1e-8;
+                    return !azimuth.HasValue || !direction.HasValue || AngularDifference(azimuth.Value, direction.Value) < CompassSectorHalfWidth - 1e-8;
                 }).ToArray();
+                // Only relax a small compass-boundary discrepancy for a globally unique role pair.
+                // Count ALL rows of that role, not unmatched leftovers or only rows with known inverts.
+                // A missing bearing/direction cannot justify this bounded-angle fallback.
+                bool directionFallback = false;
+                if (candidates.Length == 0 && roleCandidates.Length == 1 && azimuth.HasValue
+                    && native.Count(p => p.AtStart == native[i].AtStart) == 1)
+                {
+                    double? direction = Compass(connections[roleCandidates[0]].Direction);
+                    if (direction.HasValue && AngularDifference(azimuth.Value, direction.Value) <= UniqueDirectionLimit + 1e-8)
+                    {
+                        candidates = roleCandidates;
+                        directionFallback = true;
+                    }
+                }
                 string basis = (native[i].AtStart ? "START -> OUT" : "END -> IN")
                     + (azimuth.HasValue ? "; WCS outward azimuth " + azimuth.Value.ToString("0.###", CultureInfo.InvariantCulture) + " deg" : "; no horizontal bearing");
                 if (candidates.Length == 0) evidence[i] = basis + "; no matching plan role/direction. Native pipe unchanged.";
@@ -89,13 +106,23 @@ namespace CLV_CivilTools.Ufls.SewerInfo
                 else
                 {
                     choices[i] = candidates[0];
-                    evidence[i] = basis + (azimuth.HasValue && Compass(connections[candidates[0]].Direction).HasValue ? "; matched plan compass direction." : "; unique compatible role; direction unavailable.");
+                    if (directionFallback)
+                    {
+                        directionFallbackPipes.Add(i);
+                        double difference = AngularDifference(azimuth!.Value, Compass(connections[candidates[0]].Direction)!.Value);
+                        evidence[i] = basis + "; WARNING: bounded direction fallback; exactly one native and one plan "
+                            + role.ToUpperInvariant() + "; plan " + connections[candidates[0]].Direction
+                            + "; angular difference " + difference.ToString("0.###", CultureInfo.InvariantCulture)
+                            + " deg (" + Math.Max(0, difference - CompassSectorHalfWidth).ToString("0.###", CultureInfo.InvariantCulture)
+                            + " deg beyond normal sector; maximum extra 5 deg). Verify this connection before applying.";
+                    }
+                    else evidence[i] = basis + (azimuth.HasValue && Compass(connections[candidates[0]].Direction).HasValue ? "; matched plan compass direction." : "; unique compatible role; direction unavailable.");
                 }
             }
             // No pipe wins because of enumeration order when two pipes claim one plan connection.
             foreach (var conflict in Enumerable.Range(0, choices.Length).Where(i => choices[i] >= 0).GroupBy(i => choices[i]!.Value).Where(g => g.Count() > 1))
                 foreach (int i in conflict) { choices[i] = -1; evidence[i] = "Multiple native pipes match the same plan connection. Native pipe unchanged."; }
-            return new AutomaticPlan(PlanAssignments(connections, choices), evidence);
+            return new AutomaticPlan(PlanAssignments(connections, choices), evidence, directionFallbackPipes.ToArray());
         }
         private static double? Bearing(double dx, double dy)
         {

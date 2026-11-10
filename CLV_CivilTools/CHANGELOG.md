@@ -1,3 +1,8 @@
+## 2026-11-10 - Sewer Apply near-boundary connection fix
+- Fixes a uniquely identified curved outgoing pipe remaining unchanged when its tangent is only slightly across the plan compass-sector boundary. The fallback allows at most 5 extra degrees and requires exactly one native pipe and one plan connection for that role, with known directions and invert.
+- Displays a direction warning in preview and completion and retains it in the applied audit. Size/material and invert proceed together through existing validation. Multiple same-role candidates, larger/opposing discrepancies and unknown inverts are not guessed by this fallback.
+- Added regression coverage for the reported MH10 case, compass limits/wraparound, both roles, competing/missing data, enumeration order and curved tangents. Full workstation build and live drawing acceptance are still required.
+
 ## 2026-11-10 - Fix sewer Apply part matching with custom names
 - Removes display-name parsing from pipe size selection. Uses explicit numeric diameter/unit data, supported nominal/physical-ID mappings and Material consistency.
 - Recognizes supported numeric nominal-bore definitions and rounded physical IDs without nearest-size selection. Keeps exact family/specification distinction and duplicate-variant safeguards.
