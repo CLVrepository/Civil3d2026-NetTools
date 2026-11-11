@@ -25,7 +25,7 @@ namespace CLV_CivilTools.Ufls.SewerInfo
     }
     internal sealed class SewerManhole
     {
-        public int Number { get; set; }
+        public SewerManholeNumber Number { get; set; }
         public string Name { get; set; } = "";
         public string SourceId { get; set; } = "";
         public string Type { get; set; } = "SSMH";
@@ -161,12 +161,11 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = true, MaxDepth = 48
         };
-        internal static string Name(string project, int number)
+        internal static string Name(string project, SewerManholeNumber number)
         {
             if (!Regex.IsMatch(project, @"^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$") || project.Length > 64)
                 throw new ArgumentException("Project number must contain letters/numbers separated by dashes.");
-            if (number < 1 || number > 999999) throw new ArgumentException("Manhole number must be 1 to 999999.");
-            return project + "-SSMH-" + number.ToString("D2", CultureInfo.InvariantCulture);
+            return project + "-SSMH-" + number.NameToken;
         }
         internal static string Serialize<T>(T value) => JsonSerializer.Serialize(value, Json);
         internal static T Copy<T>(T value) => JsonSerializer.Deserialize<T>(Serialize(value), Json)
@@ -218,12 +217,12 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             if (c.Units == null || c.Units.Elevations != "feet" || c.Units.Diameters != "inches")
                 throw new ArgumentException("This starter requires elevations in feet and diameters in inches.");
             if (c.Manholes == null || c.Manholes.Count > 10000) throw new ArgumentException("Invalid manhole list (maximum 10000).");
-            var numbers = new HashSet<int>();
+            var numbers = new HashSet<SewerManholeNumber>();
             foreach (SewerManhole m in c.Manholes)
             {
-                if (m == null || !numbers.Add(m.Number)) throw new ArgumentException("Null or duplicate manhole number.");
+                if (m == null || !m.Number.IsValid || !numbers.Add(m.Number)) throw new ArgumentException("Missing, invalid or duplicate manhole identifier.");
                 if (m.Name != Name(c.ProjectNumber, m.Number) || m.Type != "SSMH")
-                    throw new ArgumentException("Name must follow project-SSMH-number, with at least two number digits.");
+                    throw new ArgumentException("Name must follow project-SSMH-identifier, with at least two digits for the numeric part and uppercase letters.");
                 Finite(m.RimElevation, "Rim"); Positive(m.StructureDiameterInches, "Structure diameter");
                 if (m.Connections == null || m.Connections.Count > 32) throw new ArgumentException(m.Name + ": maximum 32 pipe connections.");
                 var ids = new HashSet<string>(StringComparer.Ordinal);

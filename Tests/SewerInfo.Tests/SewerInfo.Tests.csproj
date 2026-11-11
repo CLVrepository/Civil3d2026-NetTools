@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../CLV_CivilTools/Ufls/SewerInfoModel.cs" Link="SewerInfoModel.cs" />
+    <Compile Include="../../CLV_CivilTools/Ufls/SewerInfoNumber.cs" Link="SewerInfoNumber.cs" />
     <Compile Include="../../CLV_CivilTools/Ufls/SewerInfoPartRules.cs" Link="SewerInfoPartRules.cs" />
     <Compile Include="../../CLV_CivilTools/Shared/PipeCatalog.cs" Link="PipeCatalog.cs" />
   </ItemGroup>

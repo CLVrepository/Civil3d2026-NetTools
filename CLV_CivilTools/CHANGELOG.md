@@ -1,3 +1,8 @@
+## 2026-11-10 - Lettered sewer manhole identifiers
+- Accepts identifiers such as 6A and 12B in manual entry and typed Edit/Insert selection. Numeric prefixes keep two-digit name padding (6A becomes ...-SSMH-06A); case and equivalent leading zeros cannot create duplicate records.
+- Preserves existing numeric JSON/catalog behavior, numeric sorting, snapshots, connection identities and Apply flow. Lettered IDs round-trip as JSON strings. Sewer scope is unchanged; storm/drop-inlet Info support is not added.
+- Host-independent regression and targeted Civil 3D-reference compilation pass. Full solution build and live drawing acceptance remain unverified.
+
 ## 2026-11-10 - Sewer Apply near-boundary connection fix
 - Fixes a uniquely identified curved outgoing pipe remaining unchanged when its tangent is only slightly across the plan compass-sector boundary. The fallback allows at most 5 extra degrees and requires exactly one native pipe and one plan connection for that role, with known directions and invert.
 - Displays a direction warning in preview and completion and retains it in the applied audit. Size/material and invert proceed together through existing validation. Multiple same-role candidates, larger/opposing discrepancies and unknown inverts are not guessed by this fallback.

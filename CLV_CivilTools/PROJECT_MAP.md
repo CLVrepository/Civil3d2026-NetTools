@@ -1,3 +1,8 @@
+## 2026-11-10 - Alphanumeric sewer manhole identity
+- SewerManhole.Number now uses the bounded SewerManholeNumber value type with consistent normalized equality, hashing and natural ordering. Its JSON converter reads legacy integer numbers and new string identifiers, while numeric-only exports remain JSON numbers.
+- Manual entry, typed selection, duplicate checks, merge, generated names, block snapshots and Apply retain one identity. Numeric name prefixes are padded to two digits, and suffixes are uppercase. Storage keys, pipe/connection matching, numeric part rules and sewer-only scope are unchanged.
+- Adds host-independent identifier regression checks and compiles the complete SewerInfo host sources against Civil 3D references. Full solution build, native persistence/selection/Apply and Undo/Redo remain unverified.
+
 ## 2026-11-10 - Guarded sewer compass-boundary fallback
 - SSMHAPPLY keeps its strict multi-branch matcher. A small discrepancy may use the new fallback only for exactly one native pipe and one plan connection in the entire same-role set, with known bearing, compass direction and invert. Limit is 27.5 degrees from compass center (5 beyond the normal sector edge); no residual/greedy matching or nearest-direction selection.
 - Covers the reported curved outgoing MH10 tangent at 69.478 degrees versus plan NE. Both part resolution and invert application now receive this matched row. Curved tangent geometry, numeric part selection and native transaction/readback guards are unchanged.

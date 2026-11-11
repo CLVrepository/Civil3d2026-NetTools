@@ -217,6 +217,7 @@ Assert(Math.Abs(SewerInfoPartRules.Centerline(swappedCenterline - newHeight / 2,
 Reject(() => SewerInfoPartRules.Centerline(100, 0), "invalid actual inside height");
 Console.WriteLine("PASS: PVC/C900/RCP family rules, exact nominal versus actual diameters, units, opposite-end conflicts and invert preservation across material swaps.");
 DirectionMatchRegression.Run();
+IdentifierRegression.Run();
 foreach (string path in args)
 {
     SewerCatalog input = SewerInfoModel.Parse(File.ReadAllText(path));

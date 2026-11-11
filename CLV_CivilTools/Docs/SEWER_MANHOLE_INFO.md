@@ -21,7 +21,9 @@ Q1 > ADJUST > SEWER PLAN DATA > MANHOLE INFO opens the WinForms manager. Each ma
 
 ## Catalog data
 
-The naming convention is `{project}-SSMH-{number:02d}`: minimum two number digits, preserving the plan number; numbers above 99 are not truncated. Source IDs remain separate. Storm SDMH and drop inlets are outside this version. One project catalog per DWG is supported.
+The naming convention is `{project}-SSMH-{identifier}`. Identifiers accept a positive number from 1 to 999999, an optional suffix of up to eight letters (for example `6A`, `12B`, `6AA`), or up to eight letters without a number. Embedded spaces, punctuation and letter prefixes followed by numbers are not accepted. Leading/trailing whitespace is trimmed and letters are uppercased. Numeric prefixes retain minimum two-digit padding: `6` becomes `...-SSMH-06`, and `6A` becomes `...-SSMH-06A`; numbers above 99 are not truncated. `6a`, `06A` and `6A` identify the same record, distinct from `6` and `6B`. Source IDs remain separate. Storm SDMH and drop inlets are outside this version. One project catalog per DWG is supported.
+
+Existing JSON integer numbers remain supported and are exported as JSON integers. Lettered identifiers use a string such as `"number": "6A"`; the corresponding canonical name is `...-SSMH-06A`. Numeric strings are also accepted and canonicalized. Duplicate identity detection, catalog merge, manual entry and typed Edit/Insert lookup use the same identifier rules. Catalogs and placed snapshots keep their existing storage keys. Old numeric catalogs do not need reimporting. Older plugin versions cannot read newly added lettered records, so do not load an older DLL after using this feature.
 
 Accepted input schemas are `clv.sewer-manhole-catalog/0.1-draft`, `/0.2-draft` and `/1.0`. The reviewed extraction format is supported directly. Elevations must be feet and diameters inches. Unknown numbers remain JSON null/blank; measured zero and negative elevations remain valid. Positive sizes are required when supplied. Names, unique numbers, unique connection identities, finite values, invert below rim, supported schemas and maximum sizes are validated before database writes. Duplicate JSON keys, including case variants, are rejected. Import size limit is 8 MiB; maximum 10,000 manholes and 32 connections per manhole.
 
@@ -115,3 +117,14 @@ Full-solution build and live Civil 3D acceptance remain workstation tasks. Targe
 - Verify native Properties/labels for BOTH outgoing size/family and invert, not only a size swap. Check incoming invert, opposite-end invert, slope, curve radius/bulge/side, endpoint XY, connectivity and adjacent structures. Reapply, then test Cancel, Undo and Redo. Existing numeric-size/material and native transaction/readback guards remain unchanged.
 - Test exact sector edge, 27.5-degree limit, beyond-limit and opposing directions, multiple same-role rows, unknown invert and direction, both START/END roles, both curve orientations and rotated UCS/view. Competing rows cannot be removed to enable this fallback. Ambiguous cases remain listed as pending/unresolved; this change adds no manual assignment UI.
 - New host-independent regressions reproduce the reported matching case, verify its mapped size/invert values, cover all compass sectors in both roles and both edge directions, north wraparound, boundary limits, competing/missing data, order permutations and curved endpoint tangents. Full solution build and live Civil 3D transaction behavior remain workstation acceptance tests.
+
+## Alphanumeric identifier acceptance checks
+
+Host-independent coverage includes numeric and lettered identifiers, canonical duplicate rejection, numeric ordering, JSON integer compatibility, mixed JSON export/reimport, block labels/snapshots and merge isolation. Run `dotnet run --project Tests/SewerInfo.Tests/SewerInfo.Tests.csproj`.
+
+Live Civil 3D validation is still required on a drawing copy:
+1. Open the existing numeric catalog without reimporting. Add 6A and confirm the displayed name ends in SSMH-06A; add 6B and confirm both coexist with 6.
+2. Try adding 06a again and confirm it is rejected as the existing 6A record. Try invalid text and cancel both Add and typed selection without saving.
+3. Use SSMHEDIT and SSMHINSERT with 6a or 06A; edit the record, place its block, then refresh it. Confirm the suffix and connection IDs remain intact.
+4. Save/reopen the drawing and export/reimport the mixed catalog. Confirm existing numeric records, provenance, other suffixes and prior block snapshots are preserved.
+5. Apply the reviewed 6A block to the intended existing sewer structure. Verify its name, rim, pipe sizes/materials and end inverts, labels and Undo/Redo. No storm/drop-inlet support is introduced by this identifier change.

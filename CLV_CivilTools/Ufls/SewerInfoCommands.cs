@@ -70,9 +70,10 @@ namespace CLV_CivilTools.Ufls.SewerInfo
         private static SewerManhole? PickRecord(Document d)
         {
             SewerCatalog c = ReadCatalog(d.Database) ?? throw new InvalidOperationException("Import a catalog or use SSMHADD first.");
-            PromptIntegerResult r = d.Editor.GetInteger(new PromptIntegerOptions("\nManhole number: ") { AllowNegative = false, AllowZero = false });
+            PromptResult r = d.Editor.GetString(new PromptStringOptions("\nManhole identifier (for example 6 or 6A): ") { AllowSpaces = true });
             if (r.Status != PromptStatus.OK) return null;
-            return c.Manholes.SingleOrDefault(m => m.Number == r.Value) ?? throw new InvalidOperationException("Manhole number is not in this drawing's catalog.");
+            SewerManholeNumber number = SewerManholeNumber.Parse(r.StringResult);
+            return c.Manholes.SingleOrDefault(m => m.Number == number) ?? throw new InvalidOperationException("Manhole number is not in this drawing's catalog.");
         }
         private static bool Confirm(string title, string text, string acknowledgement)
         { using var f = new SewerConfirmForm(title, text, acknowledgement); return AcadApp.ShowModalDialog(f) == DialogResult.OK; }

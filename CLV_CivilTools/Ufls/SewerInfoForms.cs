@@ -63,12 +63,12 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 4 };
             for (int i = 0; i < 4; i++) fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, i % 2 == 0 ? 20 : 30));
             void Field(string title, TextBox box, int col, int row) { fields.Controls.Add(new Label { Text = title, AutoSize = true }, col, row); box.Dock = DockStyle.Fill; fields.Controls.Add(box, col + 1, row); }
-            Field("Project", _project, 0, 0); Field("Manhole number", _number, 2, 0);
+            Field("Project", _project, 0, 0); Field("Manhole ID (6, 6A)", _number, 2, 0);
             Field("Rim elevation (ft)", _rim, 0, 1); Field("Structure diameter (in)", _diameter, 2, 1);
             Field("Station (reference)", _station, 0, 2); Field("Diameter basis", _basis, 2, 2);
-            fields.Controls.Add(new Label { Text = "Name is generated as project-SSMH-01. Blank numeric fields remain UNKNOWN. Editing a record requires refreshing its placed blocks.", Dock = DockStyle.Fill }, 0, 3); fields.SetColumnSpan(fields.GetControlFromPosition(0, 3)!, 4);
+            fields.Controls.Add(new Label { Text = "Names use project-SSMH-01 or project-SSMH-06A. Blank elevation/size fields remain UNKNOWN. Editing a record requires refreshing its placed blocks.", Dock = DockStyle.Fill }, 0, 3); fields.SetColumnSpan(fields.GetControlFromPosition(0, 3)!, 4);
             _project.Text = catalog?.ProjectNumber ?? ""; _project.ReadOnly = catalog != null;
-            _number.Text = existing?.Number.ToString(CultureInfo.InvariantCulture) ?? ""; _number.ReadOnly = existing != null;
+            _number.Text = existing?.Number.ToString() ?? ""; _number.ReadOnly = existing != null;
             _rim.Text = SewerInfoModel.Number(existing?.RimElevation); _diameter.Text = SewerInfoModel.Number(existing?.StructureDiameterInches);
             _station.Text = existing?.Station ?? ""; _basis.Text = existing?.StructureDiameterBasis is null or "base_as_labeled" ? "BASE" : existing.StructureDiameterBasis; _notes.Text = existing?.Notes ?? "";
             layout.Controls.Add(fields, 0, 0);
@@ -96,7 +96,7 @@ namespace CLV_CivilTools.Ufls.SewerInfo
             {
                 _pipes.EndEdit();
                 SewerCatalog c = _catalog == null ? new SewerCatalog { ProjectNumber = _project.Text.Trim().ToUpperInvariant() } : SewerInfoModel.Copy(_catalog);
-                if (!int.TryParse(_number.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int number)) throw new ArgumentException("Enter a positive whole-number manhole number.");
+                SewerManholeNumber number = SewerManholeNumber.Parse(_number.Text);
                 if (_existing == null && c.Manholes.Any(m => m.Number == number)) throw new ArgumentException("That number already exists. Use Edit.");
                 SewerManhole m = _existing == null ? new SewerManhole() : SewerInfoModel.Copy(_existing);
                 m.Number = number; m.Name = SewerInfoModel.Name(c.ProjectNumber, number); m.SourceId = string.IsNullOrWhiteSpace(m.SourceId) ? "SSMH#" + number : m.SourceId;

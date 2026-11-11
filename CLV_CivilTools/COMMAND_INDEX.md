@@ -1,3 +1,7 @@
+## 2026-11-10 - SSMH lettered identifiers
+- SSMHADD and the manager accept 6A-style identifiers. SSMHEDIT and SSMHINSERT now use text selection and normalize case/leading zeros. No command aliases change.
+- Canonical names use the existing numeric padding (6A becomes ...-SSMH-06A). Numeric-only records remain backward-compatible; see Docs/SEWER_MANHOLE_INFO.md for supported syntax and native acceptance checks.
+
 ## 2026-11-10 - SSMHAPPLY bounded direction fallback
 - A unique native/plan IN or OUT pair can match up to 5 degrees beyond a compass-sector edge. Requires known directions/invert and exactly one same-role row on each side across the entire input. Larger differences or competing same-role rows do not get this fallback.
 - Preview and completion explicitly warn when fallback is used; saved match evidence includes the measured difference. No new command or manual mapping step. Review both target part and invert, then verify native values after Apply.
