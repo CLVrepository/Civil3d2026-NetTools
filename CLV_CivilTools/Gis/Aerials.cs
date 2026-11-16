@@ -194,7 +194,7 @@ namespace CLV_CivilTools.Gis
                     }
                 }
 
-                ed.WriteMessage($"\n[AERIAL-R7] Imported {displayName}; completion command queued.");
+                ed.WriteMessage($"\n[AERIAL-R8] Imported {displayName}; completion command queued.");
             }
             catch (System.Exception ex)
             {
@@ -382,7 +382,7 @@ namespace CLV_CivilTools.Gis
                 {
                     AcMapMap map = AcMapMap.GetCurrentMap();
                     using ViewTableRecord view = doc.Editor.GetCurrentView();
-                    doc.Editor.WriteMessage("\n[AERIAL-R7] " + typeof(Aerials).Assembly.Location + " | " + AerialLoadSession.ViewText(view));
+                    doc.Editor.WriteMessage("\n[AERIAL-R8] " + typeof(Aerials).Assembly.Location + " | " + AerialLoadSession.ViewText(view));
                     doc.Editor.WriteMessage("\nSESSION " + (_loadSession?.Status ?? "none"));
                     if (_loadSession?.MatchesDocument(doc) == true) doc.Editor.WriteMessage("\nLAST LOAD TRACE\n" + _loadSession.Trace);
                     MgLayerGroupCollection groups = map.GetLayerGroups();
@@ -396,7 +396,7 @@ namespace CLV_CivilTools.Gis
                     AerialDisplayOrder.Report(doc.Database, map, text => doc.Editor.WriteMessage("\n" + text));
                 }
             }
-            catch (System.Exception ex) { doc.Editor.WriteMessage("\n[AERIAL-R7] State read failed: " + ex.Message); }
+            catch (System.Exception ex) { doc.Editor.WriteMessage("\n[AERIAL-R8] State read failed: " + ex.Message); }
         }
 
         // ============================================================

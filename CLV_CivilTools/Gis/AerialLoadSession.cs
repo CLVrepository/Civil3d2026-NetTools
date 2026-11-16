@@ -65,10 +65,13 @@ namespace CLV_CivilTools.Gis
             if (!_returned || _applying) return;
             string name = e.GlobalCommandName.ToUpperInvariant();
             // Our own verification must not restart the quiet interval. Map's layer
-            // import queues its DMUI registration, ZOOM and _MW/MAPWSPACE after
-            // its loading events finish. R6's trace shows registration before ZOOM.
+            // import queues DMUI_* wrappers before their visible ZOOM/MAPWSPACE
+            // commands. R6/R7 traces show registration then DMUI_ZOOMEXTENTSCMD.
+            // Preserve the bounded guard through this command family; physical
+            // input still releases the view independently in OnInput.
             if (name is "NM_AERIAL_FINISH" or "NM_AERIAL_STATE") return;
-            if (name is "ZOOM" or "PAN" or "3DORBIT" or "REGEN" or "REGENALL" or "MW" or "_MW" or "MAPWSPACE" or "DMUI_MAPREGISTERCMDSCMD")
+            if (name.StartsWith("DMUI_", StringComparison.Ordinal)
+                || name is "ZOOM" or "PAN" or "3DORBIT" or "REGEN" or "REGENALL" or "MW" or "_MW" or "MAPWSPACE")
             { Log("deferred command started=" + name); Changed(); }
             else Stop("canceled by command " + name);
         }
@@ -205,7 +208,7 @@ namespace CLV_CivilTools.Gis
             + "; initial-applied=" + _initialApplied + "; finish-applied=" + _finishApplied + "; stage=" + _stage + "; end=" + _endReason + "; saved " + _savedViewText + "; error=" + _lastError;
         private void Log(string text)
         {
-            string line = "[AERIAL-R7] " + text;
+            string line = "[AERIAL-R8] " + text;
             _trace.Add(line); _doc.Editor.WriteMessage("\n" + line);
         }
         internal static string ViewText(ViewTableRecord v) => string.Format(CultureInfo.InvariantCulture, "center=({0:0.###},{1:0.###}); height={2:0.######}; width={3:0.######}", v.CenterPoint.X, v.CenterPoint.Y, v.Height, v.Width);

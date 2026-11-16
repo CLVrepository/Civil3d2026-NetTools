@@ -1,3 +1,10 @@
+## 2026-11-16 - Aerial R8: retain the view through DMUI wrapper commands
+- R7 workstation trace confirms DMUI_MAPREGISTERCMDSCMD continued, but DMUI_ZOOMEXTENTSCMD immediately canceled the session before the visible ZOOM Extents. Input release remained False.
+- Replace the single registration-command allowance with an ordinal DMUI_ prefix allowance during this one import's bounded view guard. Both observed Map wrapper commands and other wrappers in that family now mark deferred activity rather than disposing the session.
+- Preserve input release, other-command cancellation, drawing/new-load cancellation, the five-second minimum watch, two-second quiet interval and 60-second deadline. Folder/replacement/draw-order code is unchanged.
+- Marker: [AERIAL-R8]. Retest with no input until settled; both DMUI commands should be logged as deferred activity, followed by the original site view. Then verify normal user pan/zoom, date replacement, and Map Base ordering.
+- Targeted Autodesk-reference compilation passed. Full solution and live Civil 3D acceptance remain workstation checks; no native zoom pass is claimed.
+
 ## 2026-11-16 - Aerial R7: keep restoration through Map command registration
 - Mark's R6 transcript explicitly records end=canceled by command DMUI_MAPREGISTERCMDSCMD before _ZOOM / _EXTENTS, with view-released=False. The command allowlist incorrectly ended the bounded view guard during Map's deferred registration step.
 - Add that exact observed registration command to deferred native activity. It now logs the command and resets the quiet interval, preserving restoration through the following zoom/task-pane commands.
