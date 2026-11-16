@@ -1,3 +1,9 @@
+## 2026-11-16 - Aerial replacement R3
+- Removes MgLayerCollection remove/reinsert from reorder: only real unload removes imagery. Reuses one native named root group and verifies parents. Prunes empty legacy/import containers only after both FDO and native drawing-item emptiness checks.
+- Native order changes use existing-item iterator anchors, with no null/end destinations. Preserves non-aerial relative order and checks root/draw order.
+- AerialLoadSession owns the captured viewport, native load events, quiet/readiness checks, timer and input/command lifetime. Finalizes after Map settles; native ZOOM no longer cancels restoration. User navigation releases restoration; all hooks/resources have bounded disposal. Palette awaits session completion.
+- Adds NM_AERIAL_STATE and [AERIAL-R3] runtime diagnostics to distinguish exact DLL, saved/current view, native completion and group/layer/tree/draw identities. Changed sources compile against installed refs; full build/live replacement, groups and zoom remain unverified. See Docs/Q2_GIS_AERIALS.md.
+
 ## 2026-11-16 - Native aerial display order and load-completion zoom restore
 - User confirmed Q2 street names placement and aerial unload work. Emailed examples require Map Base above the Aerial Imagery root group; MgLayerCollection ordering alone missed the native drawing element/tree.
 - AerialDisplayOrder uses ManagedMapApi DisplayManagement and public platform interop to resolve IDs, put BaseElement first in group/draw order and the aerial group/elements last, preserving unrelated relative order with readback checks.

@@ -1,3 +1,8 @@
+## 2026-11-16 - Aerial R3 completion and state diagnostic
+- **NM_AERIAL_STATE** reports the actual loaded DLL, current viewport, Map group/layer names/labels/parents and native tree/draw order. New loads emit **[AERIAL-R3]** saved view and completion/failure evidence.
+- Q2 AERIAL / NM_AERIAL now finalize after native completion/readiness rather than one idle turn. Date selection waits for that session, and unload cancels it.
+- Replacements reuse one named group and avoid live-layer removal/reinsertion for ordering. Only verified empty containers are pruned. See Docs/Q2_GIS_AERIALS.md for native tests.
+
 ## 2026-11-16 - Aerial order and zoom follow-up
 - Q2 AERIAL loading and NM_AERIAL now explicitly order Map Base first and Aerial Imagery last in native Groups/draw order, then check the result. No command rename or additional UI prompt.
 - Palette loading runs in CAD command context. Temporary synchronous initialization precedes full saved-viewport restoration/readback; previous loading mode is restored. Unload functionality remains.

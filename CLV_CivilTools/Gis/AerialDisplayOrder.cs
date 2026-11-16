@@ -14,6 +14,37 @@ namespace CLV_CivilTools.Gis
 {
     internal static class AerialDisplayOrder
     {
+        internal static bool IsGroupEmpty(Database db, MgLayerGroup group)
+        {
+            try
+            {
+                ObjectId id = AcMapDisplayManagementService.GetDMGroupFromGroup(group);
+                if (id.IsNull) return false;
+                using Transaction tr = db.TransactionManager.StartTransaction();
+                if (tr.GetObject(id, OpenMode.ForRead) is not DisplayGroup native) return false;
+                return Items(native.NewIterator(true, false)).Count == 0;
+            }
+            catch (System.Exception) { return false; } // Never delete an unverified container.
+        }
+
+        internal static void Report(Database db, AcMapMap map, Action<string> write)
+        {
+            using Transaction tr = db.TransactionManager.StartTransaction();
+            var display = (DisplayMap)tr.GetObject(AcMapDisplayManagementService.GetDMMapFromMap(map), OpenMode.ForRead);
+            void dump(string kind, IEnumerator iterator)
+            {
+                int i = 0;
+                foreach (ObjectId id in Items(iterator))
+                {
+                    DBObject item = tr.GetObject(id, OpenMode.ForRead);
+                    write(kind + "[" + i++ + "] " + id.Handle + " " + item.GetType().Name + " name='" + (item as Item)?.Name + "'");
+                }
+            }
+            dump("TREE", ((DisplayGroup)display).NewIterator(true, false));
+            if (display.DrawOrderDefined) dump("DRAW", display.GetEnumerator());
+            else write("DRAW: uses group order");
+        }
+
         internal static void EnsureMapBaseFirst(Database db, AcMapMap map, MgLayerGroup aerialGroup, IReadOnlyList<MgLayerBase> aerials)
         {
             ObjectId displayId = AcMapDisplayManagementService.GetDMMapFromMap(map);
@@ -31,7 +62,8 @@ namespace CLV_CivilTools.Gis
 
             // Group view has its own item order; moving MgLayerCollection entries alone
             // does not move the aerial folder below Map Base.
-            if (treeBefore[^1] != aerialId) root.MoveItem(aerialId, null);
+            foreach (ObjectId id in treeBefore.Skip(treeBefore.IndexOf(aerialId) + 1))
+                MoveBefore(() => root.NewIterator(true, true), id, aerialId, root.MoveItem);
             MoveTreeItemFirst(root, baseId);
 
             // Set the actual display-element draw order too, including Map Base (which
@@ -44,8 +76,12 @@ namespace CLV_CivilTools.Gis
             {
                 ObjectId elementId = AcMapDisplayManagementService.GetDMElementFromLayer(aerial);
                 aerialElements.Add(elementId);
-                display.MoveElement(elementId, null);
             }
+            List<ObjectId> currentDraw = Items(display.GetEnumerator());
+            ObjectId anchor = currentDraw.FirstOrDefault(aerialElements.Contains);
+            if (anchor.IsNull) throw new InvalidOperationException("Imported aerial elements are missing from native draw order.");
+            foreach (ObjectId id in currentDraw.Skip(currentDraw.IndexOf(anchor) + 1).Where(id => !aerialElements.Contains(id)))
+                MoveBefore(display.GetEnumerator, id, anchor, display.MoveElement);
             IEnumerator first = display.GetEnumerator();
             try
             {
@@ -78,6 +114,18 @@ namespace CLV_CivilTools.Gis
                 if ((ObjectId)first.Current != id) root.MoveItem(id, first);
             }
             finally { (first as IDisposable)?.Dispose(); }
+        }
+
+        private static void MoveBefore(Func<IEnumerator> getItems, ObjectId id, ObjectId before, Action<ObjectId, IEnumerator> move)
+        {
+            IEnumerator position = getItems();
+            try
+            {
+                while (position.MoveNext())
+                    if ((ObjectId)position.Current == before) { move(id, position); return; }
+                throw new InvalidOperationException("Native display-order anchor disappeared.");
+            }
+            finally { (position as IDisposable)?.Dispose(); }
         }
 
         private static List<ObjectId> Items(IEnumerator items)

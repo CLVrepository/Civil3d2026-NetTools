@@ -26,9 +26,7 @@ namespace CLV_CivilTools.Gis
 
         private const string AerialGroupName = "Aerial Imagery";
 
-        private static ViewTableRecord? _savedView;
-        private static Document? _viewDocument;
-        private static bool _viewRestoreHookAttached;
+        private static AerialLoadSession? _loadSession;
 
         // ============================================================
         // COMMAND-LINE ENTRY (still available)
@@ -102,13 +100,16 @@ namespace CLV_CivilTools.Gis
         {
             Document? doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
+            AerialLoadSession? session = null;
             await AcadApp.DocumentManager.ExecuteInCommandContextAsync(_ =>
             {
                 if (!ReferenceEquals(doc, AcadApp.DocumentManager.MdiActiveDocument))
                     throw new InvalidOperationException("The drawing changed before the aerial load started. Select the aerial again in the intended drawing.");
                 LoadAerialFromFile(layerFilePath);
+                session = _loadSession;
                 return Task.CompletedTask;
             }, null);
+            if (session != null) await session.Completion;
         }
 
         public static void LoadAerialFromFile(string layerFilePath)
@@ -141,106 +142,54 @@ namespace CLV_CivilTools.Gis
                         return;
                     }
 
+                    _loadSession?.Dispose();
                     bool previousSynchronousLoading = map.GetSynchronousLoading();
-                    SaveCurrentView(doc);
+                    var session = new AerialLoadSession(doc, map);
+                    _loadSession = session;
                     try
                     {
-                        // Finish Map's layer initialization/auto-extents before restoring the
-                        // captured viewport. A single Idle callback can precede an async load.
                         map.SetSynchronousLoading(true);
-                        RemoveExistingNearmapLayers(map);
+                        RemoveExistingNearmapLayers(map, keepAerialGroup: true);
                         HashSet<string> before = LayerIds(map);
+                        HashSet<string> groupsBefore = GroupIds(map);
                         map.LoadLayer(layerFilePath);
-                        // Map's internal names need not match the file name. Track every layer
-                        // actually added by this import and persist ownership through its group.
-                        List<MgLayerBase> added = Layers(map).Where(l => !before.Contains(l.GetObjectId())).ToList();
-                        if (added.Count == 0)
-                            throw new InvalidOperationException("The layer file added no new Display Manager layers.");
-                        PlaceLayersInAerialGroupAndSendToBack(map, added, displayName);
-                        BringAllCadEntitiesToFront();
-                        RefreshMap(ed);
+                        // Native loading may continue after LoadLayer returns.
+                        session.Returned(() =>
+                        {
+                            List<MgLayerBase> added = Layers(map).Where(l => !before.Contains(l.GetObjectId())).ToList();
+                            if (added.Count == 0) throw new InvalidOperationException("The import has no new aerial display layers.");
+                            MgLayerGroup aerialGroup = GroupAerialLayers(map, added, displayName);
+                            PruneEmptyGroups(map, GroupIds(map).Where(id => !groupsBefore.Contains(id)).ToHashSet(StringComparer.Ordinal), keepAerialGroup: true);
+                            AerialDisplayOrder.EnsureMapBaseFirst(doc.Database, map, aerialGroup, added);
+                            if (added.Any(layer => layer.GetGroup()?.GetObjectId() != aerialGroup.GetObjectId()))
+                                throw new InvalidOperationException("Aerial grouping changed during draw-order repair.");
+                            BringAllCadEntitiesToFront();
+                            RefreshMap(ed);
+                        }, () =>
+                        {
+                            List<MgLayerBase> added = Layers(map).Where(l => !before.Contains(l.GetObjectId())).ToList();
+                            return added.Count > 0 && added.All(l => l is AcMapLayer layer && layer.GetIsLoaded());
+                        });
+                    }
+                    catch
+                    {
+                        try { session.RestoreNow(); }
+                        finally { session.Dispose(); }
+                        throw;
                     }
                     finally
                     {
                         try { map.SetSynchronousLoading(previousSynchronousLoading); }
-                        finally
-                        {
-                            try { RestoreSavedView(doc); }
-                            finally { AttachViewRestoreHook(); }
-                        }
+                        finally { session.RestoreNow(); }
                     }
                 }
 
-                ed.WriteMessage($"\nLoaded Nearmap layer: {displayName}");
+                ed.WriteMessage($"\n[AERIAL-R3] Imported {displayName}; waiting for settled layer/group/order verification.");
             }
             catch (System.Exception ex)
             {
                 ed.WriteMessage($"\nError loading aerial: {ex.Message}");
             }
-        }
-
-        // ============================================================
-        // VIEW RESTORE – AFTER MAP'S AUTO ZOOM
-        // ============================================================
-
-        private static void SaveCurrentView(Document doc)
-        {
-            CancelViewRestore();
-            _savedView = doc.Editor.GetCurrentView();
-            _viewDocument = doc;
-        }
-
-        private static void RestoreSavedView(Document doc)
-        {
-            if (_savedView != null && ReferenceEquals(_viewDocument, doc))
-            {
-                doc.Editor.SetCurrentView(_savedView);
-                using ViewTableRecord actual = doc.Editor.GetCurrentView();
-                double size = Math.Max(1, Math.Max(_savedView.Width, _savedView.Height));
-                bool near(double a, double b) => double.IsFinite(a) && Math.Abs(a - b) <= size * 1e-8;
-                if (!near(actual.CenterPoint.X, _savedView.CenterPoint.X) || !near(actual.CenterPoint.Y, _savedView.CenterPoint.Y)
-                    || !near(actual.Height, _savedView.Height) || !near(actual.Width, _savedView.Width)
-                    || !near(actual.Target.X, _savedView.Target.X) || !near(actual.Target.Y, _savedView.Target.Y) || !near(actual.Target.Z, _savedView.Target.Z)
-                    || Math.Abs(Math.IEEERemainder(actual.ViewTwist - _savedView.ViewTwist, 2 * Math.PI)) > 1e-8
-                    || actual.PerspectiveEnabled != _savedView.PerspectiveEnabled
-                    || actual.ViewDirection.GetNormal().DotProduct(_savedView.ViewDirection.GetNormal()) < 1 - 1e-10)
-                    throw new InvalidOperationException("Aerial loaded, but the native viewport did not match the saved location/zoom. Send this message and the current view details.");
-            }
-        }
-
-        private static void AttachViewRestoreHook()
-        {
-            if (_savedView == null || _viewRestoreHookAttached) return;
-            // One idle turn also catches Map's deferred auto-zoom. Never wait for the
-            // user's next ZOOM command, and never restore another drawing's saved view.
-            AcadApp.Idle += OnRestoreView;
-            if (_viewDocument != null) _viewDocument.CommandWillStart += OnViewCommandStart;
-            _viewRestoreHookAttached = true;
-        }
-
-        private static void OnViewCommandStart(object sender, CommandEventArgs e) => CancelViewRestore();
-
-        private static void OnRestoreView(object? sender, EventArgs e)
-        {
-            Document? doc = _viewDocument;
-            try
-            {
-                if (doc != null && ReferenceEquals(doc, AcadApp.DocumentManager.MdiActiveDocument))
-                    using (doc.LockDocument()) RestoreSavedView(doc);
-            }
-            catch (System.Exception ex)
-            {
-                AcadApp.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\nAerial view restore: " + ex.Message);
-            }
-            finally { CancelViewRestore(); }
-        }
-
-        private static void CancelViewRestore()
-        {
-            if (_viewRestoreHookAttached) AcadApp.Idle -= OnRestoreView;
-            if (_viewRestoreHookAttached && _viewDocument != null) _viewDocument.CommandWillStart -= OnViewCommandStart;
-            _viewRestoreHookAttached = false;
-            _savedView?.Dispose(); _savedView = null; _viewDocument = null;
         }
 
         // ============================================================
@@ -267,7 +216,7 @@ namespace CLV_CivilTools.Gis
             Editor ed = doc.Editor;
             using (doc.LockDocument())
             {
-                if (ReferenceEquals(_viewDocument, doc)) CancelViewRestore();
+                _loadSession?.Dispose(); _loadSession = null;
                 AcMapMap map = AcMapMap.GetCurrentMap();
                 if (map == null) throw new InvalidOperationException("No current Map display is available.");
                 int removed;
@@ -305,7 +254,7 @@ namespace CLV_CivilTools.Gis
             catch (System.Exception) { return false; }
         }
 
-        private static int RemoveExistingNearmapLayers(AcMapMap map)
+        private static int RemoveExistingNearmapLayers(AcMapMap map, bool keepAerialGroup = false)
         {
             // Resolve all candidates before changing the collection. Resource connections may
             // be shared with other GIS layers; unload display layers, not arbitrary services.
@@ -321,19 +270,45 @@ namespace CLV_CivilTools.Gis
             if (Layers(map).Any(l => candidates.Contains(l.GetObjectId())))
                 throw new InvalidOperationException("Aerial layers remain after unload; inspect Display Manager.");
 
-            // Remove only an empty tool-owned root group. Nonempty or nested groups stay intact.
-            MgLayerGroupCollection groups = map.GetLayerGroups();
-            for (int i = groups.GetCount() - 1; i >= 0; i--)
-            {
-                MgLayerGroup group = groups.GetItem(i);
-                if (!AerialLayerIdentity.IsAerialGroup(group.GetName(), group.GetLegendLabel())) continue;
-                string id = group.GetObjectId();
-                bool used = Layers(map).Any(l => l.GetGroup()?.GetObjectId() == id);
-                for (int j = 0; j < groups.GetCount() && !used; j++)
-                    used = groups.GetItem(j).GetGroup()?.GetObjectId() == id;
-                if (!used) groups.RemoveAt(i);
-            }
+            PruneEmptyGroups(map, new HashSet<string>(StringComparer.Ordinal), keepAerialGroup);
             return removed;
+        }
+
+        private static HashSet<string> GroupIds(AcMapMap map)
+        {
+            MgLayerGroupCollection groups = map.GetLayerGroups();
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < groups.GetCount(); i++) ids.Add(groups.GetItem(i).GetObjectId());
+            return ids;
+        }
+
+        private static void PruneEmptyGroups(AcMapMap map, HashSet<string> importedGroups, bool keepAerialGroup)
+        {
+            MgLayerGroupCollection groups = map.GetLayerGroups();
+            string? keepId = null;
+            if (keepAerialGroup)
+                for (int i = 0; i < groups.GetCount(); i++)
+                {
+                    MgLayerGroup g = groups.GetItem(i);
+                    if (AerialLayerIdentity.IsAerialGroup(g.GetName(), g.GetLegendLabel())) { keepId = g.GetObjectId(); break; }
+                }
+            bool changed;
+            do
+            {
+                changed = false;
+                for (int i = groups.GetCount() - 1; i >= 0; i--)
+                {
+                    MgLayerGroup g = groups.GetItem(i);
+                    bool owned = AerialLayerIdentity.IsAerialGroup(g.GetName(), g.GetLegendLabel());
+                    if (g.GetObjectId() == keepId || string.Equals(g.GetName(), "Map Base", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!owned && !importedGroups.Contains(g.GetObjectId()) && !string.IsNullOrWhiteSpace(g.GetLegendLabel())) continue;
+                    string id = g.GetObjectId();
+                    bool used = Layers(map).Any(l => l.GetGroup()?.GetObjectId() == id);
+                    for (int j = 0; j < groups.GetCount() && !used; j++) used = groups.GetItem(j).GetGroup()?.GetObjectId() == id;
+                    Database? db = AcadApp.DocumentManager.MdiActiveDocument?.Database;
+                    if (!used && db != null && AerialDisplayOrder.IsGroupEmpty(db, g)) { groups.RemoveAt(i); changed = true; }
+                }
+            } while (changed);
         }
 
         private static void RefreshMap(Editor ed)
@@ -342,7 +317,7 @@ namespace CLV_CivilTools.Gis
             ed.Regen();
         }
 
-        private static void PlaceLayersInAerialGroupAndSendToBack(
+        private static MgLayerGroup GroupAerialLayers(
             AcMapMap map, IReadOnlyList<MgLayerBase> added, string displayName)
         {
             MgLayerGroupCollection groups = map.GetLayerGroups();
@@ -350,35 +325,56 @@ namespace CLV_CivilTools.Gis
             for (int i = 0; i < groups.GetCount(); i++)
             {
                 MgLayerGroup g = groups.GetItem(i);
-                if (string.Equals(g.GetName(), AerialGroupName, StringComparison.OrdinalIgnoreCase))
+                if (AerialLayerIdentity.IsAerialGroup(g.GetName(), g.GetLegendLabel()))
                 { aerialGroup = g; break; }
             }
             if (aerialGroup == null)
             {
-                aerialGroup = new MgLayerGroup(AerialGroupName);
+                aerialGroup = new AcMapLayerGroup(AerialGroupName);
                 aerialGroup.SetLegendLabel(AerialGroupName);
                 aerialGroup.SetDisplayInLegend(true);
                 aerialGroup.SetVisible(true);
                 groups.Add(aerialGroup);
             }
-            MgLayerCollection layers = map.GetLayers();
+            aerialGroup.SetLegendLabel(AerialGroupName);
+            if (aerialGroup.GetGroup() != null) aerialGroup.SetGroup(null);
+            aerialGroup.SetDisplayInLegend(true);
+            aerialGroup.SetVisible(true);
             foreach (MgLayerBase layer in added)
             {
-                layer.SetGroup(aerialGroup);
+                if (layer.GetGroup()?.GetObjectId() != aerialGroup.GetObjectId()) layer.SetGroup(aerialGroup);
                 layer.SetDisplayInLegend(true);
                 layer.SetVisible(true);
                 if (added.Count == 1) layer.SetLegendLabel(displayName);
-                int index = layers.IndexOf(layer);
-                if (index < 0) throw new InvalidOperationException("Imported aerial disappeared before grouping.");
-                if (index != layers.GetCount() - 1)
+
+            }
+            return aerialGroup;
+        }
+
+        [CommandMethod("NM_AERIAL_STATE", CommandFlags.Modal)]
+        public static void ReportAerialState()
+        {
+            Document? doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            try
+            {
+                using (doc.LockDocument())
                 {
-                    layers.RemoveAt(index);
-                    layers.Insert(layers.GetCount(), layer);
+                    AcMapMap map = AcMapMap.GetCurrentMap();
+                    using ViewTableRecord view = doc.Editor.GetCurrentView();
+                    doc.Editor.WriteMessage("\n[AERIAL-R3] " + typeof(Aerials).Assembly.Location + " | " + AerialLoadSession.ViewText(view));
+                    MgLayerGroupCollection groups = map.GetLayerGroups();
+                    for (int i = 0; i < groups.GetCount(); i++)
+                    {
+                        MgLayerGroup g = groups.GetItem(i);
+                        doc.Editor.WriteMessage("\nGROUP " + i + " id=" + g.GetObjectId() + " name='" + g.GetName() + "' label='" + g.GetLegendLabel() + "' parent=" + g.GetGroup()?.GetObjectId());
+                    }
+                    foreach (MgLayerBase layer in Layers(map))
+                        doc.Editor.WriteMessage("\nLAYER id=" + layer.GetObjectId() + " name='" + layer.GetName() + "' label='" + layer.GetLegendLabel() + "' parent=" + layer.GetGroup()?.GetObjectId());
+                    AerialDisplayOrder.Report(doc.Database, map, text => doc.Editor.WriteMessage("\n" + text));
                 }
             }
-            Document? doc = AcadApp.DocumentManager.MdiActiveDocument;
-            if (doc == null) throw new InvalidOperationException("The aerial drawing is no longer active.");
-            AerialDisplayOrder.EnsureMapBaseFirst(doc.Database, map, aerialGroup, added);
+            catch (System.Exception ex) { doc.Editor.WriteMessage("\n[AERIAL-R3] State read failed: " + ex.Message); }
         }
 
         // ============================================================

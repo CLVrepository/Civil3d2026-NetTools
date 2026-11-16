@@ -1,3 +1,9 @@
+## 2026-11-16 - Repair aerial replacement groups and completion timing
+- Removes live-layer remove/reinsert ordering that could detach group associations. Reuses a named root Aerial Imagery group and prunes only verified empty legacy/import containers.
+- Replaces one-idle restoration with native completion/readiness and quiet-period finalization; allows loader ZOOM to settle and preserves later user navigation. Ordering failures still restore the view.
+- Uses existing-item native order anchors instead of null/end positions. Adds NM_AERIAL_STATE and [AERIAL-R3] diagnostics for DLL, viewport, groups, layers and native order.
+- Targeted AutoCAD/Map-reference compilation passes. Live groups/zoom/date replacement and full-solution build still require workstation testing; no new claim of native success.
+
 ## 2026-11-16 - Keep Map Base above aerials and restore load zoom
 - Corrects the reported folder order using native DisplayManagement, including Map Base's BaseElement, alongside FDO ordering. Verifies root-group/draw order and preserves unrelated relative order.
 - Runs palette loads in command context, temporarily uses synchronous layer initialization and restores the saved viewport after loading/grouping/repaint. Restores the previous loading setting and reads back center/size/target/twist/perspective/direction.
