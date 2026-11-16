@@ -1,3 +1,9 @@
+## 2026-11-16 - Q2 street names and aerial unload repair
+- Adds ROADWAY > STREET NAMES above ADDRESS in Q2 GIS, reusing the existing Q4 command.
+- Fixes aerial ownership detection through actual imported layer IDs, persistent grouping, visible labels and resource identities instead of relying only on internal names. Unload runs in command context, checks removal and repaints the map.
+- Retains unrelated GIS/shared connection definitions; removes unsafe recursive connection reflection. Bounds saved-view restoration to the originating document and one idle turn, canceled by later commands.
+- Targeted AutoCAD/Map-reference compilation passes. New 30-check identity regression project compiles, but Application Control blocks running it here. Full solution and live load/unload/reload/view checks remain pending.
+
 ## 2026-11-10 - Lettered sewer manhole identifiers
 - Accepts identifiers such as 6A and 12B in manual entry and typed Edit/Insert selection. Numeric prefixes keep two-digit name padding (6A becomes ...-SSMH-06A); case and equivalent leading zeros cannot create duplicate records.
 - Preserves existing numeric JSON/catalog behavior, numeric sorting, snapshots, connection identities and Apply flow. Lettered IDs round-trip as JSON strings. Sewer scope is unchanged; storm/drop-inlet Info support is not added.

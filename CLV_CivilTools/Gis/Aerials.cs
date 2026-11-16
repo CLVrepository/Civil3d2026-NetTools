@@ -1,6 +1,5 @@
-﻿using System;
-using System.Collections;
-using System.Reflection;
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -27,8 +26,8 @@ namespace CLV_CivilTools.Gis
         private const string AerialGroupName = "Aerial Imagery";
 
         private static ViewTableRecord? _savedView;
-        private static bool _pendingViewRestore;
-        private static bool _zoomHookAttached;
+        private static Document? _viewDocument;
+        private static bool _viewRestoreHookAttached;
 
         // ============================================================
         // COMMAND-LINE ENTRY (still available)
@@ -128,23 +127,26 @@ namespace CLV_CivilTools.Gis
                         return;
                     }
 
-                    // Save current view + hook zoom-ended event
-                    SaveCurrentView(ed);
-                    AttachZoomEndedHook();
-                    _pendingViewRestore = true;
-
-                    // Remove any existing Nearmap layers
-                    RemoveExistingNearmapLayers(map);
-                TryRemoveNearmapConnections(ed);
-
-                    // Load the .layer file (Map will usually do a ZOOM EXTENTS)
-                    map.LoadLayer(layerFilePath);
-
-                    // Put the layer into "Aerial Imagery" group and send to back (within Map)
-                    PlaceLayerInAerialGroupAndSendToBack(map, displayName);
-
-                    // Ensure CAD entities are drawn above imagery
-                    BringAllCadEntitiesToFront();
+                    SaveCurrentView(doc);
+                    try
+                    {
+                        RemoveExistingNearmapLayers(map);
+                        HashSet<string> before = LayerIds(map);
+                        map.LoadLayer(layerFilePath);
+                        // Map's internal names need not match the file name. Track every layer
+                        // actually added by this import and persist ownership through its group.
+                        List<MgLayerBase> added = Layers(map).Where(l => !before.Contains(l.GetObjectId())).ToList();
+                        if (added.Count == 0)
+                            throw new InvalidOperationException("The layer file added no new Display Manager layers.");
+                        PlaceLayersInAerialGroupAndSendToBack(map, added, displayName);
+                        BringAllCadEntitiesToFront();
+                        RefreshMap(ed);
+                    }
+                    finally
+                    {
+                        try { RestoreSavedView(doc); }
+                        finally { AttachViewRestoreHook(); }
+                    }
                 }
 
                 ed.WriteMessage($"\nLoaded Nearmap layer: {displayName}");
@@ -156,64 +158,55 @@ namespace CLV_CivilTools.Gis
         }
 
         // ============================================================
-        // VIEW RESTORE – AFTER MAP'S AUTO ZOOM
+        // VIEW RESTORE - AFTER MAP'S AUTO ZOOM
         // ============================================================
 
-        private static void AttachZoomEndedHook()
+        private static void SaveCurrentView(Document doc)
         {
-            if (_zoomHookAttached)
-                return;
-
-            AcadApp.DocumentManager.MdiActiveDocument.CommandEnded += OnCommandEnded;
-            _zoomHookAttached = true;
+            CancelViewRestore();
+            _savedView = doc.Editor.GetCurrentView();
+            _viewDocument = doc;
         }
 
-        private static void OnCommandEnded(object sender, CommandEventArgs e)
+        private static void RestoreSavedView(Document doc)
         {
-            if (!_pendingViewRestore)
-                return;
+            if (_savedView != null && ReferenceEquals(_viewDocument, doc))
+                doc.Editor.SetCurrentView(_savedView);
+        }
 
-            if (!string.Equals(e.GlobalCommandName, "ZOOM",
-                StringComparison.OrdinalIgnoreCase))
-                return;
+        private static void AttachViewRestoreHook()
+        {
+            if (_savedView == null || _viewRestoreHookAttached) return;
+            // One idle turn also catches Map's deferred auto-zoom. Never wait for the
+            // user's next ZOOM command, and never restore another drawing's saved view.
+            AcadApp.Idle += OnRestoreView;
+            if (_viewDocument != null) _viewDocument.CommandWillStart += OnViewCommandStart;
+            _viewRestoreHookAttached = true;
+        }
 
+        private static void OnViewCommandStart(object sender, CommandEventArgs e) => CancelViewRestore();
+
+        private static void OnRestoreView(object? sender, EventArgs e)
+        {
+            Document? doc = _viewDocument;
             try
             {
-                Document? doc = AcadApp.DocumentManager.MdiActiveDocument;
-                if (doc == null)
-                    return;
-
-                Editor ed = doc.Editor;
-
-                using (var docLock = doc.LockDocument())
-                {
-                    if (_savedView != null)
-                        ed.SetCurrentView(_savedView);
-                }
+                if (doc != null && ReferenceEquals(doc, AcadApp.DocumentManager.MdiActiveDocument))
+                    using (doc.LockDocument()) RestoreSavedView(doc);
             }
-            catch
+            catch (System.Exception ex)
             {
-                // ignore restore errors
+                AcadApp.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\nAerial view restore: " + ex.Message);
             }
-            finally
-            {
-                _pendingViewRestore = false;
-            }
+            finally { CancelViewRestore(); }
         }
 
-        private static void SaveCurrentView(Editor ed)
+        private static void CancelViewRestore()
         {
-            ViewTableRecord v = ed.GetCurrentView();
-
-            _savedView = new ViewTableRecord
-            {
-                CenterPoint = v.CenterPoint,
-                Height = v.Height,
-                Width = v.Width,
-                ViewDirection = v.ViewDirection,
-                Target = v.Target,
-                ViewTwist = v.ViewTwist
-            };
+            if (_viewRestoreHookAttached) AcadApp.Idle -= OnRestoreView;
+            if (_viewRestoreHookAttached && _viewDocument != null) _viewDocument.CommandWillStart -= OnViewCommandStart;
+            _viewRestoreHookAttached = false;
+            _savedView?.Dispose(); _savedView = null; _viewDocument = null;
         }
 
         // ============================================================
@@ -223,234 +216,109 @@ namespace CLV_CivilTools.Gis
         /// <summary>
         /// Public helper for palette "Unload Aerials" button.
         /// </summary>
+        [CommandMethod("NM_UNLOAD_AERIALS", CommandFlags.Modal)]
+        public static void UnloadNearmapCommand()
+        {
+            try { RemoveAllNearmapLayers(); }
+            catch (System.Exception ex)
+            {
+                AcadApp.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\nAerial unload did not complete: " + ex.Message);
+            }
+        }
+
         public static void RemoveAllNearmapLayers()
         {
             Document? doc = AcadApp.DocumentManager.MdiActiveDocument;
-            if (doc == null)
-                return;
-
+            if (doc == null) return;
             Editor ed = doc.Editor;
-
-            using (var docLock = doc.LockDocument())
+            using (doc.LockDocument())
             {
+                if (ReferenceEquals(_viewDocument, doc)) CancelViewRestore();
                 AcMapMap map = AcMapMap.GetCurrentMap();
-                if (map == null)
-                    return;
-
-                RemoveExistingNearmapLayers(map);
-                TryRemoveNearmapConnections(ed);
+                if (map == null) throw new InvalidOperationException("No current Map display is available.");
+                int removed;
+                try { removed = RemoveExistingNearmapLayers(map); }
+                finally { RefreshMap(ed); }
+                ed.WriteMessage(removed == 0
+                    ? "\nNo matching Nearmap aerial layers found in the current map."
+                    : "\nUnloaded " + removed + " aerial layer(s) from the current map.");
             }
         }
 
-        private static void RemoveExistingNearmapLayers(AcMapMap map)
+        private static List<MgLayerBase> Layers(AcMapMap map)
         {
             MgLayerCollection layers = map.GetLayers();
-            int count = layers.GetCount();
+            var result = new List<MgLayerBase>();
+            for (int i = 0; i < layers.GetCount(); i++) result.Add(layers.GetItem(i));
+            return result;
+        }
 
-            for (int i = count - 1; i >= 0; i--)
+        private static HashSet<string> LayerIds(AcMapMap map) =>
+            new HashSet<string>(Layers(map).Select(l => l.GetObjectId()), StringComparer.Ordinal);
+
+        private static bool IsAerial(MgLayerBase layer)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            for (MgLayerGroup? group = layer.GetGroup(); group != null; group = group.GetGroup())
+            {
+                if (!seen.Add(group.GetObjectId())) throw new InvalidOperationException("Cyclic Map layer groups; no aerial ownership guess was made.");
+                if (AerialLayerIdentity.IsAerialGroup(group.GetName(), group.GetLegendLabel())) return true;
+            }
+            if (AerialLayerIdentity.IsAerial(layer.GetName(), layer.GetLegendLabel())) return true;
+            // Drawing/base-map layers need not have a feature source. Optional resource
+            // metadata must not prevent unloading positively identified aerial layers.
+            try { return AerialLayerIdentity.IsAerial(layer.GetFeatureSourceId()); }
+            catch (System.Exception) { return false; }
+        }
+
+        private static int RemoveExistingNearmapLayers(AcMapMap map)
+        {
+            // Resolve all candidates before changing the collection. Resource connections may
+            // be shared with other GIS layers; unload display layers, not arbitrary services.
+            var candidates = new HashSet<string>(Layers(map).Where(IsAerial).Select(l => l.GetObjectId()), StringComparer.Ordinal);
+            MgLayerCollection layers = map.GetLayers();
+            int removed = 0;
+            for (int i = layers.GetCount() - 1; i >= 0; i--)
             {
                 MgLayerBase layer = layers.GetItem(i);
-                string name = layer.GetName();
-
-                if (name.Contains("LasVegas",
-                        StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("Nearmap",
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    layers.RemoveAt(i);
-                }
+                if (!candidates.Contains(layer.GetObjectId())) continue;
+                layers.RemoveAt(i); removed++;
             }
-        }
+            if (Layers(map).Any(l => candidates.Contains(l.GetObjectId())))
+                throw new InvalidOperationException("Aerial layers remain after unload; inspect Display Manager.");
 
-        private static void TryRemoveNearmapConnections(Editor ed)
-        {
-            try
+            // Remove only an empty tool-owned root group. Nonempty or nested groups stay intact.
+            MgLayerGroupCollection groups = map.GetLayerGroups();
+            for (int i = groups.GetCount() - 1; i >= 0; i--)
             {
-                Assembly? managedMapApi = AppDomain.CurrentDomain.GetAssemblies()
-                    .FirstOrDefault(a => string.Equals(a.GetName().Name, "ManagedMapApi", StringComparison.OrdinalIgnoreCase));
-                if (managedMapApi == null)
-                    return;
-
-                Type? hostType = managedMapApi.GetType("Autodesk.Gis.Map.HostMapApplicationServices", throwOnError: false);
-                object? mapApp = hostType?.GetProperty("Application", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
-                if (mapApp == null)
-                    return;
-
-                int removed = 0;
-                foreach (string memberName in new[] { "Connections", "ConnectionManager", "FeatureService", "Map" })
-                {
-                    object? candidate = mapApp.GetType().GetProperty(memberName, BindingFlags.Public | BindingFlags.Instance)?.GetValue(mapApp);
-                    if (candidate != null)
-                        removed += RemoveNamedConnectionsFromObject(candidate);
-                }
-
-                if (removed > 0)
-                    ed.WriteMessage($"\nRemoved {removed} Nearmap data connection(s) from the current map session.");
+                MgLayerGroup group = groups.GetItem(i);
+                if (!AerialLayerIdentity.IsAerialGroup(group.GetName(), group.GetLegendLabel())) continue;
+                string id = group.GetObjectId();
+                bool used = Layers(map).Any(l => l.GetGroup()?.GetObjectId() == id);
+                for (int j = 0; j < groups.GetCount() && !used; j++)
+                    used = groups.GetItem(j).GetGroup()?.GetObjectId() == id;
+                if (!used) groups.RemoveAt(i);
             }
-            catch (System.Exception ex)
-            {
-                ed.WriteMessage($"\nNearmap connection cleanup skipped: {ex.Message}");
-            }
-        }
-
-        private static int RemoveNamedConnectionsFromObject(object root)
-        {
-            int removed = 0;
-
-            foreach (object item in EnumerateUnknown(root).ToList())
-            {
-                if (!IsNearmapConnectionLike(item))
-                    continue;
-
-                if (TryInvokeRemove(root, item))
-                    removed++;
-            }
-
-            foreach (string memberName in new[] { "Connections", "Items", "Values", "Children" })
-            {
-                object? child = root.GetType().GetProperty(memberName, BindingFlags.Public | BindingFlags.Instance)?.GetValue(root);
-                if (child != null && !ReferenceEquals(child, root))
-                    removed += RemoveNamedConnectionsFromObject(child);
-            }
-
             return removed;
         }
 
-        private static bool IsNearmapConnectionLike(object item)
+        private static void RefreshMap(Editor ed)
         {
-            foreach (string memberName in new[] { "Name", "ConnectionName", "FeatureSource", "ResourceId", "DisplayName" })
-            {
-                string? value = TryGetMemberString(item, memberName);
-                if (string.IsNullOrWhiteSpace(value))
-                    continue;
-
-                if (value.Contains("LasVegas", StringComparison.OrdinalIgnoreCase) ||
-                    value.Contains("Nearmap", StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            AcMapMap.ForceScreenRefresh();
+            ed.Regen();
         }
 
-        private static string? TryGetMemberString(object source, string memberName)
+        private static void PlaceLayersInAerialGroupAndSendToBack(
+            AcMapMap map, IReadOnlyList<MgLayerBase> added, string displayName)
         {
-            try
-            {
-                object? value = source.GetType().GetProperty(memberName, BindingFlags.Public | BindingFlags.Instance)?.GetValue(source);
-                if (value != null)
-                    return value.ToString();
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                MethodInfo? mi = source.GetType().GetMethod("Get" + memberName, BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
-                object? value = mi?.Invoke(source, null);
-                if (value != null)
-                    return value.ToString();
-            }
-            catch
-            {
-            }
-
-            return null;
-        }
-
-        private static bool TryInvokeRemove(object owner, object item)
-        {
-            foreach (string methodName in new[] { "Remove", "Delete", "Disconnect", "RemoveConnection" })
-            {
-                foreach (MethodInfo mi in owner.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(m => string.Equals(m.Name, methodName, StringComparison.OrdinalIgnoreCase)))
-                {
-                    ParameterInfo[] p = mi.GetParameters();
-                    if (p.Length == 1)
-                    {
-                        try
-                        {
-                            mi.Invoke(owner, new[] { item });
-                            return true;
-                        }
-                        catch
-                        {
-                        }
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        private static IEnumerable<object> EnumerateUnknown(object source)
-        {
-            if (source is IEnumerable enumerable)
-            {
-                foreach (object? item in enumerable)
-                {
-                    if (item != null)
-                        yield return item;
-                }
-                yield break;
-            }
-
-            MethodInfo? getCount = source.GetType().GetMethod("GetCount", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
-            MethodInfo? getItem = source.GetType().GetMethod("GetItem", BindingFlags.Public | BindingFlags.Instance);
-            if (getCount != null && getItem != null)
-            {
-                int count = Convert.ToInt32(getCount.Invoke(source, null));
-                for (int i = 0; i < count; i++)
-                {
-                    object? item = getItem.Invoke(source, new object[] { i });
-                    if (item != null)
-                        yield return item;
-                }
-            }
-        }
-
-        private static void PlaceLayerInAerialGroupAndSendToBack(
-            AcMapMap map, string layerName)
-        {
-            MgLayerCollection layers = map.GetLayers();
-            MgLayerBase? target = null;
-            int targetIndex = -1;
-
-            int layerCount = layers.GetCount();
-            for (int i = 0; i < layerCount; i++)
-            {
-                MgLayerBase lyr = layers.GetItem(i);
-                if (string.Equals(lyr.GetName(),
-                        layerName,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    target = lyr;
-                    targetIndex = i;
-                    break;
-                }
-            }
-
-            if (target == null)
-                return;
-
-            // Ensure "Aerial Imagery" group exists
             MgLayerGroupCollection groups = map.GetLayerGroups();
             MgLayerGroup? aerialGroup = null;
-
             for (int i = 0; i < groups.GetCount(); i++)
             {
-                var g = groups.GetItem(i);
-                if (string.Equals(g.GetName(),
-                        AerialGroupName,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    aerialGroup = g;
-                    break;
-                }
+                MgLayerGroup g = groups.GetItem(i);
+                if (string.Equals(g.GetName(), AerialGroupName, StringComparison.OrdinalIgnoreCase))
+                { aerialGroup = g; break; }
             }
-
             if (aerialGroup == null)
             {
                 aerialGroup = new MgLayerGroup(AerialGroupName);
@@ -459,19 +327,20 @@ namespace CLV_CivilTools.Gis
                 aerialGroup.SetVisible(true);
                 groups.Add(aerialGroup);
             }
-
-            // Put layer under the group, show in legend
-            target.SetGroup(aerialGroup);
-            target.SetDisplayInLegend(true);
-            target.SetLegendLabel(layerName);
-
-            // Send to back within Map's layer collection
-            int lastIndex = layerCount - 1;
-
-            if (targetIndex >= 0 && targetIndex != lastIndex)
+            MgLayerCollection layers = map.GetLayers();
+            foreach (MgLayerBase layer in added)
             {
-                layers.RemoveAt(targetIndex);
-                layers.Insert(lastIndex, target);
+                layer.SetGroup(aerialGroup);
+                layer.SetDisplayInLegend(true);
+                layer.SetVisible(true);
+                if (added.Count == 1) layer.SetLegendLabel(displayName);
+                int index = layers.IndexOf(layer);
+                if (index < 0) throw new InvalidOperationException("Imported aerial disappeared before grouping.");
+                if (index != layers.GetCount() - 1)
+                {
+                    layers.RemoveAt(index);
+                    layers.Insert(layers.GetCount(), layer);
+                }
             }
         }
 

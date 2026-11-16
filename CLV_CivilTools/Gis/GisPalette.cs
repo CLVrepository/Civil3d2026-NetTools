@@ -119,7 +119,7 @@ namespace CLV_CivilTools.Gis
             {
                 try
                 {
-                    Aerials.RemoveAllNearmapLayers();
+                    Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument?.SendStringToExecute("NM_UNLOAD_AERIALS ", true, false, false);
                 }
                 catch (System.Exception ex)
                 {
@@ -310,6 +310,25 @@ namespace CLV_CivilTools.Gis
             };
             btnCacheInspect.Click += (s, e) => Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument?.SendStringToExecute("GISCACHEINSPECT ", true, false, false);
 
+            var roadwaySection = new Label
+            {
+                AutoSize = true,
+                Font = new Font(SystemFonts.DefaultFont.FontFamily, PaletteFontSize, FontStyle.Bold),
+                Padding = new Padding(0, 8, 0, 2),
+                Text = "ROADWAY"
+            };
+            var btnStreetNames = new Button
+            {
+                Text = "STREET NAMES",
+                Width = ButtonWidth,
+                Height = ButtonHeight,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font(SystemFonts.DefaultFont.FontFamily, PaletteFontSize, FontStyle.Regular)
+            };
+            btnStreetNames.Click += (s, e) => Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument?.SendStringToExecute("SURVEY-LABEL-ROADS ", true, false, false);
+
+            panel.Controls.Add(roadwaySection);
+            panel.Controls.Add(btnStreetNames);
             panel.Controls.Add(addressSection);
             panel.Controls.Add(btnLocateAddress);
             panel.Controls.Add(btnLocateParcel);
@@ -455,3 +474,4 @@ namespace CLV_CivilTools.Gis
         }
     }
 }
+

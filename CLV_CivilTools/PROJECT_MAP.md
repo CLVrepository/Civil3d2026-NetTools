@@ -1,3 +1,9 @@
+## 2026-11-16 - Q2 roadway and aerial unload
+- Q2 GIS now begins with ROADWAY > STREET NAMES, queuing the existing SURVEY-LABEL-ROADS workflow from Q4. Q4 remains available.
+- Aerials.cs now groups actual new Map layer IDs after LoadLayer, not a filename/internal-name guess. Unload resolves group ancestry, names, visible legend labels and resource identities through AerialLayerIdentity; removes and checks candidates, prunes empty tool groups and refreshes Map/CAD.
+- Adds NM_UNLOAD_AERIALS and queues it from the palette for command context. Removes recursive arbitrary connection reflection; shared source definitions and unrelated GIS data remain. Replaces indefinitely pending global ZOOM restore with document-bound, one-idle restoration canceled by a new command.
+- Changed sources compile against AutoCAD/Map refs with unchanged palette dependencies represented by compile-only stand-ins. New 30-check console regression project builds, but execution was blocked by Windows Application Control. Full solution/live Civil load-unload-reload/view checks remain required; see Docs/Q2_GIS_AERIALS.md.
+
 ## 2026-11-10 - Alphanumeric sewer manhole identity
 - SewerManhole.Number now uses the bounded SewerManholeNumber value type with consistent normalized equality, hashing and natural ordering. Its JSON converter reads legacy integer numbers and new string identifiers, while numeric-only exports remain JSON numbers.
 - Manual entry, typed selection, duplicate checks, merge, generated names, block snapshots and Apply retain one identity. Numeric name prefixes are padded to two digits, and suffixes are uppercase. Storage keys, pipe/connection matching, numeric part rules and sewer-only scope are unchanged.

@@ -1,3 +1,8 @@
+## 2026-11-16 - Q2 GIS roadway and aerial unload
+- **Q2 > GIS > ROADWAY > STREET NAMES** is above ADDRESS and runs existing **SURVEY-LABEL-ROADS**. Q4 LABEL access is retained.
+- **NM_UNLOAD_AERIALS** is the new command used by Q2 AERIAL > Unload Aerials. Reports actual removals/no matches, handles tool groups and visible/resource identities, and forces a repaint/Regen. Retains shared FDO definitions and unrelated GIS layers.
+- **NM_AERIAL** and palette loading now group actual imported layers even when internal names differ from the .layer filename. Document-bound view restoration replaces the stale global ZOOM hook. See Docs/Q2_GIS_AERIALS.md.
+
 ## 2026-11-10 - SSMH lettered identifiers
 - SSMHADD and the manager accept 6A-style identifiers. SSMHEDIT and SSMHINSERT now use text selection and normalize case/leading zeros. No command aliases change.
 - Canonical names use the existing numeric padding (6A becomes ...-SSMH-06A). Numeric-only records remain backward-compatible; see Docs/SEWER_MANHOLE_INFO.md for supported syntax and native acceptance checks.

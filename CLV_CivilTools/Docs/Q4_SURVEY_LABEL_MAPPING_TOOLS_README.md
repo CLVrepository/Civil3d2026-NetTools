@@ -1,5 +1,7 @@
 # Q4 Survey Label / Mapping Tools
 
+Q2 > GIS > ROADWAY > STREET NAMES also runs the existing `SURVEY-LABEL-ROADS` command. Q4 access and road-label behavior are unchanged. See `Q2_GIS_AERIALS.md` for the Q2 placement and aerial repair.
+
 ## LABEL > DIMENSIONS > LINES AND CURVES
 
 ### 2-POINT
