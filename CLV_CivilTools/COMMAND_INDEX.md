@@ -1,3 +1,8 @@
+## 2026-11-16 - Aerial order and zoom follow-up
+- Q2 AERIAL loading and NM_AERIAL now explicitly order Map Base first and Aerial Imagery last in native Groups/draw order, then check the result. No command rename or additional UI prompt.
+- Palette loading runs in CAD command context. Temporary synchronous initialization precedes full saved-viewport restoration/readback; previous loading mode is restored. Unload functionality remains.
+- Existing loaded aerials can be unloaded and reloaded once after updating to apply the corrected order. See Docs/Q2_GIS_AERIALS.md for acceptance checks.
+
 ## 2026-11-16 - Q2 GIS roadway and aerial unload
 - **Q2 > GIS > ROADWAY > STREET NAMES** is above ADDRESS and runs existing **SURVEY-LABEL-ROADS**. Q4 LABEL access is retained.
 - **NM_UNLOAD_AERIALS** is the new command used by Q2 AERIAL > Unload Aerials. Reports actual removals/no matches, handles tool groups and visible/resource identities, and forces a repaint/Regen. Retains shared FDO definitions and unrelated GIS layers.

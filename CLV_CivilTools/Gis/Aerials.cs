@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -97,6 +98,19 @@ namespace CLV_CivilTools.Gis
         /// <summary>
         /// Core loading logic used by both NM_AERIAL and the palette.
         /// </summary>
+        public static async Task LoadAerialFromPaletteAsync(string layerFilePath)
+        {
+            Document? doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            await AcadApp.DocumentManager.ExecuteInCommandContextAsync(_ =>
+            {
+                if (!ReferenceEquals(doc, AcadApp.DocumentManager.MdiActiveDocument))
+                    throw new InvalidOperationException("The drawing changed before the aerial load started. Select the aerial again in the intended drawing.");
+                LoadAerialFromFile(layerFilePath);
+                return Task.CompletedTask;
+            }, null);
+        }
+
         public static void LoadAerialFromFile(string layerFilePath)
         {
             if (string.IsNullOrWhiteSpace(layerFilePath))
@@ -127,9 +141,13 @@ namespace CLV_CivilTools.Gis
                         return;
                     }
 
+                    bool previousSynchronousLoading = map.GetSynchronousLoading();
                     SaveCurrentView(doc);
                     try
                     {
+                        // Finish Map's layer initialization/auto-extents before restoring the
+                        // captured viewport. A single Idle callback can precede an async load.
+                        map.SetSynchronousLoading(true);
                         RemoveExistingNearmapLayers(map);
                         HashSet<string> before = LayerIds(map);
                         map.LoadLayer(layerFilePath);
@@ -144,8 +162,12 @@ namespace CLV_CivilTools.Gis
                     }
                     finally
                     {
-                        try { RestoreSavedView(doc); }
-                        finally { AttachViewRestoreHook(); }
+                        try { map.SetSynchronousLoading(previousSynchronousLoading); }
+                        finally
+                        {
+                            try { RestoreSavedView(doc); }
+                            finally { AttachViewRestoreHook(); }
+                        }
                     }
                 }
 
@@ -158,7 +180,7 @@ namespace CLV_CivilTools.Gis
         }
 
         // ============================================================
-        // VIEW RESTORE - AFTER MAP'S AUTO ZOOM
+        // VIEW RESTORE – AFTER MAP'S AUTO ZOOM
         // ============================================================
 
         private static void SaveCurrentView(Document doc)
@@ -171,7 +193,19 @@ namespace CLV_CivilTools.Gis
         private static void RestoreSavedView(Document doc)
         {
             if (_savedView != null && ReferenceEquals(_viewDocument, doc))
+            {
                 doc.Editor.SetCurrentView(_savedView);
+                using ViewTableRecord actual = doc.Editor.GetCurrentView();
+                double size = Math.Max(1, Math.Max(_savedView.Width, _savedView.Height));
+                bool near(double a, double b) => double.IsFinite(a) && Math.Abs(a - b) <= size * 1e-8;
+                if (!near(actual.CenterPoint.X, _savedView.CenterPoint.X) || !near(actual.CenterPoint.Y, _savedView.CenterPoint.Y)
+                    || !near(actual.Height, _savedView.Height) || !near(actual.Width, _savedView.Width)
+                    || !near(actual.Target.X, _savedView.Target.X) || !near(actual.Target.Y, _savedView.Target.Y) || !near(actual.Target.Z, _savedView.Target.Z)
+                    || Math.Abs(Math.IEEERemainder(actual.ViewTwist - _savedView.ViewTwist, 2 * Math.PI)) > 1e-8
+                    || actual.PerspectiveEnabled != _savedView.PerspectiveEnabled
+                    || actual.ViewDirection.GetNormal().DotProduct(_savedView.ViewDirection.GetNormal()) < 1 - 1e-10)
+                    throw new InvalidOperationException("Aerial loaded, but the native viewport did not match the saved location/zoom. Send this message and the current view details.");
+            }
         }
 
         private static void AttachViewRestoreHook()
@@ -342,6 +376,9 @@ namespace CLV_CivilTools.Gis
                     layers.Insert(layers.GetCount(), layer);
                 }
             }
+            Document? doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) throw new InvalidOperationException("The aerial drawing is no longer active.");
+            AerialDisplayOrder.EnsureMapBaseFirst(doc.Database, map, aerialGroup, added);
         }
 
         // ============================================================

@@ -135,20 +135,22 @@ namespace CLV_CivilTools.Gis
                 Font = new Font(SystemFonts.DefaultFont.FontFamily, PaletteFontSize, FontStyle.Regular)
             };
 
-            _lstAerials.DoubleClick += (s, e) =>
+            _lstAerials.DoubleClick += async (s, e) =>
             {
                 if (_lstAerials.SelectedItem is AerialItem item &&
                     !string.IsNullOrEmpty(item.FullPath))
                 {
                     try
                     {
-                        Aerials.LoadAerialFromFile(item.FullPath);
+                        _lstAerials.Enabled = false;
+                        await Aerials.LoadAerialFromPaletteAsync(item.FullPath);
                     }
                     catch (System.Exception ex)
                     {
                         MessageBox.Show("Error loading aerial:\n" + ex.Message,
                             "GIS Tools", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
+                    finally { _lstAerials.Enabled = true; }
                 }
             };
 

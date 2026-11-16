@@ -1,3 +1,9 @@
+## 2026-11-16 - Native aerial display order and load-completion zoom restore
+- User confirmed Q2 street names placement and aerial unload work. Emailed examples require Map Base above the Aerial Imagery root group; MgLayerCollection ordering alone missed the native drawing element/tree.
+- AerialDisplayOrder uses ManagedMapApi DisplayManagement and public platform interop to resolve IDs, put BaseElement first in group/draw order and the aerial group/elements last, preserving unrelated relative order with readback checks.
+- Palette loads now run via ExecuteInCommandContextAsync. Both load paths temporarily request synchronous layer initialization, restore the previous mode in finally, then restore/read back the full saved viewport; the bounded idle follow-up remains. This fixes restoring before an async image's later auto-extents.
+- Targeted compilation of changed sources plus unchanged palette stand-ins passes against installed AutoCAD/Map refs. Full solution/native ordering, zoom and unload/reload acceptance remain pending; see Docs/Q2_GIS_AERIALS.md.
+
 ## 2026-11-16 - Q2 roadway and aerial unload
 - Q2 GIS now begins with ROADWAY > STREET NAMES, queuing the existing SURVEY-LABEL-ROADS workflow from Q4. Q4 remains available.
 - Aerials.cs now groups actual new Map layer IDs after LoadLayer, not a filename/internal-name guess. Unload resolves group ancestry, names, visible legend labels and resource identities through AerialLayerIdentity; removes and checks candidates, prunes empty tool groups and refreshes Map/CAD.

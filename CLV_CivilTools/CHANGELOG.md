@@ -1,3 +1,8 @@
+## 2026-11-16 - Keep Map Base above aerials and restore load zoom
+- Corrects the reported folder order using native DisplayManagement, including Map Base's BaseElement, alongside FDO ordering. Verifies root-group/draw order and preserves unrelated relative order.
+- Runs palette loads in command context, temporarily uses synchronous layer initialization and restores the saved viewport after loading/grouping/repaint. Restores the previous loading setting and reads back center/size/target/twist/perspective/direction.
+- Keeps the working Q2 menu placement and unload behavior. Changed sources compile against installed Map/AutoCAD references; live ordering/zoom and full solution build remain workstation checks.
+
 ## 2026-11-16 - Q2 street names and aerial unload repair
 - Adds ROADWAY > STREET NAMES above ADDRESS in Q2 GIS, reusing the existing Q4 command.
 - Fixes aerial ownership detection through actual imported layer IDs, persistent grouping, visible labels and resource identities instead of relying only on internal names. Unload runs in command context, checks removal and repaints the map.

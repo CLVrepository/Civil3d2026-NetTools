@@ -1,5 +1,17 @@
 # Q2 GIS street names and aerial unload
 
+## 2026-11-16 follow-up: Map Base order and saved zoom
+
+Mark confirmed the Q2 menu placement and Unload Aerials work. The emailed before/desired examples show Aerial Imagery above Map Base; the requested result has Map Base first and the aerial folder beneath it. The earlier MgLayerCollection reorder did not include Map Base's native drawing element or the group's tree position.
+
+AerialDisplayOrder uses the public Map DisplayManagement interop API to resolve the native display map/group/element IDs. It locates Map Base by BaseElement type (not a localized display name), moves the aerial root group to the bottom and Map Base to the top of the Groups tree, activates explicit draw order if needed, moves the aerial elements to the back and Map Base to the front. Readback checks both orders and confirms unrelated group/element relative order remains intact. It does not rename, regroup or erase Map Base, change its visibility, or toggle the Default child. A native ordering failure is reported rather than claiming the requested order was established.
+
+Palette aerial loads now use ExecuteInCommandContextAsync; repeat clicks are disabled while a request runs. Both palette and NM_AERIAL paths save the complete current ViewTableRecord, temporarily enable AcMapMap synchronous loading, initialize/group/order/refresh the imagery, restore the prior loading mode in finally and restore the saved viewport. The one-idle follow-up remains bounded and canceled by later commands. Readback checks center, width/height, target, twist, perspective and normalized view direction after restoration. This addresses the first idle occurring before asynchronous layer initialization/auto-extents had finished. No permanent map setting, saved named view or ZOOM Previous stack operation is used.
+
+The combined changed sources compile against installed AutoCAD/Map 3D 2026 references, including ManagedMapApi. Full-solution build, both live native orders and the before/after zoom still require workstation acceptance. Earlier one-idle-only text below is superseded by this load-completion change.
+
+Retest on a drawing copy: zoom tightly to a recognizable feature, load an aerial, wait until it finishes and confirm the same center/scale/orientation. Check Groups has Map Base above Aerial Imagery, Draw Order has Map Base above the image, and linework is visible. Repeat with another date, an already configured draw order, rotated view/UCS, load failure and another drawing. Pan/zoom afterward to confirm no stale restore. Unload/reload and save/reopen to check retained grouping. Existing drawings with an aerial already loaded can unload and reload once to apply the automatic order.
+
 ## Roadway tools
 
 Q2 > GIS now begins with ROADWAY > STREET NAMES, above ADDRESS. It queues the existing `SURVEY-LABEL-ROADS` command in the active drawing, exactly as Q4 > LABEL > ROADWAY > STREET NAMES does. The Q4 button and all road-label boundaries, styles, conversion and GIS-source behavior remain unchanged.
