@@ -1,6 +1,6 @@
 using System;
 using System.Globalization;
-using System.Threading.Tasks;
+using System.Collections.Generic;
 using System.Windows.Forms;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -21,9 +21,13 @@ namespace CLV_CivilTools.Gis
         private DateTime _changed = DateTime.UtcNow;
         private Action? _finish;
         private Func<bool>? _layersReady;
-        private readonly TaskCompletionSource<bool> _finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        internal Task Completion => _finished.Task;
-        private bool _complete, _pending = true, _returned, _disposed, _applying, _viewReleased;
+        private bool _complete, _pending = true, _returned, _disposed, _applying, _viewReleased, _finishQueued, _initialApplied;
+        private string _endReason = "active", _stage = "captured", _lastError = "";
+        private readonly string _savedViewText;
+        private readonly List<string> _trace = new();
+        internal string RequestId { get; } = Guid.NewGuid().ToString("N");
+        internal bool MatchesDocument(Document doc) => ReferenceEquals(doc, _doc);
+        internal string Trace => string.Join(Environment.NewLine, _trace);
         private readonly AllLayerLoadingFinishedHandler _onComplete;
         private readonly LayerAddedHandler _onAdded;
         private readonly LayerInitializedHandler _onInitialized;
@@ -32,6 +36,7 @@ namespace CLV_CivilTools.Gis
         {
             _doc = doc; _map = map;
             _view = requestedView == null ? doc.Editor.GetCurrentView() : (ViewTableRecord)requestedView.Clone();
+            _savedViewText = ViewText(_view);
             _onComplete = (_, _) => { _complete = true; Changed(); };
             _onAdded = (_, _) => Changed();
             _onInitialized = (_, _) => Changed();
@@ -56,13 +61,13 @@ namespace CLV_CivilTools.Gis
         // filtered separately, so a user's zoom/pan cancels instead of being undone.
         private void OnCommandStart(object sender, CommandEventArgs e)
         {
-            if (!_returned) return;
+            if (!_returned || _applying) return;
             string name = e.GlobalCommandName.ToUpperInvariant();
-            if (name is "ZOOM" or "PAN" or "3DORBIT" or "REGEN" or "REGENALL" or "NM_AERIAL_STATE") Changed();
-            else { Log("completion canceled by command " + name); Dispose(); }
+            if (name is "ZOOM" or "PAN" or "3DORBIT" or "REGEN" or "REGENALL" or "NM_AERIAL_STATE" or "NM_AERIAL_FINISH") Changed();
+            else Stop("canceled by command " + name);
         }
         private void OnCommandEnd(object sender, CommandEventArgs e) { Changed(); }
-        private void OnDocumentClosing(object sender, DocumentCollectionEventArgs e) { if (ReferenceEquals(e.Document, _doc)) Dispose(); }
+        private void OnDocumentClosing(object sender, DocumentCollectionEventArgs e) { if (ReferenceEquals(e.Document, _doc)) Stop("document closing"); }
         private void OnInput(object sender, PreTranslateMessageEventArgs e)
         {
             if (!_returned || _disposed) return;
@@ -106,25 +111,44 @@ namespace CLV_CivilTools.Gis
         private void OnTick(object? sender, EventArgs e)
         {
             if (_disposed || !_returned) return;
-            if (!ReferenceEquals(AcadApp.DocumentManager.MdiActiveDocument, _doc)) { Dispose(); return; }
+            if (!ReferenceEquals(AcadApp.DocumentManager.MdiActiveDocument, _doc)) { Stop("document changed"); return; }
             if (DateTime.UtcNow - _started > TimeSpan.FromSeconds(60))
-            { Log("completion wait expired; native-finished=" + _complete + ". Run NM_AERIAL_STATE if the view/order is wrong."); Dispose(); return; }
-            if (!string.IsNullOrEmpty(_doc.CommandInProgress) || !_doc.Editor.IsQuiescent || DateTime.UtcNow - _changed < TimeSpan.FromMilliseconds(500)) return;
-            bool layersReady;
-            try { using (_doc.LockDocument()) layersReady = _layersReady?.Invoke() == true; }
-            catch (System.Exception ex) { Log("readiness check failed: " + ex.Message); Dispose(); return; }
-            if (!_pending && !(_complete || layersReady)) return;
-            if (!_complete && !layersReady)
+            { Stop("completion deadline; command=" + _doc.CommandInProgress + "; native-finished=" + _complete); return; }
+            if (!_finishQueued && _pending && string.IsNullOrEmpty(_doc.CommandInProgress) && DateTime.UtcNow - _changed >= TimeSpan.FromMilliseconds(500))
+                QueueCompletion();
+        }
+
+        internal void MarkStage(string stage) { _stage = stage; Log("stage=" + stage); }
+
+        internal void ApplyInitial() => Apply(false);
+
+        internal void QueueCompletion()
+        {
+            if (_disposed || _finishQueued || !_returned) return;
+            _finishQueued = true;
+            Log("queued finish; request=" + RequestId);
+            // Queue only: do not reactivate another drawing or hold a command awaiting us.
+            _doc.SendStringToExecute("NM_AERIAL_FINISH " + RequestId + " ", false, false, false);
+        }
+
+        internal void FinishFromCommand()
+        {
+            _finishQueued = false;
+            if (_disposed || !ReferenceEquals(AcadApp.DocumentManager.MdiActiveDocument, _doc)) return;
+            bool layersReady = _complete;
+            try { if (!layersReady) layersReady = _layersReady?.Invoke() == true; }
+            catch (System.Exception ex) { _lastError = ex.Message; Stop("readiness failed"); return; }
+            if (!_complete && (!layersReady || DateTime.UtcNow - _started < TimeSpan.FromSeconds(2)))
             {
-                if (_pending)
-                {
-                    try { using (_doc.LockDocument()) RestoreNow(); }
-                    catch (System.Exception ex) { Log("interim view restore failed: " + ex.Message); }
-                    _pending = false;
-                }
+                Log("finish waiting for native layers");
                 return;
             }
-            if (!_complete && layersReady && DateTime.UtcNow - _started < TimeSpan.FromSeconds(2)) return;
+            Apply(true);
+        }
+
+        private void Apply(bool final)
+        {
+            if (_disposed || _finish == null) return;
             _pending = false; _applying = true;
             try
             {
@@ -134,26 +158,43 @@ namespace CLV_CivilTools.Gis
                     try { _finish?.Invoke(); }
                     finally { RestoreNow(); }
                 }
-                Log("settled; native-finished=" + _complete + "; layers-loaded=" + layersReady + "; order checked; saved-view-restored=" + !_viewReleased + "; " + ViewText(_view));
-                if (_complete || layersReady) Dispose();
+                if (!final) _initialApplied = true;
+                _lastError = "";
+                Log((final ? "settled" : "initial pass") + "; native-finished=" + _complete + "; order checked; saved-view-restored=" + !_viewReleased + "; " + _savedViewText);
+                if (final) Stop("completed");
+                else _pending = true;
             }
-            catch (System.Exception ex) { Log("finalization failed: " + ex.Message + ". Run NM_AERIAL_STATE and send the output."); Dispose(); }
+            catch (System.Exception ex)
+            {
+                _lastError = ex.ToString();
+                Log("apply failed at " + _stage + ": " + ex.Message);
+                if (final) Stop("finalization failed");
+                else _pending = true;
+            }
             finally { _applying = false; }
         }
 
-        internal string Status => "returned=" + _returned + "; native-finished=" + _complete + "; pending=" + _pending + "; disposed=" + _disposed + "; view-released=" + _viewReleased;
-        private void Log(string text) => _doc.Editor.WriteMessage("\n[AERIAL-R4] " + text);
+        internal string Status => "returned=" + _returned + "; native-finished=" + _complete + "; pending=" + _pending + "; disposed=" + _disposed + "; view-released=" + _viewReleased
+            + "; initial-applied=" + _initialApplied + "; stage=" + _stage + "; end=" + _endReason + "; saved " + _savedViewText + "; error=" + _lastError;
+        private void Log(string text)
+        {
+            string line = "[AERIAL-R5] " + text;
+            _trace.Add(line); _doc.Editor.WriteMessage("\n" + line);
+        }
         internal static string ViewText(ViewTableRecord v) => string.Format(CultureInfo.InvariantCulture, "center=({0:0.###},{1:0.###}); height={2:0.######}; width={3:0.######}", v.CenterPoint.X, v.CenterPoint.Y, v.Height, v.Width);
-        public void Dispose()
+        public void Dispose() => Stop("disposed by caller");
+        private void Stop(string reason)
         {
             if (_disposed) return;
+            _endReason = reason;
+            Log("end=" + reason + "; stage=" + _stage);
             _disposed = true; _timer.Stop(); _timer.Dispose();
             AcadApp.PreTranslateMessage -= OnInput;
             _map.AllLayerLoadingFinished -= _onComplete; _map.LayerAdded -= _onAdded; _map.LayerInitialized -= _onInitialized;
             _doc.CommandWillStart -= OnCommandStart; _doc.CommandEnded -= OnCommandEnd;
             _doc.CommandCancelled -= OnCommandEnd; _doc.CommandFailed -= OnCommandEnd;
             AcadApp.DocumentManager.DocumentToBeDestroyed -= OnDocumentClosing;
-            _view.Dispose(); _finish = null; _layersReady = null; _finished.TrySetResult(true);
+            _view.Dispose(); _finish = null; _layersReady = null;
         }
     }
 }

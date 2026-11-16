@@ -1,3 +1,9 @@
+## 2026-11-16 - Execute aerial finishing in CAD command context
+- Responds to native R4 evidence that loading completed while the session was disposed with pending grouping/restore. The exact prior stop reason was not captured.
+- Applies essential work in the load command, removes the palette's wait on session completion and queues a token/document-bound completion command after loading. Timer no longer performs drawing edits itself.
+- Adds persistent R5 stage/error/end-reason/original-view trace to NM_AERIAL_STATE, including failures after disposal.
+- Targeted AutoCAD/Map-reference compilation passes. Full solution/live grouping, zoom and replacement checks remain pending.
+
 ## 2026-11-16 - Correct aerial input guard and capture original viewport earlier
 - Corrects R3's field lookup to the actual MSG.message property, verified from installed SDK/.NET metadata. The old catch could cancel the entire session before grouping and zoom restoration.
 - Makes an input-observer failure nonfatal to group/order completion; captures the palette's full viewport before command queuing and passes a session-owned clone.

@@ -1,3 +1,8 @@
+## 2026-11-16 - Aerial R5 command-context completion
+- **NM_AERIAL_FINISH** is an internal, request-token-bound completion command automatically queued by the loader; no new button or operator input is required. Wrong/stale tokens and other drawings are ignored.
+- Q2/NM_AERIAL now attempt essential grouping/restore in the load command and no longer await a timer-owned completion task. The timer queues CAD finishing instead of editing the drawing directly.
+- **NM_AERIAL_STATE** now includes the retained R5 stage/error/end trace and original viewport after session disposal. Live acceptance remains required; see Docs/Q2_GIS_AERIALS.md.
+
 ## 2026-11-16 - Aerial R4 input guard correction
 - Q2 AERIAL uses a viewport captured before queuing the load command. Fixes the MSG.message property lookup that could cancel grouping and deferred restore.
 - **NM_AERIAL_STATE** now includes lifecycle and view-release flags; load/state messages use **[AERIAL-R4]**. Existing command names and replacement/unload behavior remain.

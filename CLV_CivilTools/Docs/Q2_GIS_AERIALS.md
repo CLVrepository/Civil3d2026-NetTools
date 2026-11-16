@@ -1,5 +1,19 @@
 # Q2 GIS street names and aerial unload
 
+## 2026-11-16 R5: execute essential finishing in CAD commands
+
+Mark's R4 diagnostic proves the selected layer had no parent, Aerial Imagery was empty, draw order still used group order, and the session was returned=True / native-finished=True / pending=True / disposed=True / view-released=False. The supplied output does not retain the exact cancellation/deadline reason. It establishes that native loading completed but pending finishing did not complete; it does not prove one exclusive cause for disposal.
+
+Grouping/order/restore now get an initial application directly inside the actual load command when imported layers exist. The palette no longer awaits the pending session's TaskCompletionSource after ExecuteInCommandContextAsync. That wait and the timer's command-idle gate formed a possible context dependency; essential work no longer relies on either.
+
+After load, a request-token-bound NM_AERIAL_FINISH command is queued without activating another document. It performs the completion pass in a real document command context, checking native completion/readiness and always restoring the saved viewport in finally, even if order repair fails. A timer only queues retries/handles the bounded deadline; it no longer performs database/view finishing itself. Stale request tokens and different-document commands are ignored. The loader's own finishing command is allowed by the command-start guard. The native AllLayerLoadingFinished signal takes precedence over optional GetIsLoaded fallback reads.
+
+Runtime messages now use [AERIAL-R5]. The retained status includes initial-applied, last stage, saved viewport, last exception and end reason. NM_AERIAL_STATE prints the complete retained load trace alongside group/layer parents and native orders. Explicit stop reasons distinguish completion, other commands, document changes, deadline, caller disposal and finalization failure. This remains available after the saved ViewTableRecord is disposed.
+
+Targeted compilation with installed AutoCAD/Map references and SDK-equivalent implicit namespaces passes. The public Autodesk managed guide confirms SendStringToExecute queues commands until the current .NET command ends: https://help.autodesk.com/cloudhelp/2026/DEU/OARX-DevGuide-Managed/files/GUID-F4A36181-39FB-4923-A2AF-3333945DB289.htm . Full solution build and live CAD acceptance remain unverified.
+
+Retest after close/rebuild/restart: zoom to a small recognizable area, load one aerial and check the initial pass actually groups the image and restores the original view. Then wait for settled/end=completed. Confirm Map Base above the expanded Aerial Imagery folder and the image inside it. Replace dates and unload/reload to retain working behavior. If anything fails, run NM_AERIAL_STATE once and send all output; it now carries the saved-view/stage/error/end trace automatically. Do not manually run the internal token-bound finishing command.
+
 ## 2026-11-16 R4: input-property correction and pre-queue view capture
 
 The latest native screenshot shows the selected aerial at the map root and an empty Aerial Imagery folder. Date replacement and duplicate-folder removal are now confirmed working by Mark. The screenshot does not include command-line completion/error output.

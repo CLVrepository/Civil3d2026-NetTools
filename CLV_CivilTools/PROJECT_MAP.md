@@ -1,3 +1,9 @@
+## 2026-11-16 - Aerial R5 CAD-context finishing and retained trace
+- Native R4 diagnostic shows loading finished but session disposed with pending work, root-level image/no parent, empty aerial group and no explicit draw order. Exact stop cause was not present in the supplied trace.
+- ApplyInitial runs essential grouping/order/view restoration in the load command. Removes palette waiting on session completion. Token-bound NM_AERIAL_FINISH queues the completion pass in document command context; timer only schedules retries/deadline, avoiding dependence on idle execution for essential edits.
+- Request tokens/document checks reject stale callbacks. Native completion bypasses optional loaded-flag reads. Own finishing command cannot cancel the session.
+- [AERIAL-R5] and NM_AERIAL_STATE retain stage, original view, error, initial-application flag, end reason and full load trace after disposal. Changed sources compile against installed AutoCAD/Map refs/implicit namespaces; full build/live retest remains required. See Docs/Q2_GIS_AERIALS.md.
+
 ## 2026-11-16 - Aerial R4 input contract and view capture
 - Verified AutoCAD's PreTranslateMessageEventArgs.Message returns System.Windows.Interop.MSG with a message property and no fields. R3's GetField lookup could throw and dispose the entire session before grouping/restore; corrected to GetProperty with explicit validation.
 - Optional input-guard failures no longer cancel grouping/order. Palette capture now precedes command-context queuing; the session clones that complete viewport. One-argument public loader and working replacement/cleanup remain.
