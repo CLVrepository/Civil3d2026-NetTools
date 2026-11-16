@@ -100,19 +100,24 @@ namespace CLV_CivilTools.Gis
         {
             Document? doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
+            ViewTableRecord requestedView;
+            using (doc.LockDocument()) requestedView = doc.Editor.GetCurrentView();
+            using var requestedViewLifetime = requestedView;
             AerialLoadSession? session = null;
             await AcadApp.DocumentManager.ExecuteInCommandContextAsync(_ =>
             {
                 if (!ReferenceEquals(doc, AcadApp.DocumentManager.MdiActiveDocument))
                     throw new InvalidOperationException("The drawing changed before the aerial load started. Select the aerial again in the intended drawing.");
-                LoadAerialFromFile(layerFilePath);
+                LoadAerialCore(layerFilePath, requestedView);
                 session = _loadSession;
                 return Task.CompletedTask;
             }, null);
             if (session != null) await session.Completion;
         }
 
-        public static void LoadAerialFromFile(string layerFilePath)
+        public static void LoadAerialFromFile(string layerFilePath) => LoadAerialCore(layerFilePath, null);
+
+        private static void LoadAerialCore(string layerFilePath, ViewTableRecord? requestedView)
         {
             if (string.IsNullOrWhiteSpace(layerFilePath))
                 return;
@@ -144,7 +149,7 @@ namespace CLV_CivilTools.Gis
 
                     _loadSession?.Dispose();
                     bool previousSynchronousLoading = map.GetSynchronousLoading();
-                    var session = new AerialLoadSession(doc, map);
+                    var session = new AerialLoadSession(doc, map, requestedView);
                     _loadSession = session;
                     try
                     {
@@ -184,7 +189,7 @@ namespace CLV_CivilTools.Gis
                     }
                 }
 
-                ed.WriteMessage($"\n[AERIAL-R3] Imported {displayName}; waiting for settled layer/group/order verification.");
+                ed.WriteMessage($"\n[AERIAL-R4] Imported {displayName}; waiting for settled layer/group/order verification.");
             }
             catch (System.Exception ex)
             {
@@ -362,7 +367,8 @@ namespace CLV_CivilTools.Gis
                 {
                     AcMapMap map = AcMapMap.GetCurrentMap();
                     using ViewTableRecord view = doc.Editor.GetCurrentView();
-                    doc.Editor.WriteMessage("\n[AERIAL-R3] " + typeof(Aerials).Assembly.Location + " | " + AerialLoadSession.ViewText(view));
+                    doc.Editor.WriteMessage("\n[AERIAL-R4] " + typeof(Aerials).Assembly.Location + " | " + AerialLoadSession.ViewText(view));
+                    doc.Editor.WriteMessage("\nSESSION " + (_loadSession?.Status ?? "none"));
                     MgLayerGroupCollection groups = map.GetLayerGroups();
                     for (int i = 0; i < groups.GetCount(); i++)
                     {
@@ -374,7 +380,7 @@ namespace CLV_CivilTools.Gis
                     AerialDisplayOrder.Report(doc.Database, map, text => doc.Editor.WriteMessage("\n" + text));
                 }
             }
-            catch (System.Exception ex) { doc.Editor.WriteMessage("\n[AERIAL-R3] State read failed: " + ex.Message); }
+            catch (System.Exception ex) { doc.Editor.WriteMessage("\n[AERIAL-R4] State read failed: " + ex.Message); }
         }
 
         // ============================================================

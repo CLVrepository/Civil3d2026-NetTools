@@ -28,9 +28,10 @@ namespace CLV_CivilTools.Gis
         private readonly LayerAddedHandler _onAdded;
         private readonly LayerInitializedHandler _onInitialized;
 
-        internal AerialLoadSession(Document doc, AcMapMap map)
+        internal AerialLoadSession(Document doc, AcMapMap map, ViewTableRecord? requestedView = null)
         {
-            _doc = doc; _map = map; _view = doc.Editor.GetCurrentView();
+            _doc = doc; _map = map;
+            _view = requestedView == null ? doc.Editor.GetCurrentView() : (ViewTableRecord)requestedView.Clone();
             _onComplete = (_, _) => { _complete = true; Changed(); };
             _onAdded = (_, _) => Changed();
             _onInitialized = (_, _) => Changed();
@@ -69,11 +70,21 @@ namespace CLV_CivilTools.Gis
             {
                 // The host exposes WPF's MSG struct. Read only its message number so
                 // this WinForms project does not acquire a WPF build dependency.
-                object message = e.GetType().GetProperty("Message")!.GetValue(e)!;
-                int code = Convert.ToInt32(message.GetType().GetField("message")!.GetValue(message));
+                object message = e.GetType().GetProperty("Message")?.GetValue(e)
+                    ?? throw new InvalidOperationException("Host message is unavailable.");
+                object number = message.GetType().GetProperty("message")?.GetValue(message)
+                    ?? throw new InvalidOperationException("Host MSG.message property is unavailable.");
+                int code = Convert.ToInt32(number);
                 if (code is 0x0100 or 0x0104 or 0x0201 or 0x0204 or 0x0207 or 0x020A or 0x020E) _viewReleased = true;
             }
-            catch (System.Exception ex) { Log("input guard unavailable: " + ex.Message); Dispose(); }
+            catch (System.Exception ex)
+            {
+                // Input observation is optional. Never cancel grouping/order completion
+                // because its message adapter failed. Release view ownership to the user.
+                _viewReleased = true;
+                AcadApp.PreTranslateMessage -= OnInput;
+                Log("input guard disabled; group/order completion continues; saved-view ownership released: " + ex.Message);
+            }
         }
 
         internal void RestoreNow()
@@ -130,7 +141,8 @@ namespace CLV_CivilTools.Gis
             finally { _applying = false; }
         }
 
-        private void Log(string text) => _doc.Editor.WriteMessage("\n[AERIAL-R3] " + text);
+        internal string Status => "returned=" + _returned + "; native-finished=" + _complete + "; pending=" + _pending + "; disposed=" + _disposed + "; view-released=" + _viewReleased;
+        private void Log(string text) => _doc.Editor.WriteMessage("\n[AERIAL-R4] " + text);
         internal static string ViewText(ViewTableRecord v) => string.Format(CultureInfo.InvariantCulture, "center=({0:0.###},{1:0.###}); height={2:0.######}; width={3:0.######}", v.CenterPoint.X, v.CenterPoint.Y, v.Height, v.Width);
         public void Dispose()
         {

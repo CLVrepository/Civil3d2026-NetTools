@@ -1,3 +1,8 @@
+## 2026-11-16 - Aerial R4 input guard correction
+- Q2 AERIAL uses a viewport captured before queuing the load command. Fixes the MSG.message property lookup that could cancel grouping and deferred restore.
+- **NM_AERIAL_STATE** now includes lifecycle and view-release flags; load/state messages use **[AERIAL-R4]**. Existing command names and replacement/unload behavior remain.
+- Aerial grouping and actual original-view restoration still require native acceptance on this revision; see Docs/Q2_GIS_AERIALS.md.
+
 ## 2026-11-16 - Aerial R3 completion and state diagnostic
 - **NM_AERIAL_STATE** reports the actual loaded DLL, current viewport, Map group/layer names/labels/parents and native tree/draw order. New loads emit **[AERIAL-R3]** saved view and completion/failure evidence.
 - Q2 AERIAL / NM_AERIAL now finalize after native completion/readiness rather than one idle turn. Date selection waits for that session, and unload cancels it.

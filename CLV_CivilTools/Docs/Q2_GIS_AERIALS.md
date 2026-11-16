@@ -1,5 +1,19 @@
 # Q2 GIS street names and aerial unload
 
+## 2026-11-16 R4: input-property correction and pre-queue view capture
+
+The latest native screenshot shows the selected aerial at the map root and an empty Aerial Imagery folder. Date replacement and duplicate-folder removal are now confirmed working by Mark. The screenshot does not include command-line completion/error output.
+
+A specific defect was verified against the installed assemblies: AutoCAD PreTranslateMessageEventArgs.Message returns System.Windows.Interop.MSG, which has a public message PROPERTY and no public fields. R3 called GetField("message"), received null, then disposed the entire load session from the catch. This can prevent both grouping and delayed view restoration. R4 reads the property with explicit validation. An optional input-adapter failure now disables only its observer/releases saved-view ownership; it never cancels group/order completion.
+
+The original viewport is now captured under a short document lock in the palette double-click path BEFORE ExecuteInCommandContextAsync is queued. A session-owned clone survives the asynchronous completion. The public one-argument LoadAerialFromFile entry remains compatible; command-line loads still capture at load entry. The established replacement, grouping, cleanup and native order logic are retained.
+
+Messages now use [AERIAL-R4]. NM_AERIAL_STATE additionally reports returned/native-finished/pending/disposed/view-released session flags. This distinguishes a canceled or failed session from an actual settled/verified load.
+
+Validation: installed SDK metadata confirmed the actual host return type and the property-only MSG shape; the production fix was compiled with installed AutoCAD/Map references and SDK-equivalent WinForms implicit namespaces. No full solution or live CAD grouping/zoom test was performed. Console regression execution remains blocked by the previously observed Application Control policy. Microsoft API contract: https://learn.microsoft.com/dotnet/api/system.windows.interop.msg
+
+Retest: close/rebuild/restart, zoom to a recognizable location and double-click an aerial. Wait for [AERIAL-R4] settled without navigating. Expand Aerial Imagery to confirm the image is its child and compare the original location/zoom. Repeat with another date, verify one group/no duplicates, then test user pan/zoom. If grouping or zoom is still wrong, send the complete R4 messages plus NM_AERIAL_STATE output. The latest email screenshot has been inspected; no claim is made that it contains an exception trace.
+
 ## 2026-11-16 R3: replacement folders and native completion
 
 The second native test still showed Map Base below imagery, an extents zoom and accumulating unnamed folders. The replacement screenshot confirms multiple blank containers alongside Aerial Imagery. Code inspection found that reordering removed live layers from MgLayerCollection and reinserted them after assigning their group. That removal/reinsertion can disturb the native group association; it is now eliminated. RemoveAt remains only for actual unload, and empty-group pruning.

@@ -1,3 +1,9 @@
+## 2026-11-16 - Correct aerial input guard and capture original viewport earlier
+- Corrects R3's field lookup to the actual MSG.message property, verified from installed SDK/.NET metadata. The old catch could cancel the entire session before grouping and zoom restoration.
+- Makes an input-observer failure nonfatal to group/order completion; captures the palette's full viewport before command queuing and passes a session-owned clone.
+- Adds [AERIAL-R4] and diagnostic session flags. Retains the user's confirmed date replacement/no duplicate-folder behavior.
+- API contract inspection and targeted AutoCAD/Map-reference compilation passed; full solution/live grouping and zoom remain unverified.
+
 ## 2026-11-16 - Repair aerial replacement groups and completion timing
 - Removes live-layer remove/reinsert ordering that could detach group associations. Reuses a named root Aerial Imagery group and prunes only verified empty legacy/import containers.
 - Replaces one-idle restoration with native completion/readiness and quiet-period finalization; allows loader ZOOM to settle and preserves later user navigation. Ordering failures still restore the view.

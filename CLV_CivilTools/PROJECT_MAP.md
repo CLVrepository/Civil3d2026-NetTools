@@ -1,3 +1,9 @@
+## 2026-11-16 - Aerial R4 input contract and view capture
+- Verified AutoCAD's PreTranslateMessageEventArgs.Message returns System.Windows.Interop.MSG with a message property and no fields. R3's GetField lookup could throw and dispose the entire session before grouping/restore; corrected to GetProperty with explicit validation.
+- Optional input-guard failures no longer cancel grouping/order. Palette capture now precedes command-context queuing; the session clones that complete viewport. One-argument public loader and working replacement/cleanup remain.
+- Runtime marker is [AERIAL-R4]; NM_AERIAL_STATE includes session lifecycle/view-release flags. Latest screenshot shows root-level imagery with an empty folder; it does not contain exception output.
+- Installed API-shape inspection and targeted compilation (including implicit namespaces) passed. Full solution/live grouping/zoom retest remains pending; see Docs/Q2_GIS_AERIALS.md.
+
 ## 2026-11-16 - Aerial replacement R3
 - Removes MgLayerCollection remove/reinsert from reorder: only real unload removes imagery. Reuses one native named root group and verifies parents. Prunes empty legacy/import containers only after both FDO and native drawing-item emptiness checks.
 - Native order changes use existing-item iterator anchors, with no null/end destinations. Preserves non-aerial relative order and checks root/draw order.
