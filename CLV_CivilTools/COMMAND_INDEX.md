@@ -1,3 +1,10 @@
+## 2026-11-16 - Aerial R7: keep restoration through Map command registration
+- Mark's R6 transcript explicitly records end=canceled by command DMUI_MAPREGISTERCMDSCMD before _ZOOM / _EXTENTS, with view-released=False. The command allowlist incorrectly ended the bounded view guard during Map's deferred registration step.
+- Add that exact observed registration command to deferred native activity. It now logs the command and resets the quiet interval, preserving restoration through the following zoom/task-pane commands.
+- Retain R6's five-second minimum watch, two-second quiet verification, input release, document/new-load cancellation and deadline. Grouping/replacement/draw-order code is unchanged.
+- Runtime marker is [AERIAL-R7]. Retest without input until settled: registration must be logged as deferred command activity, not cancellation, followed by original-view restoration after ZOOM Extents.
+- Targeted compilation against installed Autodesk references passed. Live Civil 3D acceptance and full solution build remain workstation checks.
+
 ## 2026-11-16 - Aerial R6 delayed zoom completion
 - Q2 AERIAL / NM_AERIAL retain the original view while deferred Map ZOOM Extents and MW/MAPWSPACE commands drain.
 - Internal NM_AERIAL_FINISH now performs later view-only verification without rerunning the Map refresh. Wait for [AERIAL-R6] settled before evaluating zoom; normally at least five seconds after the first finish.

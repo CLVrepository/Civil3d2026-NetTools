@@ -1,5 +1,12 @@
 # Q2 GIS street names and aerial unload
 
+## 2026-11-16 - Aerial R7: keep restoration through Map command registration
+- Mark's R6 transcript explicitly records end=canceled by command DMUI_MAPREGISTERCMDSCMD before _ZOOM / _EXTENTS, with view-released=False. The command allowlist incorrectly ended the bounded view guard during Map's deferred registration step.
+- Add that exact observed registration command to deferred native activity. It now logs the command and resets the quiet interval, preserving restoration through the following zoom/task-pane commands.
+- Retain R6's five-second minimum watch, two-second quiet verification, input release, document/new-load cancellation and deadline. Grouping/replacement/draw-order code is unchanged.
+- Runtime marker is [AERIAL-R7]. Retest without input until settled: registration must be logged as deferred command activity, not cancellation, followed by original-view restoration after ZOOM Extents.
+- Targeted compilation against installed Autodesk references passed. Live Civil 3D acceptance and full solution build remain workstation checks.
+
 ## 2026-11-16 R6: restore after deferred Map zoom commands
 
 Mark's R5 transcript confirms the correct Aerial Imagery parent, Map Base first in TREE and DRAW, and successful original-view readback in both initial and finish passes. It then shows a separate _ZOOM / _EXTENTS followed by _MW / MAPWSPACE AFTER end=completed. The later command overwrites the restored view; group placement is now working.
