@@ -1,5 +1,17 @@
 # Q2 GIS street names and aerial unload
 
+## 2026-11-16 R6: restore after deferred Map zoom commands
+
+Mark's R5 transcript confirms the correct Aerial Imagery parent, Map Base first in TREE and DRAW, and successful original-view readback in both initial and finish passes. It then shows a separate _ZOOM / _EXTENTS followed by _MW / MAPWSPACE AFTER end=completed. The later command overwrites the restored view; group placement is now working.
+
+Keep the saved ViewTableRecord and event subscriptions after the first finish command. Native ZOOM/PAN/REGEN and the observed Map task-pane commands mark pending view work. A timer only queues request-bound NM_AERIAL_FINISH commands while no command is running. Subsequent passes restore the saved view without re-running grouping/order/Map refresh, avoiding a refresh-to-auto-zoom loop. Final verification requires at least five seconds after the first successful finish and two seconds without relevant native changes. Internal finish/state commands do not reset that quiet interval. The existing 60-second deadline, document/new-load cancellation and input ownership release remain.
+
+This is a bounded settling guard, not a guarantee against arbitrary commands issued much later. Physical keyboard/mouse input releases view ownership; the first release message code is retained. Runtime messages use [AERIAL-R6], record deferred command names and finish-applied, and reserve settled for the final quiet verification. Group/replacement/order implementation remains unchanged.
+
+Retest: zoom to a recognizable site, load an aerial and do not type/navigate until [AERIAL-R6] settled (normally about five seconds after the first finish). Verify the original site/scale remains after the task pane appears. Switch dates and confirm one image inside one Aerial Imagery folder, Map Base first, with the same site view. After settling, pan/zoom normally and confirm the routine does not pull the view back. If it fails, send the full transcript plus NM_AERIAL_STATE, including commands after the final status.
+
+Validation: changed GIS sources compiled against the installed AutoCAD/Map assemblies with SDK-equivalent implicit usings. Full solution build and live Civil 3D acceptance remain workstation checks; no live viewport test is claimed.
+
 ## 2026-11-16 R5: execute essential finishing in CAD commands
 
 Mark's R4 diagnostic proves the selected layer had no parent, Aerial Imagery was empty, draw order still used group order, and the session was returned=True / native-finished=True / pending=True / disposed=True / view-released=False. The supplied output does not retain the exact cancellation/deadline reason. It establishes that native loading completed but pending finishing did not complete; it does not prove one exclusive cause for disposal.

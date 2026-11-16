@@ -19,9 +19,10 @@ namespace CLV_CivilTools.Gis
         private readonly Timer _timer = new() { Interval = 150 };
         private readonly DateTime _started = DateTime.UtcNow;
         private DateTime _changed = DateTime.UtcNow;
+        private DateTime? _readyAt;
         private Action? _finish;
         private Func<bool>? _layersReady;
-        private bool _complete, _pending = true, _returned, _disposed, _applying, _viewReleased, _finishQueued, _initialApplied;
+        private bool _complete, _pending = true, _returned, _disposed, _applying, _viewReleased, _finishQueued, _initialApplied, _finishApplied;
         private string _endReason = "active", _stage = "captured", _lastError = "";
         private readonly string _savedViewText;
         private readonly List<string> _trace = new();
@@ -63,10 +64,18 @@ namespace CLV_CivilTools.Gis
         {
             if (!_returned || _applying) return;
             string name = e.GlobalCommandName.ToUpperInvariant();
-            if (name is "ZOOM" or "PAN" or "3DORBIT" or "REGEN" or "REGENALL" or "NM_AERIAL_STATE" or "NM_AERIAL_FINISH") Changed();
+            // Our own verification must not restart the quiet interval. Map's layer
+            // import queues ZOOM and _MW/MAPWSPACE after its loading events finish.
+            if (name is "NM_AERIAL_FINISH" or "NM_AERIAL_STATE") return;
+            if (name is "ZOOM" or "PAN" or "3DORBIT" or "REGEN" or "REGENALL" or "MW" or "_MW" or "MAPWSPACE")
+            { Log("deferred command started=" + name); Changed(); }
             else Stop("canceled by command " + name);
         }
-        private void OnCommandEnd(object sender, CommandEventArgs e) { Changed(); }
+        private void OnCommandEnd(object sender, CommandEventArgs e)
+        {
+            if (e.GlobalCommandName.ToUpperInvariant() is "NM_AERIAL_FINISH" or "NM_AERIAL_STATE") return;
+            Changed();
+        }
         private void OnDocumentClosing(object sender, DocumentCollectionEventArgs e) { if (ReferenceEquals(e.Document, _doc)) Stop("document closing"); }
         private void OnInput(object sender, PreTranslateMessageEventArgs e)
         {
@@ -80,7 +89,8 @@ namespace CLV_CivilTools.Gis
                 object number = message.GetType().GetProperty("message")?.GetValue(message)
                     ?? throw new InvalidOperationException("Host MSG.message property is unavailable.");
                 int code = Convert.ToInt32(number);
-                if (code is 0x0100 or 0x0104 or 0x0201 or 0x0204 or 0x0207 or 0x020A or 0x020E) _viewReleased = true;
+                if (!_viewReleased && (code is 0x0100 or 0x0104 or 0x0201 or 0x0204 or 0x0207 or 0x020A or 0x020E))
+                { _viewReleased = true; Log("saved-view ownership released by input=0x" + code.ToString("X4")); }
             }
             catch (System.Exception ex)
             {
@@ -114,7 +124,10 @@ namespace CLV_CivilTools.Gis
             if (!ReferenceEquals(AcadApp.DocumentManager.MdiActiveDocument, _doc)) { Stop("document changed"); return; }
             if (DateTime.UtcNow - _started > TimeSpan.FromSeconds(60))
             { Stop("completion deadline; command=" + _doc.CommandInProgress + "; native-finished=" + _complete); return; }
-            if (!_finishQueued && _pending && string.IsNullOrEmpty(_doc.CommandInProgress) && DateTime.UtcNow - _changed >= TimeSpan.FromMilliseconds(500))
+            // Do not dispose as soon as AllLayerLoadingFinished fires: the transcript
+            // proves ZOOM Extents can still be queued AFTER our first finish command.
+            bool verificationDue = _readyAt.HasValue && DateTime.UtcNow - _readyAt.Value >= TimeSpan.FromSeconds(5);
+            if (!_finishQueued && (_pending || verificationDue) && string.IsNullOrEmpty(_doc.CommandInProgress) && DateTime.UtcNow - _changed >= TimeSpan.FromMilliseconds(750))
                 QueueCompletion();
         }
 
@@ -155,14 +168,27 @@ namespace CLV_CivilTools.Gis
                 using (_doc.LockDocument())
                 {
                     // An ordering failure must never skip restoration of the captured view.
-                    try { _finish?.Invoke(); }
+                    // Group/order once in the finish command. Later view checks must
+                    // not refresh Map again and potentially enqueue another auto-zoom.
+                    try { if (!final || !_finishApplied) _finish?.Invoke(); }
                     finally { RestoreNow(); }
                 }
                 if (!final) _initialApplied = true;
                 _lastError = "";
-                Log((final ? "settled" : "initial pass") + "; native-finished=" + _complete + "; order checked; saved-view-restored=" + !_viewReleased + "; " + _savedViewText);
-                if (final) Stop("completed");
-                else _pending = true;
+                if (final)
+                {
+                    _finishApplied = true;
+                    _readyAt ??= DateTime.UtcNow;
+                    bool quiet = DateTime.UtcNow - _readyAt.Value >= TimeSpan.FromSeconds(5)
+                        && DateTime.UtcNow - _changed >= TimeSpan.FromSeconds(2);
+                    Log((quiet ? "settled" : "view guard active; waiting for deferred Map commands")
+                        + "; native-finished=" + _complete + "; saved-view-restored=" + !_viewReleased + "; " + _savedViewText);
+                    if (quiet || _viewReleased) Stop(_viewReleased ? "completed; view released to user" : "completed after deferred commands");
+                    // No refresh/requeue loop: timer requests the final verification
+                    // after five seconds, or sooner when a native command changes it.
+                }
+                else Log("initial pass; native-finished=" + _complete + "; order checked; saved-view-restored=" + !_viewReleased + "; " + _savedViewText);
+                if (!final) _pending = true;
             }
             catch (System.Exception ex)
             {
@@ -175,10 +201,10 @@ namespace CLV_CivilTools.Gis
         }
 
         internal string Status => "returned=" + _returned + "; native-finished=" + _complete + "; pending=" + _pending + "; disposed=" + _disposed + "; view-released=" + _viewReleased
-            + "; initial-applied=" + _initialApplied + "; stage=" + _stage + "; end=" + _endReason + "; saved " + _savedViewText + "; error=" + _lastError;
+            + "; initial-applied=" + _initialApplied + "; finish-applied=" + _finishApplied + "; stage=" + _stage + "; end=" + _endReason + "; saved " + _savedViewText + "; error=" + _lastError;
         private void Log(string text)
         {
-            string line = "[AERIAL-R5] " + text;
+            string line = "[AERIAL-R6] " + text;
             _trace.Add(line); _doc.Editor.WriteMessage("\n" + line);
         }
         internal static string ViewText(ViewTableRecord v) => string.Format(CultureInfo.InvariantCulture, "center=({0:0.###},{1:0.###}); height={2:0.######}; width={3:0.######}", v.CenterPoint.X, v.CenterPoint.Y, v.Height, v.Width);

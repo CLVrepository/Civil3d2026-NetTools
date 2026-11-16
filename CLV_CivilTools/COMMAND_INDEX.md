@@ -1,3 +1,9 @@
+## 2026-11-16 - Aerial R6 delayed zoom completion
+- Q2 AERIAL / NM_AERIAL retain the original view while deferred Map ZOOM Extents and MW/MAPWSPACE commands drain.
+- Internal NM_AERIAL_FINISH now performs later view-only verification without rerunning the Map refresh. Wait for [AERIAL-R6] settled before evaluating zoom; normally at least five seconds after the first finish.
+- NM_AERIAL_STATE retains deferred command names, input release code, finish-applied, saved view and stop reason. User navigation releases restoration; no new operator command/button.
+- Existing aerial folder/replacement behavior remains intact. Live acceptance pending.
+
 ## 2026-11-16 - Aerial R5 command-context completion
 - **NM_AERIAL_FINISH** is an internal, request-token-bound completion command automatically queued by the loader; no new button or operator input is required. Wrong/stale tokens and other drawings are ignored.
 - Q2/NM_AERIAL now attempt essential grouping/restore in the load command and no longer await a timer-owned completion task. The timer queues CAD finishing instead of editing the drawing directly.

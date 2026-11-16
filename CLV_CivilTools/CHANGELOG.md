@@ -1,3 +1,10 @@
+## 2026-11-16 - Preserve aerial view after queued Map auto-zoom
+- R5 transcript shows restoration succeeded before a later queued ZOOM Extents; correct folder and Map Base draw order were confirmed.
+- Retain the saved viewport and observers beyond the first completion. Restore after native view/task-pane commands and verify again after five seconds with a two-second quiet interval.
+- Later checks skip grouping/order/refresh to avoid producing another import zoom. Internal finish/state commands do not extend the quiet interval.
+- Preserve physical-input release, cancellation/deadline and working folder/replacement/order implementation. Added [AERIAL-R6] deferred-command and input-release diagnostics.
+- Validation: targeted compilation against installed Autodesk references passed. Full solution/native Civil 3D acceptance still required.
+
 ## 2026-11-16 - Execute aerial finishing in CAD command context
 - Responds to native R4 evidence that loading completed while the session was disposed with pending grouping/restore. The exact prior stop reason was not captured.
 - Applies essential work in the load command, removes the palette's wait on session completion and queues a token/document-bound completion command after loading. Timer no longer performs drawing edits itself.

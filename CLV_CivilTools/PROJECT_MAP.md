@@ -1,3 +1,9 @@
+## 2026-11-16 - Aerial R6 deferred zoom settling
+- R5 workstation trace confirms correct grouping/order and immediate view restoration, then shows queued ZOOM Extents and MW/MAPWSPACE after the session ended.
+- AerialLoadSession now retains its saved view through deferred commands, performs view-only completion checks, and ends after a minimum five-second watch plus two-second quiet interval. Timer queues CAD commands only; no repeated Map refresh.
+- Keyboard/mouse input releases view ownership; document/new-load cancellation and the 60-second deadline remain. Grouping/replacement/order code is unchanged. See Docs/Q2_GIS_AERIALS.md for exact acceptance checks.
+- Targeted native-reference compilation passed; full build/native viewport acceptance remain workstation checks.
+
 ## 2026-11-16 - Aerial R5 CAD-context finishing and retained trace
 - Native R4 diagnostic shows loading finished but session disposed with pending work, root-level image/no parent, empty aerial group and no explicit draw order. Exact stop cause was not present in the supplied trace.
 - ApplyInitial runs essential grouping/order/view restoration in the load command. Removes palette waiting on session completion. Token-bound NM_AERIAL_FINISH queues the completion pass in document command context; timer only schedules retries/deadline, avoiding dependence on idle execution for essential edits.
