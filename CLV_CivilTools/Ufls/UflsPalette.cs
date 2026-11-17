@@ -202,6 +202,9 @@ namespace CLV_CivilTools
             layout.Controls.Add(CreateSectionLabel("SEWER LATERAL C900"));
             layout.Controls.Add(CreateCommandButtonRow("LAT - SINGLE", "UFLS-LATERAL-C900-SINGLE", "LAT - ALL", "UFLS-LATERAL-C900-ALL"));
 
+            layout.Controls.Add(CreateSectionLabel("STORM PLAN DATA"));
+            layout.Controls.Add(CreateCommandButton("MANHOLE / DROP INLET INFO", "SDINFO"));
+
             layout.Controls.Add(CreateSectionLabel("STORM JUNCTION STRUCTURE"));
             layout.Controls.Add(CreateCommandButton("RESIZE JUNCTION", "SD-JUNCTION-SIZE"));
             layout.Controls.Add(CreateCommandButton("ADJUST TOP ELEV", "UFLS-ADJ-TOP-ELEV"));

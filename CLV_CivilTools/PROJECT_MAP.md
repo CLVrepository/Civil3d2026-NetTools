@@ -1,3 +1,11 @@
+## 2026-11-17 - Separate storm structure plan catalog
+- Add SDINFO / SDIMPORT / SDADD / SDEDIT / SDINSERT / SDAPPLY / SDREFRESH / SDEXPORT and a STORM PLAN DATA button under UFLS Adjust.
+- Separate storm JSON schema, DWG catalog, block snapshots, layer and pipe-end metadata; existing sewer files and commands remain unchanged.
+- Support SDMH/SDDI identity (same number allowed across types), consultant source labels, round/rectangular dimensions, inlet opening length, source TC/TG elevations, review holds and manual entry.
+- Preserve the existing network preview/matching/rollback behavior. Circular parts retain exact numeric/family resolution. Matching rectangular RCB pipes retain native parts; mismatched box dimensions stop. Rectangular inlet structure parts require manual sizing.
+- Do not assign TC as rim/grate or apply unresolved holds/unknown top values. See Docs/STORM_STRUCTURE_INFO.md for schema, limitations and acceptance checks.
+- Targeted Autodesk-reference compilation and independent input-data QA passed. Full solution build and native UI/network acceptance remain workstation tests. Project extraction files are delivered separately, not committed to the public source repository.
+
 ## 2026-11-16 - Aerial R8: retain the view through DMUI wrapper commands
 - R7 workstation trace confirms DMUI_MAPREGISTERCMDSCMD continued, but DMUI_ZOOMEXTENTSCMD immediately canceled the session before the visible ZOOM Extents. Input release remained False.
 - Replace the single registration-command allowance with an ordinal DMUI_ prefix allowance during this one import's bounded view guard. Both observed Map wrapper commands and other wrappers in that family now mark deferred activity rather than disposing the session.
