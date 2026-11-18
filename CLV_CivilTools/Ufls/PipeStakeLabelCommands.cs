@@ -35,6 +35,7 @@ namespace CLV_CivilTools.Ufls
             public double PipeY { get; set; }
             public string LabelText { get; set; }="";
             public DateTime MeasuredUtc { get; set; }
+            public PipeStakeMath.LabelValues? ReportValues { get; set; }
         }
         [CommandMethod("UFLS-PIPE-STAKE-LABEL",CommandFlags.Modal)]
         public static void Place() => Run(d =>
@@ -122,6 +123,85 @@ namespace CLV_CivilTools.Ufls
             Save(text,tr,MakeSnapshot(d.Database,pipe,alignment,shot,report,text.Contents));text.RecordGraphicsModified(true);
             tr.Commit();d.Editor.Regen();d.Editor.WriteMessage("\nRefreshed source values; label position, height and style retained.");
         });
+        [CommandMethod("UFLS-PIPE-STAKE-REPORT", CommandFlags.Modal)]
+        public static void ExportReport() => Run(document =>
+        {
+            Editor editor = document.Editor;
+            var options = new PromptSelectionOptions
+            {
+                MessageForAdding = "\nSelect pipe stake labels or their source points, then press Enter: "
+            };
+            PromptSelectionResult selection = editor.GetSelection(options);
+            if (selection.Status != PromptStatus.OK) return;
+
+            var rows = new System.Collections.Generic.List<PipeStakeWorkbook.Row>();
+            int skipped = 0;
+            using (Transaction tr = document.Database.TransactionManager.StartTransaction())
+            {
+                var selected = selection.Value.GetObjectIds().ToHashSet();
+                var pointHandles = selected.Where(id => tr.GetObject(id, OpenMode.ForRead) is CogoPoint or DBPoint)
+                    .Select(id => id.Handle.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var space = (BlockTableRecord)tr.GetObject(
+                    SymbolUtilityServices.GetBlockModelSpaceId(document.Database), OpenMode.ForRead);
+                var candidates = pointHandles.Count == 0 ? selected : space.Cast<ObjectId>().Concat(selected).Distinct();
+
+                foreach (ObjectId id in candidates)
+                {
+                    if (id.ObjectClass.DxfName != "MTEXT") continue;
+                    var label = (MText)tr.GetObject(id, OpenMode.ForRead);
+                    bool directlySelected = selected.Contains(id);
+                    if (!HasSnapshot(label, tr))
+                    {
+                        if (directlySelected) skipped++;
+                        continue;
+                    }
+
+                    try
+                    {
+                        Snapshot snapshot = Read(label, tr);
+                        bool localSource = snapshot.DrawingFingerprint == document.Database.FingerprintGuid;
+                        if (!directlySelected && (!localSource || !pointHandles.Contains(snapshot.PointHandle))) continue;
+                        if (snapshot.ReportValues is not { } values)
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        rows.Add(new PipeStakeWorkbook.Row(values,
+                            snapshot.PointHandle.Length == 0 ? null : snapshot.Z, snapshot.MeasuredUtc));
+                    }
+                    catch (System.Exception ex) when (ex is JsonException or InvalidOperationException)
+                    {
+                        skipped++;
+                        editor.WriteMessage("\nSkipped label [" + id.Handle + "]: " + ex.Message);
+                    }
+                }
+            }
+
+            if (skipped > 0)
+                editor.WriteMessage($"\nSkipped {skipped} text object(s) without usable report data.");
+            if (rows.Count == 0)
+            {
+                editor.WriteMessage("\nNo report records found. Select labels created or refreshed with the report update, or their linked points.");
+                return;
+            }
+
+            using var file = new System.Windows.Forms.SaveFileDialog
+            {
+                Title = "Export pipe stake report",
+                Filter = "Excel workbook (*.xlsx)|*.xlsx",
+                FileName = "Pipe-Stake-Report.xlsx",
+                OverwritePrompt = true
+            };
+            if (file.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            PipeStakeWorkbook.Write(file.FileName, System.IO.Path.GetFileName(document.Name), rows);
+            editor.WriteMessage($"\nExported {rows.Count} check shot(s) to {file.FileName}");
+        });
+
+        private static bool HasSnapshot(MText label, Transaction tr) =>
+            !label.ExtensionDictionary.IsNull &&
+            ((DBDictionary)tr.GetObject(label.ExtensionDictionary, OpenMode.ForRead)).Contains(Key);
+
         private static void Run(Action<Document> action)
         {
             Document? d=AcadApp.DocumentManager.MdiActiveDocument;if(d==null)return;
@@ -240,7 +320,7 @@ namespace CLV_CivilTools.Ufls
             DrawingFingerprint=db.FingerprintGuid,
             PipeHandle=pipe.Handle.ToString(),PointHandle=shot.Id.IsNull?"":shot.Id.Handle.ToString(),
             AlignmentHandle=alignment.IsNull?"":alignment.Handle.ToString(),X=shot.Position.X,Y=shot.Position.Y,Z=shot.Position.Z,
-            PipeX=report.Projection.Foot.X,PipeY=report.Projection.Foot.Y,LabelText=text,MeasuredUtc=DateTime.UtcNow
+            PipeX=report.Projection.Foot.X,PipeY=report.Projection.Foot.Y,LabelText=text,MeasuredUtc=DateTime.UtcNow,ReportValues=report.Values
         };
         private static ObjectId Resolve(Database db,string value)
         {

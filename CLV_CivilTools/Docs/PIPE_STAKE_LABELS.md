@@ -61,3 +61,13 @@ Workstation acceptance:
 5. Select the project's pipe alignment. Check a known station, a station equation and an out-of-range case. Confirm station is at pipe foot, while offset is shot-to-pipe CL.
 6. Edit a source pipe/point and refresh. Confirm new values, preserved label placement/style/height and no point/network changes.
 7. Verify missing thickness produces UNKNOWN outside top; test missing sources, locked annotation layer and different-drawing copied labels.
+
+## Export an Excel report
+
+1. Place labels for the check shots. For labels placed before the report update, recreate them or run **REFRESH PIPE STAKE LABEL** to capture current values.
+2. Choose **Q1 > TOP CHECK > PIPE STAKE REPORT**, or run **UFLS-PIPE-STAKE-REPORT**.
+3. Window-select or pick labels, source COGO points, or AutoCAD POINT objects. Press Enter and save the Excel workbook.
+
+Selecting both a point and its label includes that label once. Multiple labels linked to the same point each get a row. Location-only checks are selectable by label and have a blank survey elevation. The drawing stores the report values on each label across saves and reopens. An explicit refresh replaces that label's stored values with current measurements. Export is read-only and uses saved values. Save dated workbooks to keep earlier deliveries.
+
+The report flags nearest-end distances, preserves alignment station warnings, and leaves unavailable measurements blank. Survey elevation and design elevations appear in separate columns.

@@ -1,3 +1,6 @@
+## 2026-11-18 - Pipe stake check report
+- Store structured check-shot values in the existing MText snapshot. Report selection resolves labels and linked source points without recalculating pipe geometry.
+
 ## 2026-11-18 - Pipe stake label catalog-read protection and prompt order
 - Workstation point selection succeeds, then measurement reports Part Family is invalid. Remove the direct dependency on the optional family display getter; guard family/description/size/name metadata and native wall-thickness reads.
 - Material uses a recognized family first, then readable description/size text; unavailable metadata stays UNKNOWN. Required geometry reads still stop with field-specific native errors. No catalog repair or guessed geometry/thickness.
