@@ -36,4 +36,15 @@ Check(label.Contains("P\\{\\\\C1;bad\\}"),"source names escaped as MText literal
 string clamped=PipeStakeMath.Label(v with{Clamped=true});Check(clamped.Contains("DIST TO PIPE END")&&clamped.Contains("BEYOND PIPE LIMITS"),"clamped values unmistakable");
 Check(PipeStakeMath.Label(v with{Wall=null,Top=null}).Contains("TOP (OUTSIDE): UNKNOWN"),"unknown roof explicit");
 Check(PipeStakeMath.Label(v with{Alignment=null,Station=null}).Contains("PIPE DIST: 803.32 ft from start"),"no alignment is not fake project station");
+Check(PipeStakeMath.ReadText(()=>throw new InvalidOperationException("Part Family is invalid"))==null,"throwing catalog display getter is optional");
+Check(PipeStakeMath.ReadThickness(()=>throw new InvalidOperationException("Part Family is invalid"))==null,"throwing thickness getter remains unknown");
+Check(PipeStakeMath.ReadThickness(()=>0)==null,"zero native thickness unknown");
+Near(PipeStakeMath.ReadThickness(()=>11.0/12)!.Value,11.0/12,"valid native thickness retained");
+Check(PipeStakeMath.Material(null,"10 x 6 RCB",null)=="RCB","description fallback after invalid family");
+Check(PipeStakeMath.Material(null,null,"CLV_RCP 30 inch")=="RCP","size fallback after invalid family");
+Check(PipeStakeMath.Material(null,null,null).StartsWith("UNKNOWN"),"no metadata never guesses a material");
+Check(PipeStakeMath.Material("CLV_C900","PVC",null)=="C900","C900 specification retained");
+Check(PipeStakeMath.Material("CLV_PVC","replaced RCP",null)=="PVC","recognized valid family takes precedence over description");
+try { PipeStakeMath.Required<double>(()=>throw new InvalidOperationException("Part Family is invalid"),"inside pipe height"); throw new Exception("required dimension silently skipped"); }
+catch(InvalidOperationException ex) { Check(ex.Message.Contains("inside pipe height")&&ex.Message.Contains("Part Family is invalid"),"required getter error retains field and cause"); }
 Console.WriteLine($"Passed {count} pipe stake math/label checks.");

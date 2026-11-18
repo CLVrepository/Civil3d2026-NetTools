@@ -1,3 +1,9 @@
+## 2026-11-18 - Pipe stake label catalog-read protection and prompt order
+- Workstation point selection succeeds, then measurement reports Part Family is invalid. Remove the direct dependency on the optional family display getter; guard family/description/size/name metadata and native wall-thickness reads.
+- Material uses a recognized family first, then readable description/size text; unavailable metadata stays UNKNOWN. Required geometry reads still stop with field-specific native errors. No catalog repair or guessed geometry/thickness.
+- Reorder initial prompts to pipe, alignment, point, text height, label location; Height defers until the next valid point. Remove the duplicate printed keyword list.
+- Added regressions for throwing getters, missing thickness, metadata fallback/precedence and required-field diagnostics. Current production-linked tests passed 43/43; targeted native-reference compilation passed. The reported Civil drawing still needs a native retest.
+
 ## 2026-11-18 - Pipe information labels at staking check shots
 - Add UFLS-PIPE-STAKE-LABEL under Q1 CHECK > INFO and TOP CHECK > LABEL, plus UFLS-PIPE-STAKE-REFRESH under TOP CHECK.
 - Repeated COGO-label/marker, exact-number, AutoCAD POINT or location picks place MText with pipe name, native size/material, invert/outside top/wall and shot offset. No slope or start/end invert fields.

@@ -2,12 +2,12 @@
 
 Run **UFLS-PIPE-STAKE-LABEL** from Q1 > CHECK > INFO > PIPE STAKE LABEL, or Q1 > TOP CHECK > LABEL > PIPE STAKE LABEL.
 
-Select a Civil gravity pipe/box, optionally select a Civil alignment, and set the text height (model drawing feet; default 0.1). Then repeatedly select check points and place labels. Enter finishes; Esc cancels the current command.
+Select a Civil gravity pipe/box, optionally select a Civil alignment, then select the first check point. Set the text height (model drawing feet; default 0.1) after that point, then place the label. Continue selecting points and placing labels with that height. Enter finishes; Esc cancels the current command.
 
 - COGO labels/markers and AutoCAD POINT objects supply their actual WCS coordinates, not a dragged label position.
 - Number selects a COGO point by its exact number.
 - Location uses a manually picked WCS-transformed location with no point identity.
-- Pipe, Alignment and Height change those settings between shots.
+- Pipe and Alignment change those selections between shots. Height requests a new text height after the next valid point.
 
 ## Label contents
 
@@ -38,6 +38,14 @@ Labels are snapshots, not live Civil labels. Run **UFLS-PIPE-STAKE-REFRESH** (TO
 Each label retains a versioned Xrecord with source handles, drawing fingerprint, sampled WCS/pipe-foot XY, rendered text and measurement UTC. Missing/deleted/wrong-type sources and copied labels from a different drawing refuse refresh. Old sources are not replaced by nearest-neighbor matching.
 
 This metadata is separate from the existing top-check label/table format. These labels are not automatically included in the older comparison table or tolerance tools.
+
+## Catalog metadata failure handling (2026-11-18 follow-up)
+
+The workstation error "Part Family is invalid" occurred after a point was selected, during measurement. The original command directly read PartFamilyName for its material text. That optional getter is now guarded, along with description/size/name and wall-thickness display reads. A recognized valid family takes precedence; description or size text can supply a material code if the family is unavailable. If no supported metadata is readable, material is UNKNOWN. No catalog repair or material/geometry substitution is performed.
+
+A failed wall-thickness getter leaves outside top UNKNOWN. Required cross-section, endpoint, plan-arc and inside-dimension reads retain strict validation and identify the specific failing field and native error. A failure of required geometry still stops that label. This protects reporting from unavailable optional catalog data; it does not claim an invalid Civil part/catalog has been repaired.
+
+Initial prompt order is pipe, alignment, point, text height, label location. The point keyword list appears once. Current pure regressions: all 43 passed, including throwing optional getters, fallback material sources and required-field diagnostics. Live re-test of the reported drawing remains required.
 
 ## Validation
 

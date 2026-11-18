@@ -42,10 +42,10 @@ namespace CLV_CivilTools.Ufls
             ObjectId pipe=PickPipe(d.Editor); if(pipe.IsNull)return;
             ObjectId alignment=PickAlignment(d.Editor,out bool cancelled); if(cancelled)return;
             double height=0.1;
-            if(!PickHeight(d.Editor,ref height))return;
+            bool askHeight=true;
             while(true)
             {
-                var options=new PromptEntityOptions("\nSelect check point label/marker [Number/Location/Pipe/Alignment/Height] <finish>: ") { AllowNone=true };
+                var options=new PromptEntityOptions("\nSelect check point label/marker <finish>: ") { AllowNone=true };
                 options.SetRejectMessage("\nSelect a COGO point label/marker or AutoCAD POINT; Number selects an exact COGO point.");
                 options.AddAllowedClass(typeof(CogoPoint),false); options.AddAllowedClass(typeof(DBPoint),false);
                 foreach(string keyword in new[]{"Number","Location","Pipe","Alignment","Height"})options.Keywords.Add(keyword);
@@ -58,7 +58,7 @@ namespace CLV_CivilTools.Ufls
                     {
                         case "Pipe": pipe=PickPipe(d.Editor); if(pipe.IsNull)return; continue;
                         case "Alignment": alignment=PickAlignment(d.Editor,out cancelled); if(cancelled)return; continue;
-                        case "Height": if(!PickHeight(d.Editor,ref height))return; continue;
+                        case "Height": askHeight=true; d.Editor.WriteMessage("\nText height will be requested after the next check point."); continue;
                         case "Number":
                             PromptIntegerResult number=d.Editor.GetInteger(new PromptIntegerOptions("\nCOGO point number: "){AllowNegative=false,AllowZero=false});
                             if(number.Status!=PromptStatus.OK)return;
@@ -86,6 +86,7 @@ namespace CLV_CivilTools.Ufls
                         if(m.Values.Clamped)d.Editor.WriteMessage("\nWARNING: outside the selected pipe segment; label will show nearest-end values and distance to that end.");
                         if(!m.Values.Top.HasValue)d.Editor.WriteMessage("\nWall/slab thickness is unavailable; outside top will remain UNKNOWN.");
                     }
+                    if(askHeight) { if(!PickHeight(d.Editor,ref height))return; askHeight=false; }
                     PromptPointResult placement=d.Editor.GetPoint("\nPlace pipe information label: "); if(placement.Status!=PromptStatus.OK)return;
                     Point3d wcs=placement.Value.TransformBy(d.Editor.CurrentUserCoordinateSystem);
                     using Transaction tr=d.Database.TransactionManager.StartTransaction();
@@ -168,14 +169,16 @@ namespace CLV_CivilTools.Ufls
         private static Measurement Measure(Transaction tr,ObjectId pipeId,ObjectId alignmentId,Shot shot)
         {
             var pipe=tr.GetObject(pipeId,OpenMode.ForRead) as Pipe??throw new InvalidOperationException("Source pipe is missing/invalid.");
-            if(pipe.CrossSectionalShape is not (SweptShapeType.Circular or SweptShapeType.Rectangular))
+            SweptShapeType shape=PipeStakeMath.Required(()=>pipe.CrossSectionalShape,"pipe cross-section");
+            if(shape is not (SweptShapeType.Circular or SweptShapeType.Rectangular))
                 throw new InvalidOperationException("Only circular and rectangular pipes are supported.");
-            Point3d start=pipe.StartPoint,end=pipe.EndPoint;
+            Point3d start=PipeStakeMath.Required(()=>pipe.StartPoint,"pipe start coordinates"),end=PipeStakeMath.Required(()=>pipe.EndPoint,"pipe end coordinates");
+            PipeSubEntityType subtype=PipeStakeMath.Required(()=>pipe.SubEntityType,"pipe geometry subtype");
             PipeStakeMath.Projection projection;
-            if(pipe.SubEntityType==PipeSubEntityType.Straight)projection=PipeStakeMath.Line(XY(start),XY(end),XY(shot.Position));
-            else if(pipe.SubEntityType==PipeSubEntityType.Curved)
+            if(subtype==PipeSubEntityType.Straight)projection=PipeStakeMath.Line(XY(start),XY(end),XY(shot.Position));
+            else if(subtype==PipeSubEntityType.Curved)
             {
-                using PipeCurveGeometry geometry=pipe.CurveGeometry;
+                using PipeCurveGeometry geometry=PipeStakeMath.Required(()=>pipe.CurveGeometry,"pipe plan arc");
                 using CircularArc2d arc=geometry.GetArc2d();
                 bool first=new Point2d(start.X,start.Y).GetDistanceTo(arc.StartPoint)<=1e-6;
                 bool last=new Point2d(start.X,start.Y).GetDistanceTo(arc.EndPoint)<=1e-6;
@@ -184,12 +187,11 @@ namespace CLV_CivilTools.Ufls
                     Math.Abs(arc.EndAngle-arc.StartAngle),XY(shot.Position));
             }
             else throw new InvalidOperationException("Unsupported pipe geometry subtype.");
-            double height=pipe.InnerHeight,width=pipe.InnerDiameterOrWidth;
+            double height=PipeStakeMath.Required(()=>pipe.InnerHeight,"inside pipe height"),width=PipeStakeMath.Required(()=>pipe.InnerDiameterOrWidth,"inside pipe width/diameter");
             if(!double.IsFinite(width)||width<=0)throw new InvalidOperationException("Native inside pipe width/diameter is unavailable.");
-            double rawWall=pipe.WallThickness;
-            double? wall=double.IsFinite(rawWall)&&rawWall>0?rawWall:null;
+            double? wall=PipeStakeMath.ReadThickness(()=>pipe.WallThickness);
             var elevations=PipeStakeMath.Elevations(start.Z,end.Z,height,wall,projection.Fraction);
-            string size=pipe.CrossSectionalShape==SweptShapeType.Rectangular?
+            string size=shape==SweptShapeType.Rectangular?
                 PipeStakeMath.N(width)+" ft W x "+PipeStakeMath.N(height)+" ft H":PipeStakeMath.N(width*12)+" in DIA";
             string? alignmentName=null,station=null,warning=null;
             if(!alignmentId.IsNull)
@@ -206,16 +208,15 @@ namespace CLV_CivilTools.Ufls
                 catch(Autodesk.Civil.PointNotOnEntityException){warning="PIPE LOCATION OUTSIDE SELECTED ALIGNMENT - STATION UNAVAILABLE";}
                 catch(ArgumentException){warning="ALIGNMENT STATION UNAVAILABLE - CHECK ALIGNMENT RANGE";}
             }
-            var values=new PipeStakeMath.LabelValues(shot.Name,pipe.Name,size,Material(pipe),elevations.Invert,elevations.Top,wall,
+            string name=PipeStakeMath.ReadText(()=>pipe.Name)??("PIPE ["+pipe.Handle+"]");
+            var values=new PipeStakeMath.LabelValues(shot.Name,name,size,Material(pipe),elevations.Invert,elevations.Top,wall,
                 projection.Offset,projection.Along,projection.Clamped,alignmentName,station,warning);
             return new(values,projection);
         }
         private static string Material(Pipe pipe)
         {
-            string family=pipe.PartFamilyName??"";
-            string upper=family.ToUpperInvariant();
-            foreach(string code in new[]{"C900","RCB","RCP","PVC","HDPE","CMP","DIP"})if(upper.Contains(code))return code;
-            return family.Length==0?"UNKNOWN":family+" (family)";
+            return PipeStakeMath.Material(PipeStakeMath.ReadText(()=>pipe.PartFamilyName),
+                PipeStakeMath.ReadText(()=>pipe.Description),PipeStakeMath.ReadText(()=>pipe.PartSizeName));
         }
         private static ObjectId TextStyle(Database db,Transaction tr)
         {

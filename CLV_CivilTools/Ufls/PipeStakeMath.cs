@@ -62,6 +62,29 @@ namespace CLV_CivilTools.Ufls
             double Offset,double Along,bool Clamped,string? Alignment,string? Station,string? StationWarning);
         internal static string Escape(string text) => text.Replace("\\","\\\\").Replace("{","\\{").Replace("}","\\}").Replace("\r"," ").Replace("\n"," ");
         internal static string N(double n,string format="0.000") => n.ToString(format,CultureInfo.InvariantCulture);
+        // Catalog display getters may throw for legacy/imported parts. Missing
+        // metadata must not prevent otherwise valid native geometry reporting.
+        internal static string? ReadText(Func<string?> read)
+        { try { return read(); } catch (Exception) { return null; } }
+        internal static double? ReadThickness(Func<double> read)
+        {
+            try { double value=read(); return double.IsFinite(value)&&value>0?value:null; }
+            catch (Exception) { return null; }
+        }
+        internal static T Required<T>(Func<T> read,string field)
+        {
+            try { return read(); }
+            catch (Exception ex) { throw new InvalidOperationException("Cannot read native "+field+": "+ex.Message,ex); }
+        }
+        internal static string Material(string? family,string? description,string? size)
+        {
+            foreach(string? text in new[]{family,description,size})
+            {
+                string upper=(text??"").ToUpperInvariant();
+                foreach(string code in new[]{"C900","RCB","RCP","PVC","HDPE","CMP","DIP"})if(upper.Contains(code))return code;
+            }
+            return string.IsNullOrWhiteSpace(family)?"UNKNOWN - catalog metadata unavailable":family+" (family)";
+        }
         internal static string Label(LabelValues v)
         {
             var lines=new List<string> { "CHECK: "+Escape(v.Point),"PIPE: "+Escape(v.Pipe),"SIZE: "+Escape(v.Size),"MATERIAL: "+Escape(v.Material) };
