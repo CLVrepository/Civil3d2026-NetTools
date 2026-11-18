@@ -19,7 +19,7 @@ namespace CLV_CivilTools.Ufls
     {
         private const string Key="CLV_PIPE_STAKE_LABEL_V1", Style="CLV-Non Anno";
         private const string Layer="V-SURV-CHCK";
-        private sealed record Shot(ObjectId Id,string Name,Point3d Position);
+        private sealed record Shot(ObjectId Id,string Name,Point3d Position,string Description="");
         private sealed record Measurement(PipeStakeMath.LabelValues Values,PipeStakeMath.Projection Projection);
         private sealed class Snapshot
         {
@@ -36,6 +36,7 @@ namespace CLV_CivilTools.Ufls
             public string LabelText { get; set; }="";
             public DateTime MeasuredUtc { get; set; }
             public PipeStakeMath.LabelValues? ReportValues { get; set; }
+            public string? ShotDescription { get; set; }
         }
         [CommandMethod("UFLS-PIPE-STAKE-LABEL",CommandFlags.Modal)]
         public static void Place() => Run(d =>
@@ -167,8 +168,20 @@ namespace CLV_CivilTools.Ufls
                             continue;
                         }
 
+                        string? description = snapshot.ShotDescription;
+                        string? cutSource = null;
+                        if (description == null && localSource && snapshot.PointHandle.Length > 0)
+                        {
+                            description = PipeStakeMath.ReadText(() =>
+                                (tr.GetObject(Resolve(document.Database, snapshot.PointHandle), OpenMode.ForRead)
+                                    as CogoPoint)?.RawDescription);
+                            if (description != null) cutSource = "Current COGO description (older label)";
+                        }
+
+                        double? cut = PipeStakeMath.ParseStakeCut(description);
                         rows.Add(new PipeStakeWorkbook.Row(values,
-                            snapshot.PointHandle.Length == 0 ? null : snapshot.Z, snapshot.MeasuredUtc));
+                            snapshot.PointHandle.Length == 0 ? null : snapshot.Z, snapshot.MeasuredUtc,
+                            cut, cut.HasValue ? cutSource ?? "Saved COGO description" : "No unambiguous cut code"));
                     }
                     catch (System.Exception ex) when (ex is JsonException or InvalidOperationException)
                     {
@@ -240,7 +253,7 @@ namespace CLV_CivilTools.Ufls
         private static Shot ReadShot(Transaction tr,ObjectId id)
         {
             var item=tr.GetObject(id,OpenMode.ForRead);
-            if(item is CogoPoint cp)return new(id,"POINT "+cp.PointNumber.ToString(CultureInfo.InvariantCulture),cp.Location);
+            if(item is CogoPoint cp)return new(id,"POINT "+cp.PointNumber.ToString(CultureInfo.InvariantCulture),cp.Location,PipeStakeMath.ReadText(()=>cp.RawDescription)??"");
             if(item is DBPoint p)return new(id,"ACAD POINT ["+p.Handle+"]",p.Position);
             throw new InvalidOperationException("Source is not a COGO point or AutoCAD POINT.");
         }
@@ -320,7 +333,7 @@ namespace CLV_CivilTools.Ufls
             DrawingFingerprint=db.FingerprintGuid,
             PipeHandle=pipe.Handle.ToString(),PointHandle=shot.Id.IsNull?"":shot.Id.Handle.ToString(),
             AlignmentHandle=alignment.IsNull?"":alignment.Handle.ToString(),X=shot.Position.X,Y=shot.Position.Y,Z=shot.Position.Z,
-            PipeX=report.Projection.Foot.X,PipeY=report.Projection.Foot.Y,LabelText=text,MeasuredUtc=DateTime.UtcNow,ReportValues=report.Values
+            PipeX=report.Projection.Foot.X,PipeY=report.Projection.Foot.Y,LabelText=text,MeasuredUtc=DateTime.UtcNow,ReportValues=report.Values,ShotDescription=shot.Description
         };
         private static ObjectId Resolve(Database db,string value)
         {

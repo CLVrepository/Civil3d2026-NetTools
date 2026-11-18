@@ -60,6 +60,18 @@ namespace CLV_CivilTools.Ufls
         }
         internal sealed record LabelValues(string Point,string Pipe,string Size,string Material,double Invert,double? Top,double? Wall,
             double Offset,double Along,bool Clamped,string? Alignment,string? Station,string? StationWarning);
+        internal static double? ParseStakeCut(string? description)
+        {
+            if (string.IsNullOrWhiteSpace(description)) return null;
+            var matches = System.Text.RegularExpressions.Regex.Matches(description,
+                @"(?<!\S)C\s*([0-9]+(?:\.[0-9]+)?)(?!\S)",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase |
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+            if (matches.Count != 1) return null;
+            return double.TryParse(matches[0].Groups[1].Value, NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture, out double cut) && double.IsFinite(cut) ? cut : null;
+        }
+
         internal static string Escape(string text) => text.Replace("\\","\\\\").Replace("{","\\{").Replace("}","\\}").Replace("\r"," ").Replace("\n"," ");
         internal static string N(double n,string format="0.000") => n.ToString(format,CultureInfo.InvariantCulture);
         // Catalog display getters may throw for legacy/imported parts. Missing

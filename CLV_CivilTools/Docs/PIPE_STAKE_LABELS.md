@@ -71,3 +71,7 @@ Workstation acceptance:
 Selecting both a point and its label includes that label once. Multiple labels linked to the same point each get a row. Location-only checks are selectable by label and have a blank survey elevation. The drawing stores the report values on each label across saves and reopens. An explicit refresh replaces that label's stored values with current measurements. Export is read-only and uses saved values. Save dated workbooks to keep earlier deliveries.
 
 The report flags nearest-end distances, preserves alignment station warnings, and leaves unavailable measurements blank. Survey elevation and design elevations appear in separate columns.
+
+The Excel report reads a single cut code such as `C21.28` or `C 21.28` from the COGO point's raw description. Staked invert is survey elevation minus cut. The signed comparison is staked invert minus the design invert from the selected pipe. Positive values are above design. Both derived values are reported to 0.001 ft. Missing or ambiguous cuts leave the comparison blank.
+
+New and refreshed labels save the raw description with the shot. Older report-enabled labels can use the linked COGO point's current raw description in the same drawing. The Cut Source column identifies that fallback.

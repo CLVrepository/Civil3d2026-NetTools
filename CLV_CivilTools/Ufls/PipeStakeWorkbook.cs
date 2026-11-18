@@ -11,7 +11,8 @@ namespace CLV_CivilTools.Ufls
 {
     internal static class PipeStakeWorkbook
     {
-        internal sealed record Row(PipeStakeMath.LabelValues Values, double? ShotElevation, DateTime MeasuredUtc);
+        internal sealed record Row(PipeStakeMath.LabelValues Values, double? ShotElevation, DateTime MeasuredUtc,
+            double? Cut = null, string? CutSource = null);
 
         private static readonly XNamespace Sheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
         private static readonly XNamespace Office = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -24,16 +25,20 @@ namespace CLV_CivilTools.Ufls
                 MakeRow("Point", "Survey elevation (ft)", "Pipe", "Inside size", "Material",
                     "Alignment", "Station", "Distance from pipe start (ft)", "Horizontal distance (ft)",
                     "Distance basis", "Design invert (ft)", "Design outside top (ft)", "Wall thickness (ft)",
-                    "Station note", "Captured (UTC)", "Drawing"));
+                    "Station note", "Captured (UTC)", "Drawing", "Stake cut (ft)", "Staked invert (ft)",
+                    "Staked minus design invert (ft)", "Cut source"));
 
             foreach (Row row in rows.OrderBy(r => r.MeasuredUtc))
             {
                 var values = row.Values;
+                double? stakedInvert = row.ShotElevation - row.Cut;
+                double? invertDifference = stakedInvert - values.Invert;
                 data.Add(MakeRow(values.Point, row.ShotElevation, values.Pipe, values.Size, values.Material,
                     values.Alignment, values.Station, values.Along, values.Offset,
                     values.Clamped ? "Nearest pipe end" : "Pipe centerline offset",
                     values.Invert, values.Top, values.Wall, values.StationWarning,
-                    row.MeasuredUtc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture), drawing));
+                    row.MeasuredUtc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture), drawing,
+                    row.Cut, Rounded(stakedInvert), Rounded(invertDifference), row.CutSource));
             }
 
             // Finish the workbook before replacing a previously exported file.
@@ -65,6 +70,9 @@ namespace CLV_CivilTools.Ufls
                 File.Delete(temporary);
             }
         }
+
+        private static double? Rounded(double? feet) =>
+            feet.HasValue ? Math.Round(feet.Value, 3, MidpointRounding.AwayFromZero) : null;
 
         private static XElement MakeRow(params object?[] cells) =>
             new(Sheet + "row", cells.Select(value => value switch

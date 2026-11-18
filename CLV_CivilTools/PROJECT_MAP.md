@@ -1,3 +1,6 @@
+## 2026-11-18 - Pipe stake cut comparison
+- Capture the COGO raw description with the label snapshot and calculate the cut comparison from the saved survey and design elevations.
+
 ## 2026-11-18 - Pipe stake check report
 - Store structured check-shot values in the existing MText snapshot. Report selection resolves labels and linked source points without recalculating pipe geometry.
 

@@ -1,3 +1,6 @@
+## 2026-11-18 - Pipe stake cut comparison
+- Add stake cut, staked invert, and signed staked-minus-design invert to the Excel check report.
+
 ## 2026-11-18 - Pipe stake check report
 - Export selected pipe staking checks to one Excel workbook, with a row per saved label and the captured survey and design values.
 
