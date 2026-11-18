@@ -152,6 +152,7 @@ namespace CLV_CivilTools
 
             layout.Controls.Add(CreateSectionLabel("INFO"));
             layout.Controls.Add(CreateCommandButton("PIPE INFO @ POINT", "UFLS-PIPE-INFO"));
+            layout.Controls.Add(CreateCommandButton("PIPE STAKE LABEL", "UFLS-PIPE-STAKE-LABEL"));
 
             return layout;
         }
@@ -165,6 +166,8 @@ namespace CLV_CivilTools
 
             layout.Controls.Add(CreateSectionLabel("LABEL"));
             layout.Controls.Add(CreateCommandButton("ELEVATION COMPARISON", "UFLS-PIPE-TOP-CHECK"));
+            layout.Controls.Add(CreateCommandButton("PIPE STAKE LABEL", "UFLS-PIPE-STAKE-LABEL"));
+            layout.Controls.Add(CreateCommandButton("REFRESH PIPE STAKE LABEL", "UFLS-PIPE-STAKE-REFRESH"));
 
             layout.Controls.Add(CreateSectionLabel("TOLERANCE CHECK"));
             layout.Controls.Add(CreateCommandButton("EXCEEDS TOLERANCE", "UFLS-PIPE-TOP-EXCEEDS-TOLERANCE"));

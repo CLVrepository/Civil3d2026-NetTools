@@ -1,3 +1,12 @@
+## 2026-11-18 - Pipe information labels at staking check shots
+- Add UFLS-PIPE-STAKE-LABEL under Q1 CHECK > INFO and TOP CHECK > LABEL, plus UFLS-PIPE-STAKE-REFRESH under TOP CHECK.
+- Repeated COGO-label/marker, exact-number, AutoCAD POINT or location picks place MText with pipe name, native size/material, invert/outside top/wall and shot offset. No slope or start/end invert fields.
+- Optional Civil alignment stationing is evaluated at the projected pipe location and formatted with station equations. Without alignment, explicitly show distance from pipe start. Offset remains shot-to-pipe centerline.
+- Actual finite-arc projection supports curved pipes; endpoint clamps remain explicit warnings/distances. Native feet/inches reporting avoids the old dimension magnitude heuristics, and missing wall never becomes a zero-thickness roof.
+- Snapshot metadata supports explicit refresh while retaining label placement/style/height; drawing fingerprint and source handles guard copied/deleted/missing sources. Source points/networks are read only.
+- Existing info/comparison calculations and top-check table formats remain unchanged. See Docs/PIPE_STAKE_LABELS.md.
+- All 33 production-linked math/format checks passed. Targeted native-reference compilation passed with an unchanged LayerStandards signature stub; full solution build and live Civil acceptance remain workstation checks.
+
 ## 2026-11-17 - Separate storm structure plan catalog
 - Add SDINFO / SDIMPORT / SDADD / SDEDIT / SDINSERT / SDAPPLY / SDREFRESH / SDEXPORT and a STORM PLAN DATA button under UFLS Adjust.
 - Separate storm JSON schema, DWG catalog, block snapshots, layer and pipe-end metadata; existing sewer files and commands remain unchanged.
